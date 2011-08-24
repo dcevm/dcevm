@@ -134,13 +134,10 @@ public:
 
 G1CollectorPolicy::G1CollectorPolicy() :
   _parallel_gc_threads(G1CollectedHeap::use_parallel_gc_threads()
-    ? ParallelGCThreads : 1),
-
+                        ? ParallelGCThreads : 1),
 
   _n_pauses(0),
-  _recent_CH_strong_roots_times_ms(new TruncatedSeq(NumPrevPausesForHeuristics)),
-  _recent_G1_strong_roots_times_ms(new TruncatedSeq(NumPrevPausesForHeuristics)),
-  _recent_evac_times_ms(new TruncatedSeq(NumPrevPausesForHeuristics)),
+  _recent_rs_scan_times_ms(new TruncatedSeq(NumPrevPausesForHeuristics)),
   _recent_pause_times_ms(new TruncatedSeq(NumPrevPausesForHeuristics)),
   _recent_rs_sizes(new TruncatedSeq(NumPrevPausesForHeuristics)),
   _recent_gc_times_ms(new TruncatedSeq(NumPrevPausesForHeuristics)),
@@ -238,6 +235,10 @@ G1CollectorPolicy::G1CollectorPolicy() :
   _during_initial_mark_pause(false),
   _should_revert_to_full_young_gcs(false),
   _last_full_young_gc(false),
+
+  _eden_bytes_before_gc(0),
+  _survivor_bytes_before_gc(0),
+  _capacity_before_gc(0),
 
   _prev_collection_pause_used_at_end_bytes(0),
 
@@ -858,14 +859,6 @@ void G1CollectorPolicy::record_full_collection_end() {
   calculate_young_list_target_length();
 }
 
-void G1CollectorPolicy::record_before_bytes(size_t bytes) {
-  _bytes_in_to_space_before_gc += bytes;
-}
-
-void G1CollectorPolicy::record_after_bytes(size_t bytes) {
-  _bytes_in_to_space_after_gc += bytes;
-}
-
 void G1CollectorPolicy::record_stop_world_start() {
   _stop_world_start = os::elapsedTime();
 }
@@ -893,9 +886,13 @@ void G1CollectorPolicy::record_collection_pause_start(double start_time_sec,
   _pending_cards = _g1->pending_card_num();
   _max_pending_cards = _g1->max_pending_card_num();
 
-  _bytes_in_to_space_before_gc = 0;
-  _bytes_in_to_space_after_gc = 0;
   _bytes_in_collection_set_before_gc = 0;
+  _bytes_copied_during_gc = 0;
+
+  YoungList* young_list = _g1->young_list();
+  _eden_bytes_before_gc = young_list->eden_used_bytes();
+  _survivor_bytes_before_gc = young_list->survivor_used_bytes();
+  _capacity_before_gc = _g1->capacity();
 
 #ifdef DEBUG
   // initialise these to something well known so that we can spot
@@ -1041,18 +1038,6 @@ void G1CollectorPolicy::record_concurrent_pause() {
 void G1CollectorPolicy::record_concurrent_pause_end() {
 }
 
-void G1CollectorPolicy::record_collection_pause_end_CH_strong_roots() {
-  _cur_CH_strong_roots_end_sec = os::elapsedTime();
-  _cur_CH_strong_roots_dur_ms =
-    (_cur_CH_strong_roots_end_sec - _cur_collection_start_sec) * 1000.0;
-}
-
-void G1CollectorPolicy::record_collection_pause_end_G1_strong_roots() {
-  _cur_G1_strong_roots_end_sec = os::elapsedTime();
-  _cur_G1_strong_roots_dur_ms =
-    (_cur_G1_strong_roots_end_sec - _cur_CH_strong_roots_end_sec) * 1000.0;
-}
-
 template<class T>
 T sum_of(T* sum_arr, int start, int n, int N) {
   T sum = (T)0;
@@ -1174,7 +1159,6 @@ void G1CollectorPolicy::record_collection_pause_end() {
   double end_time_sec = os::elapsedTime();
   double elapsed_ms = _last_pause_time_ms;
   bool parallel = G1CollectedHeap::use_parallel_gc_threads();
-  double evac_ms = (end_time_sec - _cur_G1_strong_roots_end_sec) * 1000.0;
   size_t rs_size =
     _cur_collection_pause_used_regions_at_start - collection_set_size();
   size_t cur_used_bytes = _g1->used();
@@ -1247,13 +1231,51 @@ void G1CollectorPolicy::record_collection_pause_end() {
 
   _n_pauses++;
 
-  if (update_stats) {
-    _recent_CH_strong_roots_times_ms->add(_cur_CH_strong_roots_dur_ms);
-    _recent_G1_strong_roots_times_ms->add(_cur_G1_strong_roots_dur_ms);
-    _recent_evac_times_ms->add(evac_ms);
-    _recent_pause_times_ms->add(elapsed_ms);
+  double ext_root_scan_time = avg_value(_par_last_ext_root_scan_times_ms);
+  double mark_stack_scan_time = avg_value(_par_last_mark_stack_scan_times_ms);
+  double update_rs_time = avg_value(_par_last_update_rs_times_ms);
+  double update_rs_processed_buffers =
+    sum_of_values(_par_last_update_rs_processed_buffers);
+  double scan_rs_time = avg_value(_par_last_scan_rs_times_ms);
+  double obj_copy_time = avg_value(_par_last_obj_copy_times_ms);
+  double termination_time = avg_value(_par_last_termination_times_ms);
 
+  double parallel_known_time = update_rs_time +
+                               ext_root_scan_time +
+                               mark_stack_scan_time +
+                               scan_rs_time +
+                               obj_copy_time +
+                               termination_time;
+
+  double parallel_other_time = _cur_collection_par_time_ms - parallel_known_time;
+
+  PauseSummary* summary = _summary;
+
+  if (update_stats) {
+    _recent_rs_scan_times_ms->add(scan_rs_time);
+    _recent_pause_times_ms->add(elapsed_ms);
     _recent_rs_sizes->add(rs_size);
+
+    MainBodySummary* body_summary = summary->main_body_summary();
+    guarantee(body_summary != NULL, "should not be null!");
+
+    if (_satb_drain_time_set)
+      body_summary->record_satb_drain_time_ms(_cur_satb_drain_time_ms);
+    else
+      body_summary->record_satb_drain_time_ms(0.0);
+
+    body_summary->record_ext_root_scan_time_ms(ext_root_scan_time);
+    body_summary->record_mark_stack_scan_time_ms(mark_stack_scan_time);
+    body_summary->record_update_rs_time_ms(update_rs_time);
+    body_summary->record_scan_rs_time_ms(scan_rs_time);
+    body_summary->record_obj_copy_time_ms(obj_copy_time);
+    if (parallel) {
+      body_summary->record_parallel_time_ms(_cur_collection_par_time_ms);
+      body_summary->record_clear_ct_time_ms(_cur_clear_ct_time_ms);
+      body_summary->record_termination_time_ms(termination_time);
+      body_summary->record_parallel_other_time_ms(parallel_other_time);
+    }
+    body_summary->record_mark_closure_time_ms(_mark_closure_time_ms);
 
     // We exempt parallel collection from this check because Alloc Buffer
     // fragmentation can produce negative collections.  Same with evac
@@ -1319,56 +1341,12 @@ void G1CollectorPolicy::record_collection_pause_end() {
     gclog_or_tty->print_cr("   Recording collection pause(%d)", _n_pauses);
   }
 
-  PauseSummary* summary = _summary;
-
-  double ext_root_scan_time = avg_value(_par_last_ext_root_scan_times_ms);
-  double mark_stack_scan_time = avg_value(_par_last_mark_stack_scan_times_ms);
-  double update_rs_time = avg_value(_par_last_update_rs_times_ms);
-  double update_rs_processed_buffers =
-    sum_of_values(_par_last_update_rs_processed_buffers);
-  double scan_rs_time = avg_value(_par_last_scan_rs_times_ms);
-  double obj_copy_time = avg_value(_par_last_obj_copy_times_ms);
-  double termination_time = avg_value(_par_last_termination_times_ms);
-
-  double parallel_other_time = _cur_collection_par_time_ms -
-    (update_rs_time + ext_root_scan_time + mark_stack_scan_time +
-     scan_rs_time + obj_copy_time + termination_time);
-  if (update_stats) {
-    MainBodySummary* body_summary = summary->main_body_summary();
-    guarantee(body_summary != NULL, "should not be null!");
-
-    if (_satb_drain_time_set)
-      body_summary->record_satb_drain_time_ms(_cur_satb_drain_time_ms);
-    else
-      body_summary->record_satb_drain_time_ms(0.0);
-    body_summary->record_ext_root_scan_time_ms(ext_root_scan_time);
-    body_summary->record_mark_stack_scan_time_ms(mark_stack_scan_time);
-    body_summary->record_update_rs_time_ms(update_rs_time);
-    body_summary->record_scan_rs_time_ms(scan_rs_time);
-    body_summary->record_obj_copy_time_ms(obj_copy_time);
-    if (parallel) {
-      body_summary->record_parallel_time_ms(_cur_collection_par_time_ms);
-      body_summary->record_clear_ct_time_ms(_cur_clear_ct_time_ms);
-      body_summary->record_termination_time_ms(termination_time);
-      body_summary->record_parallel_other_time_ms(parallel_other_time);
-    }
-    body_summary->record_mark_closure_time_ms(_mark_closure_time_ms);
-  }
-
   if (G1PolicyVerbose > 1) {
     gclog_or_tty->print_cr("      ET: %10.6f ms           (avg: %10.6f ms)\n"
-                           "        CH Strong: %10.6f ms    (avg: %10.6f ms)\n"
-                           "        G1 Strong: %10.6f ms    (avg: %10.6f ms)\n"
-                           "        Evac:      %10.6f ms    (avg: %10.6f ms)\n"
                            "       ET-RS:  %10.6f ms      (avg: %10.6f ms)\n"
                            "      |RS|: " SIZE_FORMAT,
                            elapsed_ms, recent_avg_time_for_pauses_ms(),
-                           _cur_CH_strong_roots_dur_ms, recent_avg_time_for_CH_strong_ms(),
-                           _cur_G1_strong_roots_dur_ms, recent_avg_time_for_G1_strong_ms(),
-                           evac_ms, recent_avg_time_for_evac_ms(),
-                           scan_rs_time,
-                           recent_avg_time_for_pauses_ms() -
-                           recent_avg_time_for_G1_strong_ms(),
+                           scan_rs_time, recent_avg_time_for_rs_scan_ms(),
                            rs_size);
 
     gclog_or_tty->print_cr("       Used at start: " SIZE_FORMAT"K"
@@ -1429,7 +1407,7 @@ void G1CollectorPolicy::record_collection_pause_end() {
       }
       print_par_stats(2, "GC Worker Times", _par_last_gc_worker_times_ms);
 
-      print_stats(2, "Other", parallel_other_time);
+      print_stats(2, "Parallel Other", parallel_other_time);
       print_stats(1, "Clear CT", _cur_clear_ct_time_ms);
     } else {
       print_stats(1, "Update RS", update_rs_time);
@@ -1460,14 +1438,6 @@ void G1CollectorPolicy::record_collection_pause_end() {
       }
     }
   }
-  if (PrintGCDetails)
-    gclog_or_tty->print("   [");
-  if (PrintGC || PrintGCDetails)
-    _g1->print_size_transition(gclog_or_tty,
-                               _cur_collection_pause_used_at_start_bytes,
-                               _g1->used(), _g1->capacity());
-  if (PrintGCDetails)
-    gclog_or_tty->print_cr("]");
 
   _all_pause_times_ms->add(elapsed_ms);
   if (update_stats) {
@@ -1599,8 +1569,8 @@ void G1CollectorPolicy::record_collection_pause_end() {
 
     double survival_ratio = 0.0;
     if (_bytes_in_collection_set_before_gc > 0) {
-      survival_ratio = (double) bytes_in_to_space_during_gc() /
-        (double) _bytes_in_collection_set_before_gc;
+      survival_ratio = (double) _bytes_copied_during_gc /
+                                   (double) _bytes_in_collection_set_before_gc;
     }
 
     _pending_cards_seq->add((double) _pending_cards);
@@ -1670,6 +1640,40 @@ void G1CollectorPolicy::record_collection_pause_end() {
   double update_rs_time_goal_ms = _mmu_tracker->max_gc_time() * MILLIUNITS * G1RSetUpdatingPauseTimePercent / 100.0;
   adjust_concurrent_refinement(update_rs_time, update_rs_processed_buffers, update_rs_time_goal_ms);
   // </NEW PREDICTION>
+}
+
+#define EXT_SIZE_FORMAT "%d%s"
+#define EXT_SIZE_PARAMS(bytes)                                  \
+  byte_size_in_proper_unit((bytes)),                            \
+  proper_unit_for_byte_size((bytes))
+
+void G1CollectorPolicy::print_heap_transition() {
+  if (PrintGCDetails) {
+    YoungList* young_list = _g1->young_list();
+    size_t eden_bytes = young_list->eden_used_bytes();
+    size_t survivor_bytes = young_list->survivor_used_bytes();
+    size_t used_before_gc = _cur_collection_pause_used_at_start_bytes;
+    size_t used = _g1->used();
+    size_t capacity = _g1->capacity();
+
+    gclog_or_tty->print_cr(
+         "   [Eden: "EXT_SIZE_FORMAT"->"EXT_SIZE_FORMAT" "
+             "Survivors: "EXT_SIZE_FORMAT"->"EXT_SIZE_FORMAT" "
+             "Heap: "EXT_SIZE_FORMAT"("EXT_SIZE_FORMAT")->"
+                     EXT_SIZE_FORMAT"("EXT_SIZE_FORMAT")]",
+             EXT_SIZE_PARAMS(_eden_bytes_before_gc),
+               EXT_SIZE_PARAMS(eden_bytes),
+             EXT_SIZE_PARAMS(_survivor_bytes_before_gc),
+               EXT_SIZE_PARAMS(survivor_bytes),
+             EXT_SIZE_PARAMS(used_before_gc),
+             EXT_SIZE_PARAMS(_capacity_before_gc),
+               EXT_SIZE_PARAMS(used),
+               EXT_SIZE_PARAMS(capacity));
+  } else if (PrintGC) {
+    _g1->print_size_transition(gclog_or_tty,
+                               _cur_collection_pause_used_at_start_bytes,
+                               _g1->used(), _g1->capacity());
+  }
 }
 
 // <NEW PREDICTION>
@@ -1932,38 +1936,27 @@ void G1CollectorPolicy::update_recent_gc_times(double end_time_sec,
 }
 
 double G1CollectorPolicy::recent_avg_time_for_pauses_ms() {
-  if (_recent_pause_times_ms->num() == 0) return (double) MaxGCPauseMillis;
-  else return _recent_pause_times_ms->avg();
+  if (_recent_pause_times_ms->num() == 0) {
+    return (double) MaxGCPauseMillis;
+  }
+  return _recent_pause_times_ms->avg();
 }
 
-double G1CollectorPolicy::recent_avg_time_for_CH_strong_ms() {
-  if (_recent_CH_strong_roots_times_ms->num() == 0)
+double G1CollectorPolicy::recent_avg_time_for_rs_scan_ms() {
+  if (_recent_rs_scan_times_ms->num() == 0) {
     return (double)MaxGCPauseMillis/3.0;
-  else return _recent_CH_strong_roots_times_ms->avg();
-}
-
-double G1CollectorPolicy::recent_avg_time_for_G1_strong_ms() {
-  if (_recent_G1_strong_roots_times_ms->num() == 0)
-    return (double)MaxGCPauseMillis/3.0;
-  else return _recent_G1_strong_roots_times_ms->avg();
-}
-
-double G1CollectorPolicy::recent_avg_time_for_evac_ms() {
-  if (_recent_evac_times_ms->num() == 0) return (double)MaxGCPauseMillis/3.0;
-  else return _recent_evac_times_ms->avg();
+  }
+  return _recent_rs_scan_times_ms->avg();
 }
 
 int G1CollectorPolicy::number_of_recent_gcs() {
-  assert(_recent_CH_strong_roots_times_ms->num() ==
-         _recent_G1_strong_roots_times_ms->num(), "Sequence out of sync");
-  assert(_recent_G1_strong_roots_times_ms->num() ==
-         _recent_evac_times_ms->num(), "Sequence out of sync");
-  assert(_recent_evac_times_ms->num() ==
+  assert(_recent_rs_scan_times_ms->num() ==
          _recent_pause_times_ms->num(), "Sequence out of sync");
   assert(_recent_pause_times_ms->num() ==
          _recent_CS_bytes_used_before->num(), "Sequence out of sync");
   assert(_recent_CS_bytes_used_before->num() ==
          _recent_CS_bytes_surviving->num(), "Sequence out of sync");
+
   return _recent_pause_times_ms->num();
 }
 
@@ -2435,21 +2428,6 @@ record_collection_pause_start(double start_time_sec, size_t start_used) {
   G1CollectorPolicy::record_collection_pause_start(start_time_sec, start_used);
 }
 
-class NextNonCSElemFinder: public HeapRegionClosure {
-  HeapRegion* _res;
-public:
-  NextNonCSElemFinder(): _res(NULL) {}
-  bool doHeapRegion(HeapRegion* r) {
-    if (!r->in_collection_set()) {
-      _res = r;
-      return true;
-    } else {
-      return false;
-    }
-  }
-  HeapRegion* res() { return _res; }
-};
-
 class KnownGarbageClosure: public HeapRegionClosure {
   CollectionSetChooser* _hrSorted;
 
@@ -2618,14 +2596,6 @@ add_to_collection_set(HeapRegion* hr) {
   assert(_inc_cset_build_state == Active, "Precondition");
   assert(!hr->is_young(), "non-incremental add of young region");
 
-  if (G1PrintHeapRegions) {
-    gclog_or_tty->print_cr("added region to cset "
-                           "%d:["PTR_FORMAT", "PTR_FORMAT"], "
-                           "top "PTR_FORMAT", %s",
-                           hr->hrs_index(), hr->bottom(), hr->end(),
-                           hr->top(), hr->is_young() ? "YOUNG" : "NOT_YOUNG");
-  }
-
   if (_g1->mark_in_progress())
     _g1->concurrent_mark()->registerCSetRegion(hr);
 
@@ -2791,14 +2761,6 @@ void G1CollectorPolicy::add_region_to_incremental_cset_rhs(HeapRegion* hr) {
     _inc_cset_tail->set_next_in_collection_set(hr);
   }
   _inc_cset_tail = hr;
-
-  if (G1PrintHeapRegions) {
-    gclog_or_tty->print_cr(" added region to incremental cset (RHS) "
-                  "%d:["PTR_FORMAT", "PTR_FORMAT"], "
-                  "top "PTR_FORMAT", young %s",
-                  hr->hrs_index(), hr->bottom(), hr->end(),
-                  hr->top(), (hr->is_young()) ? "YES" : "NO");
-  }
 }
 
 // Add the region to the LHS of the incremental cset
@@ -2816,14 +2778,6 @@ void G1CollectorPolicy::add_region_to_incremental_cset_lhs(HeapRegion* hr) {
     _inc_cset_tail = hr;
   }
   _inc_cset_head = hr;
-
-  if (G1PrintHeapRegions) {
-    gclog_or_tty->print_cr(" added region to incremental cset (LHS) "
-                  "%d:["PTR_FORMAT", "PTR_FORMAT"], "
-                  "top "PTR_FORMAT", young %s",
-                  hr->hrs_index(), hr->bottom(), hr->end(),
-                  hr->top(), (hr->is_young()) ? "YES" : "NO");
-  }
 }
 
 #ifndef PRODUCT

@@ -843,7 +843,7 @@ public:
   void insert_pre_post_loops( IdealLoopTree *loop, Node_List &old_new, bool peel_only );
   // If Node n lives in the back_ctrl block, we clone a private version of n
   // in preheader_ctrl block and return that, otherwise return n.
-  Node *clone_up_backedge_goo( Node *back_ctrl, Node *preheader_ctrl, Node *n );
+  Node *clone_up_backedge_goo( Node *back_ctrl, Node *preheader_ctrl, Node *n, VectorSet &visited, Node_Stack &clones );
 
   // Take steps to maximally unroll the loop.  Peel any odd iterations, then
   // unroll to do double iterations.  The next round of major loop transforms
@@ -877,19 +877,13 @@ public:
                                    Deoptimization::DeoptReason reason,
                                    PhaseIdealLoop* loop_phase,
                                    PhaseIterGVN* igvn);
-  static ProjNode*  move_predicate(ProjNode* predicate_proj, Node* new_entry,
-                                   Deoptimization::DeoptReason reason,
-                                   PhaseIdealLoop* loop_phase,
-                                   PhaseIterGVN* igvn);
+
   static Node* clone_loop_predicates(Node* old_entry, Node* new_entry,
-                                         bool move_predicates,
                                          bool clone_limit_check,
                                          PhaseIdealLoop* loop_phase,
                                          PhaseIterGVN* igvn);
   Node* clone_loop_predicates(Node* old_entry, Node* new_entry, bool clone_limit_check);
-  Node*  move_loop_predicates(Node* old_entry, Node* new_entry, bool clone_limit_check);
 
-  void eliminate_loop_predicates(Node* entry);
   static Node* skip_loop_predicates(Node* entry);
 
   // Find a good location to insert a predicate
@@ -1009,7 +1003,7 @@ public:
   Node *has_local_phi_input( Node *n );
   // Mark an IfNode as being dominated by a prior test,
   // without actually altering the CFG (and hence IDOM info).
-  void dominated_by( Node *prevdom, Node *iff, bool flip = false );
+  void dominated_by( Node *prevdom, Node *iff, bool flip = false, bool exclude_loop_predicate = false );
 
   // Split Node 'n' through merge point
   Node *split_thru_region( Node *n, Node *region );

@@ -243,6 +243,7 @@ void print_statistics() {
     FlagSetting fs(DisplayVMOutput, DisplayVMOutput && PrintC1Statistics);
     Runtime1::print_statistics();
     Deoptimization::print_statistics();
+    SharedRuntime::print_statistics();
     nmethod::print_statistics();
   }
 #endif /* COMPILER1 */
@@ -254,8 +255,8 @@ void print_statistics() {
 #ifndef COMPILER1
     Deoptimization::print_statistics();
     nmethod::print_statistics();
-#endif //COMPILER1
     SharedRuntime::print_statistics();
+#endif //COMPILER1
     os::print_statistics();
   }
 
@@ -468,12 +469,10 @@ void before_exit(JavaThread * thread) {
   StatSampler::disengage();
   StatSampler::destroy();
 
-#ifndef SERIALGC
-  // stop CMS threads
-  if (UseConcMarkSweepGC) {
-    ConcurrentMarkSweepThread::stop();
-  }
-#endif // SERIALGC
+  // We do not need to explicitly stop concurrent GC threads because the
+  // JVM will be taken down at a safepoint when such threads are inactive --
+  // except for some concurrent G1 threads, see (comment in)
+  // Threads::destroy_vm().
 
   // Print GC/heap related information.
   if (PrintGCDetails) {

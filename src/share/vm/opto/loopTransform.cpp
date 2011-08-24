@@ -509,14 +509,13 @@ void PhaseIdealLoop::do_peeling( IdealLoopTree *loop, Node_List &old_new ) {
   //         backedges) and then map to the new peeled iteration.  This leaves
   //         the pre-loop with only 1 user (the new peeled iteration), but the
   //         peeled-loop backedge has 2 users.
-  Node* new_exit_value = old_new[head->in(LoopNode::LoopBackControl)->_idx];
-  new_exit_value = move_loop_predicates(entry, new_exit_value, !counted_loop);
+  Node* new_entry = old_new[head->in(LoopNode::LoopBackControl)->_idx];
   _igvn.hash_delete(head);
-  head->set_req(LoopNode::EntryControl, new_exit_value);
+  head->set_req(LoopNode::EntryControl, new_entry);
   for (DUIterator_Fast jmax, j = head->fast_outs(jmax); j < jmax; j++) {
     Node* old = head->fast_out(j);
     if (old->in(0) == loop->_head && old->req() == 3 && old->is_Phi()) {
-      new_exit_value = old_new[old->in(LoopNode::LoopBackControl)->_idx];
+      Node* new_exit_value = old_new[old->in(LoopNode::LoopBackControl)->_idx];
       if (!new_exit_value )     // Backedge value is ALSO loop invariant?
         // Then loop body backedge value remains the same.
         new_exit_value = old->in(LoopNode::LoopBackControl);
@@ -824,13 +823,23 @@ bool IdealLoopTree::policy_peel_only( PhaseIdealLoop *phase ) const {
 //------------------------------clone_up_backedge_goo--------------------------
 // If Node n lives in the back_ctrl block and cannot float, we clone a private
 // version of n in preheader_ctrl block and return that, otherwise return n.
-Node *PhaseIdealLoop::clone_up_backedge_goo( Node *back_ctrl, Node *preheader_ctrl, Node *n ) {
+Node *PhaseIdealLoop::clone_up_backedge_goo( Node *back_ctrl, Node *preheader_ctrl, Node *n, VectorSet &visited, Node_Stack &clones ) {
   if( get_ctrl(n) != back_ctrl ) return n;
+
+  // Only visit once
+  if (visited.test_set(n->_idx)) {
+    Node *x = clones.find(n->_idx);
+    if (x != NULL)
+      return x;
+    return n;
+  }
 
   Node *x = NULL;               // If required, a clone of 'n'
   // Check for 'n' being pinned in the backedge.
   if( n->in(0) && n->in(0) == back_ctrl ) {
+    assert(clones.find(n->_idx) == NULL, "dead loop");
     x = n->clone();             // Clone a copy of 'n' to preheader
+    clones.push(x, n->_idx);
     x->set_req( 0, preheader_ctrl ); // Fix x's control input to preheader
   }
 
@@ -838,10 +847,13 @@ Node *PhaseIdealLoop::clone_up_backedge_goo( Node *back_ctrl, Node *preheader_ct
   // If there are no changes we can just return 'n', otherwise
   // we need to clone a private copy and change it.
   for( uint i = 1; i < n->req(); i++ ) {
-    Node *g = clone_up_backedge_goo( back_ctrl, preheader_ctrl, n->in(i) );
+    Node *g = clone_up_backedge_goo( back_ctrl, preheader_ctrl, n->in(i), visited, clones );
     if( g != n->in(i) ) {
-      if( !x )
+      if( !x ) {
+        assert(clones.find(n->_idx) == NULL, "dead loop");
         x = n->clone();
+        clones.push(x, n->_idx);
+      }
       x->set_req(i, g);
     }
   }
@@ -960,6 +972,9 @@ void PhaseIdealLoop::insert_pre_post_loops( IdealLoopTree *loop, Node_List &old_
   post_head->set_req(LoopNode::EntryControl, zer_taken);
   set_idom(post_head, zer_taken, dd_main_exit);
 
+  Arena *a = Thread::current()->resource_area();
+  VectorSet visited(a);
+  Node_Stack clones(a, main_head->back_control()->outcnt());
   // Step A3: Make the fall-in values to the post-loop come from the
   // fall-out values of the main-loop.
   for (DUIterator_Fast imax, i = main_head->fast_outs(imax); i < imax; i++) {
@@ -968,7 +983,8 @@ void PhaseIdealLoop::insert_pre_post_loops( IdealLoopTree *loop, Node_List &old_
       Node *post_phi = old_new[main_phi->_idx];
       Node *fallmain  = clone_up_backedge_goo(main_head->back_control(),
                                               post_head->init_control(),
-                                              main_phi->in(LoopNode::LoopBackControl));
+                                              main_phi->in(LoopNode::LoopBackControl),
+                                              visited, clones);
       _igvn.hash_delete(post_phi);
       post_phi->set_req( LoopNode::EntryControl, fallmain );
     }
@@ -1032,6 +1048,8 @@ void PhaseIdealLoop::insert_pre_post_loops( IdealLoopTree *loop, Node_List &old_
   main_head->set_req(LoopNode::EntryControl, min_taken);
   set_idom(main_head, min_taken, dd_main_head);
 
+  visited.Clear();
+  clones.clear();
   // Step B3: Make the fall-in values to the main-loop come from the
   // fall-out values of the pre-loop.
   for (DUIterator_Fast i2max, i2 = main_head->fast_outs(i2max); i2 < i2max; i2++) {
@@ -1040,7 +1058,8 @@ void PhaseIdealLoop::insert_pre_post_loops( IdealLoopTree *loop, Node_List &old_
       Node *pre_phi = old_new[main_phi->_idx];
       Node *fallpre  = clone_up_backedge_goo(pre_head->back_control(),
                                              main_head->init_control(),
-                                             pre_phi->in(LoopNode::LoopBackControl));
+                                             pre_phi->in(LoopNode::LoopBackControl),
+                                             visited, clones);
       _igvn.hash_delete(main_phi);
       main_phi->set_req( LoopNode::EntryControl, fallpre );
     }
@@ -2080,7 +2099,7 @@ bool IdealLoopTree::policy_do_remove_empty_loop( PhaseIdealLoop *phase ) {
   if (!_head->is_CountedLoop())
     return false;     // Dead loop
   CountedLoopNode *cl = _head->as_CountedLoop();
-  if (!cl->loopexit())
+  if (!cl->is_valid_counted_loop())
     return false; // Malformed loop
   if (!phase->is_member(this, phase->get_ctrl(cl->loopexit()->in(CountedLoopEndNode::TestValue))))
     return false;             // Infinite loop
@@ -2236,7 +2255,7 @@ bool IdealLoopTree::iteration_split_impl( PhaseIdealLoop *phase, Node_List &old_
   }
   CountedLoopNode *cl = _head->as_CountedLoop();
 
-  if (!cl->loopexit()) return true; // Ignore various kinds of broken loops
+  if (!cl->is_valid_counted_loop()) return true; // Ignore various kinds of broken loops
 
   // Do nothing special to pre- and post- loops
   if (cl->is_pre_loop() || cl->is_post_loop()) return true;
@@ -2617,7 +2636,7 @@ bool PhaseIdealLoop::intrinsify_fill(IdealLoopTree* lpt) {
 
   // Must have constant stride
   CountedLoopNode* head = lpt->_head->as_CountedLoop();
-  if (!head->stride_is_con() || !head->is_normal_loop()) {
+  if (!head->is_valid_counted_loop() || !head->is_normal_loop()) {
     return false;
   }
 

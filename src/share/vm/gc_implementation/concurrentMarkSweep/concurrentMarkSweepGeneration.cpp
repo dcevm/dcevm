@@ -2025,9 +2025,6 @@ void CMSCollector::do_compaction_work(bool clear_all_soft_refs) {
                                             _intra_sweep_estimate.padded_average());
   }
 
-  {
-    TraceCMSMemoryManagerStats tmms(gch->gc_cause());
-  }
   GenMarkSweep::invoke_at_safepoint(_cmsGen->level(),
     ref_processor(), clear_all_soft_refs);
   #ifdef ASSERT
@@ -2715,6 +2712,10 @@ void CMSCollector::gc_epilogue(bool full) {
 
   bitMapLock()->unlock();
   releaseFreelistLocks();
+
+  if (!CleanChunkPoolAsync) {
+    Chunk::clean_chunk_pool();
+  }
 
   _between_prologue_and_epilogue = false;  // ready for next cycle
 }
@@ -9341,15 +9342,3 @@ TraceCMSMemoryManagerStats::TraceCMSMemoryManagerStats(CMSCollector::CollectorSt
   }
 }
 
-// when bailing out of cms in concurrent mode failure
-TraceCMSMemoryManagerStats::TraceCMSMemoryManagerStats(GCCause::Cause cause): TraceMemoryManagerStats() {
-  initialize(true /* fullGC */ ,
-             cause /* cause of the GC */,
-             true /* recordGCBeginTime */,
-             true /* recordPreGCUsage */,
-             true /* recordPeakUsage */,
-             true /* recordPostGCusage */,
-             true /* recordAccumulatedGCTime */,
-             true /* recordGCEndTime */,
-             true /* countCollection */ );
-}

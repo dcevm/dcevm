@@ -45,7 +45,7 @@ HeapRegionDCTOC::HeapRegionDCTOC(G1CollectedHeap* g1,
                                  FilterKind fk) :
   ContiguousSpaceDCTOC(hr, cl, precision, NULL),
   _hr(hr), _fk(fk), _g1(g1)
-{}
+{ }
 
 FilterOutOfRegionClosure::FilterOutOfRegionClosure(HeapRegion* r,
                                                    OopClosure* oc) :
@@ -210,15 +210,17 @@ void HeapRegionDCTOC::walk_mem_region_with_cl(MemRegion mr,
                                               HeapWord* top,
                                               OopClosure* cl) {
   G1CollectedHeap* g1h = _g1;
-
   int oop_size;
+  OopClosure* cl2 = NULL;
 
-  OopClosure* cl2 = cl;
   FilterIntoCSClosure intoCSFilt(this, g1h, cl);
   FilterOutOfRegionClosure outOfRegionFilt(_hr, cl);
+
   switch (_fk) {
+  case NoFilterKind:          cl2 = cl; break;
   case IntoCSFilterKind:      cl2 = &intoCSFilt; break;
   case OutOfRegionFilterKind: cl2 = &outOfRegionFilt; break;
+  default:                    ShouldNotReachHere();
   }
 
   // Start filtering what we add to the remembered set. If the object is
@@ -239,16 +241,19 @@ void HeapRegionDCTOC::walk_mem_region_with_cl(MemRegion mr,
     case NoFilterKind:
       bottom = walk_mem_region_loop(cl, g1h, _hr, bottom, top);
       break;
+
     case IntoCSFilterKind: {
       FilterIntoCSClosure filt(this, g1h, cl);
       bottom = walk_mem_region_loop(&filt, g1h, _hr, bottom, top);
       break;
     }
+
     case OutOfRegionFilterKind: {
       FilterOutOfRegionClosure filt(_hr, cl);
       bottom = walk_mem_region_loop(&filt, g1h, _hr, bottom, top);
       break;
     }
+
     default:
       ShouldNotReachHere();
     }
@@ -483,12 +488,13 @@ HeapRegion::
 HeapRegion(size_t hrs_index, G1BlockOffsetSharedArray* sharedOffsetArray,
            MemRegion mr, bool is_zeroed)
   : G1OffsetTableContigSpace(sharedOffsetArray, mr, is_zeroed),
-    _next_fk(HeapRegionDCTOC::NoFilterKind), _hrs_index(hrs_index),
+    _hrs_index(hrs_index),
     _humongous_type(NotHumongous), _humongous_start_region(NULL),
     _in_collection_set(false),
     _next_in_special_set(NULL), _orig_end(NULL),
     _claimed(InitialClaimValue), _evacuation_failed(false),
     _prev_marked_bytes(0), _next_marked_bytes(0), _sort_index(-1),
+    _gc_efficiency(0.0),
     _young_type(NotYoung), _next_young_region(NULL),
     _next_dirty_cards_region(NULL), _next(NULL), _pending_removal(false),
 #ifdef ASSERT

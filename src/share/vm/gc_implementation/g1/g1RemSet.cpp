@@ -122,10 +122,10 @@ public:
   void set_try_claimed() { _try_claimed = true; }
 
   void scanCard(size_t index, HeapRegion *r) {
-    DirtyCardToOopClosure* cl =
-      r->new_dcto_closure(_oc,
-                         CardTableModRefBS::Precise,
-                         HeapRegionDCTOC::IntoCSFilterKind);
+    // Stack allocate the DirtyCardToOopClosure instance
+    HeapRegionDCTOC cl(_g1h, r, _oc,
+                       CardTableModRefBS::Precise,
+                       HeapRegionDCTOC::IntoCSFilterKind);
 
     // Set the "from" region in the closure.
     _oc->set_region(r);
@@ -140,7 +140,7 @@ public:
       // scans (the rsets of the regions in the cset can intersect).
       _ct_bs->set_card_claimed(index);
       _cards_done++;
-      cl->do_MemRegion(mr);
+      cl.do_MemRegion(mr);
     }
   }
 
@@ -635,10 +635,18 @@ bool G1RemSet::concurrentRefineOneCard_impl(jbyte* card_ptr, int worker_i,
   ct_freq_note_card(_ct_bs->index_for(start));
 #endif
 
-  assert(!check_for_refs_into_cset || _cset_rs_update_cl[worker_i] != NULL, "sanity");
+  OopsInHeapRegionClosure* oops_in_heap_closure = NULL;
+  if (check_for_refs_into_cset) {
+    // ConcurrentG1RefineThreads have worker numbers larger than what
+    // _cset_rs_update_cl[] is set up to handle. But those threads should
+    // only be active outside of a collection which means that when they
+    // reach here they should have check_for_refs_into_cset == false.
+    assert((size_t)worker_i < n_workers(), "index of worker larger than _cset_rs_update_cl[].length");
+    oops_in_heap_closure = _cset_rs_update_cl[worker_i];
+  }
   UpdateRSOrPushRefOopClosure update_rs_oop_cl(_g1,
                                                _g1->g1_rem_set(),
-                                               _cset_rs_update_cl[worker_i],
+                                               oops_in_heap_closure,
                                                check_for_refs_into_cset,
                                                worker_i);
   update_rs_oop_cl.set_from(r);

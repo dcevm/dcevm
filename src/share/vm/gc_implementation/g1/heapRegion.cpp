@@ -340,14 +340,6 @@ void HeapRegion::reset_after_compaction() {
   init_top_at_mark_start();
 }
 
-DirtyCardToOopClosure*
-HeapRegion::new_dcto_closure(OopClosure* cl,
-                             CardTableModRefBS::PrecisionStyle precision,
-                             HeapRegionDCTOC::FilterKind fk) {
-  return new HeapRegionDCTOC(G1CollectedHeap::heap(),
-                             this, cl, precision, fk);
-}
-
 void HeapRegion::hr_clear(bool par, bool clear_space) {
   assert(_humongous_type == NotHumongous,
          "we should have already filtered out humongous regions");
@@ -730,7 +722,7 @@ void HeapRegion::print_on(outputStream* st) const {
     st->print(" F");
   else
     st->print("  ");
-  st->print(" %5d", _gc_time_stamp);
+  st->print(" TS %5d", _gc_time_stamp);
   st->print(" PTAMS "PTR_FORMAT" NTAMS "PTR_FORMAT,
             prev_top_at_mark_start(), next_top_at_mark_start());
   G1OffsetTableContigSpace::print_on(st);

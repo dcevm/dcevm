@@ -421,6 +421,7 @@ void GenMarkSweep::mark_sweep_phase4() {
   // in the same order in phase2, phase3 and phase4. We don't quite do that
   // here (perm_gen first rather than last), so we tell the validate code
   // to use a higher index (saved from phase2) when verifying perm_gen.
+  assert(_rescued_oops == NULL, "must be empty before processing");
   GenCollectedHeap* gch = GenCollectedHeap::heap();
   Generation* pg = gch->perm_gen();
 
@@ -433,10 +434,14 @@ void GenMarkSweep::mark_sweep_phase4() {
 
   VALIDATE_MARK_SWEEP_ONLY(reset_live_oop_tracking(false));
 
+  MarkSweep::copy_rescued_objects_back();
+
   GenCompactClosure blk;
   gch->generation_iterate(&blk, true);
 
   VALIDATE_MARK_SWEEP_ONLY(compaction_complete());
+
+  MarkSweep::copy_rescued_objects_back();
 
   pg->post_compact(); // Shared spaces verification.
 }

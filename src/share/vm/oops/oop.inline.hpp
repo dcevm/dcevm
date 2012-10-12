@@ -123,6 +123,14 @@ inline void oopDesc::set_klass(klassOop k) {
   }
 }
 
+inline void oopDesc::set_klass_no_check(klassOop k) {
+  if (UseCompressedOops) {
+    oop_store_without_check(compressed_klass_addr(), (oop)k);
+  } else {
+    oop_store_without_check(klass_addr(), (oop) k);
+  }
+}
+
 inline int oopDesc::klass_gap() const {
   return *(int*)(((intptr_t)this) + klass_gap_offset_in_bytes());
 }
@@ -156,6 +164,7 @@ inline bool oopDesc::is_objArray()           const { return blueprint()->oop_is_
 inline bool oopDesc::is_typeArray()          const { return blueprint()->oop_is_typeArray(); }
 inline bool oopDesc::is_javaArray()          const { return blueprint()->oop_is_javaArray(); }
 inline bool oopDesc::is_klass()              const { return blueprint()->oop_is_klass(); }
+inline bool oopDesc::is_instanceKlass()      const { return blueprint()->oop_is_instanceKlass(); }
 inline bool oopDesc::is_thread()             const { return blueprint()->oop_is_thread(); }
 inline bool oopDesc::is_method()             const { return blueprint()->oop_is_method(); }
 inline bool oopDesc::is_constMethod()        const { return blueprint()->oop_is_constMethod(); }

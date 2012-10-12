@@ -1172,3 +1172,11 @@ void ciEnv::record_out_of_memory_failure() {
   // If memory is low, we stop compiling methods.
   record_method_not_compilable("out of memory");
 }
+
+// DCEVM: Called after class redefinition to clean up possibly invalidated state.
+void ciEnv::cleanup_after_redefinition() {
+
+  if (_factory != NULL) {
+    _factory->cleanup_after_redefinition();
+  }
+}

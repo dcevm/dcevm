@@ -402,7 +402,7 @@ IRT_ENTRY(address, InterpreterRuntime::exception_handler_for_exception(JavaThrea
     assert(h_exception.not_null(), "NULL exceptions should be handled by athrow");
     assert(h_exception->is_oop(), "just checking");
     // Check that exception is a subclass of Throwable, otherwise we have a VerifyError
-    if (!(h_exception->is_a(SystemDictionary::Throwable_klass()))) {
+    if (!(h_exception->is_a(SystemDictionary::Throwable_klass()->klass_part()->newest_version())) && !(h_exception->is_a(SystemDictionary::Throwable_klass()))) {
       if (ExitVMOnVerifyError) vm_exit(-1);
       ShouldNotReachHere();
     }
@@ -656,6 +656,82 @@ IRT_ENTRY(void, InterpreterRuntime::_breakpoint(JavaThread* thread, methodOopDes
   JvmtiExport::post_raw_breakpoint(thread, method, bcp);
 IRT_END
 
+// (tw) Correctly resolve method when running old code.
+IRT_ENTRY(void, InterpreterRuntime::forward_method(JavaThread *thread))
+  {
+    MonitorLockerEx ml(RedefinitionSync_lock);
+    while (Threads::wait_at_instrumentation_entry()) {
+      ml.wait();
+    }
+  }
+  frame f = last_frame(thread);
+  methodOop m = f.interpreter_frame_method();
+  methodOop forward_method = m->forward_method();
+  if (forward_method != NULL) {
+    int bci = f.interpreter_frame_bci();
+    
+    if (TraceRedefineClasses >= 3) {
+      tty->print_cr("Executing NOP in method %s at bci %d %d", m->name()->as_C_string(), bci, m->is_in_code_section(bci + 1));
+    }
+
+    int next_bci = bci - 1;
+    // First try bci before NOP.
+    if (!m->is_in_code_section(next_bci)) {
+      // Try bci after NOP.
+      next_bci = bci + 1;
+      if (!m->is_in_code_section(next_bci)) return;
+    }
+    
+    int new_bci = m->calculate_forward_bci(next_bci, forward_method);
+    if (TraceRedefineClasses >= 2) {
+      tty->print_cr("Transfering execution of %s to new method old_bci=%d new_bci=%d", forward_method->name()->as_C_string(), bci, new_bci);
+    }
+    RegisterMap reg_map(thread);
+    vframe* vf = vframe::new_vframe(&f, &reg_map, thread);
+    interpretedVFrame *iframe = (interpretedVFrame *)vf;
+    iframe->set_method(forward_method, new_bci - 1);
+  }
+IRT_END
+
+// (tw) Correctly resolve method when running old code.
+IRT_ENTRY(void, InterpreterRuntime::find_correct_method(JavaThread *thread, oopDesc* receiverOop, int vTableIndex))
+  // extract receiver from the outgoing argument list if necessary
+  Handle receiver(thread, receiverOop);
+
+  // TODO: Check for invokeinterface!
+  Bytecodes::Code bytecode = Bytecodes::_invokevirtual;
+
+  int method_holder_revision_number = method(thread)->method_holder()->klass_part()->revision_number();
+  klassOop klass = receiverOop->klass();
+  while (klass->klass_part()->revision_number() > method_holder_revision_number) {
+    klass = klass->klass_part()->old_version();
+  }
+
+  // TODO: Check for correctness if different vtable indices in different versions?
+
+  methodOop method = ((instanceKlass *)klass->klass_part())->method_at_vtable(vTableIndex);
+  thread->set_vm_result(method);
+IRT_END
+
+// Correctly resolve interface method when running old code.
+IRT_ENTRY(void, InterpreterRuntime::find_correct_interface_method(JavaThread *thread, oopDesc* receiverOop, oopDesc* interface_klass, int vTableIndex))
+
+  // extract receiver from the outgoing argument list if necessary
+  Handle receiver(thread, receiverOop);
+
+  // TODO: Check for invokeinterface!
+  Bytecodes::Code bytecode = Bytecodes::_invokevirtual;
+
+  int method_holder_revision_number = method(thread)->method_holder()->klass_part()->revision_number();
+  klassOop klass = receiverOop->klass();
+  while (klass->klass_part()->revision_number() > method_holder_revision_number) {
+    klass = klass->klass_part()->old_version();
+  }
+
+  methodOop method = ((instanceKlass *)klass->klass_part())->method_at_itable((klassOop)interface_klass, vTableIndex, THREAD);
+  thread->set_vm_result(method);
+IRT_END
+
 IRT_ENTRY(void, InterpreterRuntime::resolve_invoke(JavaThread* thread, Bytecodes::Code bytecode)) {
   // extract receiver from the outgoing argument list if necessary
   Handle receiver(thread, NULL);
@@ -684,6 +760,10 @@ IRT_ENTRY(void, InterpreterRuntime::resolve_invoke(JavaThread* thread, Bytecodes
     if (JvmtiExport::can_hotswap_or_post_breakpoint()) {
       int retry_count = 0;
       while (info.resolved_method()->is_old()) {
+        // (tw) If we are executing an old method, this is OK!
+        if (method(thread)->is_old()) {
+          break;
+        }
         // It is very unlikely that method is redefined more than 100 times
         // in the middle of resolve. If it is looping here more than 100 times
         // means then there could be a bug here.

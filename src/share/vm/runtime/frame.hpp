@@ -346,6 +346,7 @@ class frame VALUE_OBJ_CLASS_SPEC {
   // Method & constant pool cache
   methodOop interpreter_frame_method() const;
   void interpreter_frame_set_method(methodOop method);
+  void interpreter_frame_set_cache(constantPoolCacheOop method);
   methodOop* interpreter_frame_method_addr() const;
   constantPoolCacheOop* interpreter_frame_cache_addr() const;
 #ifdef PPC

@@ -417,6 +417,8 @@ public:
   void record_failure(const char* reason);
   void record_method_not_compilable(const char* reason, bool all_tiers = true);
   void record_out_of_memory_failure();
+
+  void cleanup_after_redefinition();
 };
 
 #endif // SHARE_VM_CI_CIENV_HPP

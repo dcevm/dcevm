@@ -406,7 +406,7 @@ JNI_ENTRY(jclass, jni_DefineClass(JNIEnv *env, const char *name, jobject loaderR
     }
   }
   klassOop k = SystemDictionary::resolve_from_stream(class_name, class_loader,
-                                                     Handle(), &st, true,
+                                                     Handle(), &st, true, KlassHandle(),
                                                      CHECK_NULL);
 
   if (TraceClassResolution && k != NULL) {

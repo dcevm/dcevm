@@ -329,8 +329,8 @@ class TemplateTable: AllStatic {
   static void shouldnotreachhere();
 
   // jvmti support
-  static void jvmti_post_field_access(Register cache, Register index, bool is_static, bool has_tos);
-  static void jvmti_post_field_mod(Register cache, Register index, bool is_static);
+  static void jvmti_post_field_access(Register cache, Register index, int byte_no, bool is_static, bool has_tos);
+  static void jvmti_post_field_mod(Register cache, Register index, int byte_no, bool is_static);
   static void jvmti_post_fast_field_mod();
 
   // debugging of TemplateGenerator

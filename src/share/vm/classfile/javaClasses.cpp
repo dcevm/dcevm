@@ -1798,7 +1798,7 @@ Handle java_lang_reflect_Method::create(TRAPS) {
   klassOop klass = SystemDictionary::reflect_Method_klass();
   // This class is eagerly initialized during VM initialization, since we keep a refence
   // to one of the methods
-  assert(instanceKlass::cast(klass)->is_initialized(), "must be initialized");
+  assert(instanceKlass::cast(klass)->is_initialized() || klass->klass_part()->old_version() != NULL, "must be initialized");
   return instanceKlass::cast(klass)->allocate_instance_handle(CHECK_NH);
 }
 

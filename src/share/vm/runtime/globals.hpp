@@ -1227,9 +1227,23 @@ class CommandLineFlags {
   product(bool, StressLdcRewrite, false,                                    \
           "Force ldc -> ldc_w rewrite during RedefineClasses")              \
                                                                             \
+  product(bool, UseMethodForwardPoints, false,                              \
+          "Use method forward points")                                      \
+                                                                            \
+  product(intx, MethodForwardPointsMaxLocals, 300,                          \
+          "Maximum number of locals in forwarding method")                  \
+                                                                            \
+  product(intx, MethodForwardPointsMaxStack, 300,                           \
+          "Maximum number of stack slots in forwarding method")             \
+                                                                            \
   product(intx, TraceRedefineClasses, 0,                                    \
           "Trace level for JVMTI RedefineClasses")                          \
                                                                             \
+  product(bool, TimeRedefineClasses, false,                                 \
+          "Measure timing for JVMTI RedefineClasses")                       \
+                                                                            \
+  product(bool, AllowAdvancedClassRedefinition, true,                       \
+          "Allow advanced class redefinition beyond swapping method bodies")\
   develop(bool, StressMethodComparator, false,                              \
           "run the MethodComparator on all loaded methods")                 \
                                                                             \

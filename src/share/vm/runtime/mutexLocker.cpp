@@ -49,6 +49,7 @@
 // Consider using GCC's __read_mostly.
 
 Mutex*   Patching_lock                = NULL;
+Mutex*   RedefineClasses_lock         = NULL;
 Monitor* SystemDictionary_lock        = NULL;
 Mutex*   PackageTable_lock            = NULL;
 Mutex*   CompiledIC_lock              = NULL;
@@ -90,6 +91,7 @@ Mutex*   Shared_SATB_Q_lock           = NULL;
 Mutex*   DirtyCardQ_FL_lock           = NULL;
 Monitor* DirtyCardQ_CBL_mon           = NULL;
 Mutex*   Shared_DirtyCardQ_lock       = NULL;
+Monitor* RedefinitionSync_lock        = NULL;
 Mutex*   ParGCRareEvent_lock          = NULL;
 Mutex*   EvacFailureStack_lock        = NULL;
 Mutex*   DerivedPointerTableGC_lock   = NULL;
@@ -205,6 +207,7 @@ void mutex_init() {
     def(HotCardCache_lock          , Mutex  , special  ,   true );
     def(EvacFailureStack_lock      , Mutex  , nonleaf  ,   true );
   }
+  def(RedefinitionSync_lock        , Monitor  , leaf     ,   false );
   def(ParGCRareEvent_lock          , Mutex  , leaf     ,   true );
   def(DerivedPointerTableGC_lock   , Mutex,   leaf,        true );
   def(CodeCache_lock               , Mutex  , special,     true );
@@ -279,6 +282,7 @@ void mutex_init() {
   def(Debug2_lock                  , Mutex  , nonleaf+4,   true );
   def(Debug3_lock                  , Mutex  , nonleaf+4,   true );
   def(CompileThread_lock           , Monitor, nonleaf+5,   false );
+  def(RedefineClasses_lock         , Mutex  , nonleaf+7,   false ); // for ensuring that class redefinition is not done in parallel
 
   def(JfrMsg_lock                  , Monitor, leaf,        true);
   def(JfrBuffer_lock               , Mutex,   nonleaf+1,   true);

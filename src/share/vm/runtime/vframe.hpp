@@ -163,6 +163,7 @@ class interpretedVFrame: public javaVFrame {
   StackValueCollection*        locals()         const;
   StackValueCollection*        expressions()    const;
   GrowableArray<MonitorInfo*>* monitors()       const;
+  void                         set_method(methodOop method, int new_bci);
 
   void set_locals(StackValueCollection* values) const;
 

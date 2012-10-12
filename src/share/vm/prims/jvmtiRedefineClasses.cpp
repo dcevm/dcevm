@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,498 +30,636 @@
 #include "interpreter/rewriter.hpp"
 #include "memory/gcLocker.hpp"
 #include "memory/universe.inline.hpp"
-#include "oops/fieldStreams.hpp"
 #include "oops/klassVtable.hpp"
+#include "oops/fieldStreams.hpp"
 #include "prims/jvmtiImpl.hpp"
 #include "prims/jvmtiRedefineClasses.hpp"
+#include "prims/jvmtiClassFileReconstituter.hpp"
 #include "prims/methodComparator.hpp"
 #include "runtime/deoptimization.hpp"
 #include "runtime/relocator.hpp"
 #include "utilities/bitMap.inline.hpp"
+#include "compiler/compileBroker.hpp"
 
 
 objArrayOop VM_RedefineClasses::_old_methods = NULL;
 objArrayOop VM_RedefineClasses::_new_methods = NULL;
-methodOop*  VM_RedefineClasses::_matching_old_methods = NULL;
-methodOop*  VM_RedefineClasses::_matching_new_methods = NULL;
-methodOop*  VM_RedefineClasses::_deleted_methods      = NULL;
-methodOop*  VM_RedefineClasses::_added_methods        = NULL;
+int*        VM_RedefineClasses::_matching_old_methods = NULL;
+int*        VM_RedefineClasses::_matching_new_methods = NULL;
+int*        VM_RedefineClasses::_deleted_methods      = NULL;
+int*        VM_RedefineClasses::_added_methods        = NULL;
 int         VM_RedefineClasses::_matching_methods_length = 0;
 int         VM_RedefineClasses::_deleted_methods_length  = 0;
 int         VM_RedefineClasses::_added_methods_length    = 0;
 klassOop    VM_RedefineClasses::_the_class_oop = NULL;
 
+// Holds the revision number of the current class redefinition
+int    VM_RedefineClasses::_revision_number = -1;
 
-VM_RedefineClasses::VM_RedefineClasses(jint class_count,
-                                       const jvmtiClassDefinition *class_defs,
-                                       JvmtiClassLoadKind class_load_kind) {
+VM_RedefineClasses::VM_RedefineClasses(jint class_count, const jvmtiClassDefinition *class_defs, JvmtiClassLoadKind class_load_kind)
+   : VM_GC_Operation(Universe::heap()->total_full_collections(), GCCause::_jvmti_force_gc) {
+  RC_TIMER_START(_timer_total);
   _class_count = class_count;
   _class_defs = class_defs;
   _class_load_kind = class_load_kind;
-  _res = JVMTI_ERROR_NONE;
+  _updated_oops = NULL;
+  _result = JVMTI_ERROR_NONE;
 }
 
-bool VM_RedefineClasses::doit_prologue() {
-  if (_class_count == 0) {
-    _res = JVMTI_ERROR_NONE;
-    return false;
+VM_RedefineClasses::~VM_RedefineClasses() {
+  {
+    MonitorLockerEx ml(RedefinitionSync_lock);
+    Threads::set_wait_at_instrumentation_entry(false);
+    ml.notify_all();
   }
-  if (_class_defs == NULL) {
-    _res = JVMTI_ERROR_NULL_POINTER;
-    return false;
+
+  unlock_threads();
+  RC_TIMER_STOP(_timer_total);
+
+  if (TimeRedefineClasses) {
+    tty->print_cr("Timing Prologue:             %d", _timer_prologue.milliseconds());
+    tty->print_cr("Timing Class Loading:        %d", _timer_class_loading.milliseconds());
+    tty->print_cr("Timing Waiting for Lock:     %d", _timer_wait_for_locks.milliseconds());
+    tty->print_cr("Timing Class Linking:        %d", _timer_class_linking.milliseconds());
+    tty->print_cr("Timing Check Type:           %d", _timer_check_type.milliseconds());
+    tty->print_cr("Timing Prepare Redefinition: %d", _timer_prepare_redefinition.milliseconds());
+    tty->print_cr("Timing Redefinition GC:      %d", _timer_redefinition.milliseconds());
+    tty->print_cr("Timing Epilogue:             %d", _timer_vm_op_epilogue.milliseconds());
+    tty->print_cr("------------------------------------------------------------------");
+    tty->print_cr("Total Time:                  %d", _timer_total.milliseconds());
   }
-  for (int i = 0; i < _class_count; i++) {
-    if (_class_defs[i].klass == NULL) {
-      _res = JVMTI_ERROR_INVALID_CLASS;
-      return false;
-    }
-    if (_class_defs[i].class_byte_count == 0) {
-      _res = JVMTI_ERROR_INVALID_CLASS_FORMAT;
-      return false;
-    }
-    if (_class_defs[i].class_bytes == NULL) {
-      _res = JVMTI_ERROR_NULL_POINTER;
-      return false;
+}
+
+// Searches for all affected classes and performs a sorting such that a supertype is always before a subtype.
+jvmtiError VM_RedefineClasses::find_sorted_affected_classes(GrowableArray<instanceKlassHandle> *all_affected_klasses) {
+
+  // Create array with all classes for which the redefine command was given
+  GrowableArray<instanceKlassHandle> klasses_to_redefine;
+  for (int i=0; i<_class_count; i++) {
+    oop mirror = JNIHandles::resolve_non_null(_class_defs[i].klass);
+    instanceKlassHandle klass_handle(Thread::current(), java_lang_Class::as_klassOop(mirror));
+    klasses_to_redefine.append(klass_handle);
+    assert(klass_handle->new_version() == NULL, "Must be new class");
+  }
+
+  // Find classes not directly redefined, but affected by a redefinition (because one of its supertypes is redefined)
+  GrowableArray<instanceKlassHandle> affected_classes;
+  FindAffectedKlassesClosure closure(&klasses_to_redefine, &affected_classes);
+
+  // Trace affected classes
+  if (RC_TRACE_ENABLED(0x00000001)) {
+    RC_TRACE(0x00000001, ("Klasses affected: %d",
+      affected_classes.length()));
+    for (int i=0; i<affected_classes.length(); i++) {
+      RC_TRACE(0x00000001, ("%s",
+        affected_classes.at(i)->name()->as_C_string()));
     }
   }
 
-  // Start timer after all the sanity checks; not quite accurate, but
-  // better than adding a bunch of stop() calls.
-  RC_TIMER_START(_timer_vm_op_prologue);
+  // Add the array of affected classes and the array of redefined classes to get a list of all classes that need a redefinition
+  all_affected_klasses->appendAll(&klasses_to_redefine);
+  all_affected_klasses->appendAll(&affected_classes);
+
+  // Sort the affected klasses such that a supertype is always on a smaller array index than its subtype.
+  jvmtiError result = do_topological_class_sorting(_class_defs, _class_count, &affected_classes, all_affected_klasses, Thread::current());
+  if (RC_TRACE_ENABLED(0x00000001)) {
+    RC_TRACE(0x00000001, ("Redefine order: "));
+    for (int i=0; i<all_affected_klasses->length(); i++) {
+      RC_TRACE(0x00000001, ("%s",
+        all_affected_klasses->at(i)->name()->as_C_string()));
+    }
+  }
+
+  return result;
+}
+
+// Searches for the class bytes of the given class and returns them as a byte array.
+jvmtiError VM_RedefineClasses::find_class_bytes(instanceKlassHandle the_class, const unsigned char **class_bytes, jint *class_byte_count, jboolean *not_changed) {
+
+  *not_changed = false;
+
+  // Search for the index in the redefinition array that corresponds to the current class
+  int j;
+  for (j=0; j<_class_count; j++) {
+    oop mirror = JNIHandles::resolve_non_null(_class_defs[j].klass);
+    klassOop the_class_oop = java_lang_Class::as_klassOop(mirror);
+    if (the_class_oop == the_class()) {
+      break;
+    }
+  }
+
+  if (j == _class_count) {
+
+    *not_changed = true;
+
+    // Redefine with same bytecodes. This is a class that is only indirectly affected by redefinition,
+    // so the user did not specify a different bytecode for that class.
+
+    if (the_class->get_cached_class_file_bytes() == NULL) {
+      // not cached, we need to reconstitute the class file from VM representation
+      constantPoolHandle  constants(Thread::current(), the_class->constants());
+      ObjectLocker ol(constants, Thread::current());    // lock constant pool while we query it
+
+      JvmtiClassFileReconstituter reconstituter(the_class);
+      if (reconstituter.get_error() != JVMTI_ERROR_NONE) {
+        return reconstituter.get_error();
+      }
+
+      *class_byte_count = (jint)reconstituter.class_file_size();
+      *class_bytes      = (unsigned char*)reconstituter.class_file_bytes();
+
+    } else {
+
+      // it is cached, get it from the cache
+      *class_byte_count = the_class->get_cached_class_file_len();
+      *class_bytes      = the_class->get_cached_class_file_bytes();
+    }
+
+  } else {
+
+    // Redefine with bytecodes at index j
+    *class_bytes = _class_defs[j].class_bytes;
+    *class_byte_count = _class_defs[j].class_byte_count;
+  }
+
+  return JVMTI_ERROR_NONE;
+}
+
+// Prologue of the VM operation, called on the Java thread in parallel to normal program execution
+bool VM_RedefineClasses::doit_prologue() {
+
+  _revision_number++;
+  RC_TRACE(0x00000001, ("Redefinition with revision number %d started!", _revision_number));
+
+  assert(Thread::current()->is_Java_thread(), "must be Java thread");
+  RC_TIMER_START(_timer_prologue);
+
+  if (!check_arguments()) {
+    RC_TIMER_STOP(_timer_prologue);
+    return false;
+  }
 
   // We first load new class versions in the prologue, because somewhere down the
   // call chain it is required that the current thread is a Java thread.
-  _res = load_new_class_versions(Thread::current());
-  if (_res != JVMTI_ERROR_NONE) {
-    // Free os::malloc allocated memory in load_new_class_version.
-    os::free(_scratch_classes);
-    RC_TIMER_STOP(_timer_vm_op_prologue);
+  _new_classes = new (ResourceObj::C_HEAP, mtInternal) GrowableArray<instanceKlassHandle>(5, true);
+  _result = load_new_class_versions(Thread::current());
+
+  RC_TRACE(0x00000001, ("Loaded new class versions!"));
+  if (_result != JVMTI_ERROR_NONE) {
+    RC_TRACE(0x00000001, ("error occured: %d!", _result));
+    delete _new_classes;
+    _new_classes = NULL;
+    RC_TIMER_STOP(_timer_prologue);
     return false;
   }
 
-  RC_TIMER_STOP(_timer_vm_op_prologue);
+  RC_TRACE(0x00000001, ("nearly finished"));
+  VM_GC_Operation::doit_prologue();
+  RC_TIMER_STOP(_timer_prologue);
+  RC_TRACE(0x00000001, ("doit_prologue finished!"));
   return true;
 }
 
-void VM_RedefineClasses::doit() {
-  Thread *thread = Thread::current();
+// Checks basic properties of the arguments of the redefinition command.
+bool VM_RedefineClasses::check_arguments() {
 
-  if (UseSharedSpaces) {
-    // Sharing is enabled so we remap the shared readonly space to
-    // shared readwrite, private just in case we need to redefine
-    // a shared class. We do the remap during the doit() phase of
-    // the safepoint to be safer.
-    if (!CompactingPermGenGen::remap_shared_readonly_as_readwrite()) {
-      RC_TRACE_WITH_THREAD(0x00000001, thread,
-        ("failed to remap shared readonly space to readwrite, private"));
-      _res = JVMTI_ERROR_INTERNAL;
-      return;
+  if (_class_count == 0) RC_ABORT(JVMTI_ERROR_NONE);
+  if (_class_defs == NULL) RC_ABORT(JVMTI_ERROR_NULL_POINTER);
+  for (int i = 0; i < _class_count; i++) {
+    if (_class_defs[i].klass == NULL) RC_ABORT(JVMTI_ERROR_INVALID_CLASS);
+    if (_class_defs[i].class_byte_count == 0) RC_ABORT(JVMTI_ERROR_INVALID_CLASS_FORMAT);
+    if (_class_defs[i].class_bytes == NULL) RC_ABORT(JVMTI_ERROR_NULL_POINTER);
+  }
+
+  return true;
+}
+
+jvmtiError VM_RedefineClasses::check_exception() const {
+  Thread* THREAD = Thread::current();
+  if (HAS_PENDING_EXCEPTION) {
+
+    Symbol* ex_name = PENDING_EXCEPTION->klass()->klass_part()->name();
+    RC_TRACE(0x00000001, ("parse_stream exception: '%s'",
+      ex_name->as_C_string()));
+    if (TraceRedefineClasses >= 1) {
+      java_lang_Throwable::print(PENDING_EXCEPTION, tty);
+      tty->print_cr("");
+    }
+    CLEAR_PENDING_EXCEPTION;
+
+    if (ex_name == vmSymbols::java_lang_UnsupportedClassVersionError()) {
+      return JVMTI_ERROR_UNSUPPORTED_VERSION;
+    } else if (ex_name == vmSymbols::java_lang_ClassFormatError()) {
+      return JVMTI_ERROR_INVALID_CLASS_FORMAT;
+    } else if (ex_name == vmSymbols::java_lang_ClassCircularityError()) {
+      return JVMTI_ERROR_CIRCULAR_CLASS_DEFINITION;
+    } else if (ex_name == vmSymbols::java_lang_NoClassDefFoundError()) {
+      // The message will be "XXX (wrong name: YYY)"
+      return JVMTI_ERROR_NAMES_DONT_MATCH;
+    } else if (ex_name == vmSymbols::java_lang_OutOfMemoryError()) {
+      return JVMTI_ERROR_OUT_OF_MEMORY;
+    } else {
+      // Just in case more exceptions can be thrown..
+      return JVMTI_ERROR_FAILS_VERIFICATION;
     }
   }
 
-  for (int i = 0; i < _class_count; i++) {
-    redefine_single_class(_class_defs[i].klass, _scratch_classes[i], thread);
-  }
-  // Disable any dependent concurrent compilations
-  SystemDictionary::notice_modification();
-
-  // Set flag indicating that some invariants are no longer true.
-  // See jvmtiExport.hpp for detailed explanation.
-  JvmtiExport::set_has_redefined_a_class();
-
-// check_class() is optionally called for product bits, but is
-// always called for non-product bits.
-#ifdef PRODUCT
-  if (RC_TRACE_ENABLED(0x00004000)) {
-#endif
-    RC_TRACE_WITH_THREAD(0x00004000, thread, ("calling check_class"));
-    SystemDictionary::classes_do(check_class, thread);
-#ifdef PRODUCT
-  }
-#endif
+  return JVMTI_ERROR_NONE;
 }
 
-void VM_RedefineClasses::doit_epilogue() {
-  // Free os::malloc allocated memory.
-  // The memory allocated in redefine will be free'ed in next VM operation.
-  os::free(_scratch_classes);
+// Loads all new class versions and stores the instanceKlass handles in an array.
+jvmtiError VM_RedefineClasses::load_new_class_versions(TRAPS) {
 
-  if (RC_TRACE_ENABLED(0x00000004)) {
-    // Used to have separate timers for "doit" and "all", but the timer
-    // overhead skewed the measurements.
-    jlong doit_time = _timer_rsc_phase1.milliseconds() +
-                      _timer_rsc_phase2.milliseconds();
-    jlong all_time = _timer_vm_op_prologue.milliseconds() + doit_time;
+  ResourceMark rm(THREAD);
 
-    RC_TRACE(0x00000004, ("vm_op: all=" UINT64_FORMAT
-      "  prologue=" UINT64_FORMAT "  doit=" UINT64_FORMAT, all_time,
-      _timer_vm_op_prologue.milliseconds(), doit_time));
-    RC_TRACE(0x00000004,
-      ("redefine_single_class: phase1=" UINT64_FORMAT "  phase2=" UINT64_FORMAT,
-       _timer_rsc_phase1.milliseconds(), _timer_rsc_phase2.milliseconds()));
+  RC_TRACE(0x00000001, ("==================================================================="));
+  RC_TRACE(0x00000001, ("load new class versions (%d)",
+    _class_count));
+
+  // Retrieve an array of all classes that need to be redefined
+  GrowableArray<instanceKlassHandle> all_affected_klasses;
+  jvmtiError err = find_sorted_affected_classes(&all_affected_klasses);
+  if (err != JVMTI_ERROR_NONE) {
+    RC_TRACE(0x00000001, ("Error finding sorted affected classes: %d",
+      (int)err));
+    return err;
   }
-}
 
-bool VM_RedefineClasses::is_modifiable_class(oop klass_mirror) {
-  // classes for primitives cannot be redefined
-  if (java_lang_Class::is_primitive(klass_mirror)) {
-    return false;
-  }
-  klassOop the_class_oop = java_lang_Class::as_klassOop(klass_mirror);
-  // classes for arrays cannot be redefined
-  if (the_class_oop == NULL || !Klass::cast(the_class_oop)->oop_is_instance()) {
-    return false;
-  }
-  return true;
-}
 
-// Append the current entry at scratch_i in scratch_cp to *merge_cp_p
-// where the end of *merge_cp_p is specified by *merge_cp_length_p. For
-// direct CP entries, there is just the current entry to append. For
-// indirect and double-indirect CP entries, there are zero or more
-// referenced CP entries along with the current entry to append.
-// Indirect and double-indirect CP entries are handled by recursive
-// calls to append_entry() as needed. The referenced CP entries are
-// always appended to *merge_cp_p before the referee CP entry. These
-// referenced CP entries may already exist in *merge_cp_p in which case
-// there is nothing extra to append and only the current entry is
-// appended.
-void VM_RedefineClasses::append_entry(constantPoolHandle scratch_cp,
-       int scratch_i, constantPoolHandle *merge_cp_p, int *merge_cp_length_p,
-       TRAPS) {
+  JvmtiThreadState *state = JvmtiThreadState::state_for(JavaThread::current());
 
-  // append is different depending on entry tag type
-  switch (scratch_cp->tag_at(scratch_i).value()) {
+  _max_redefinition_flags = Klass::NoRedefinition;
+  jvmtiError result = JVMTI_ERROR_NONE;
 
-    // The old verifier is implemented outside the VM. It loads classes,
-    // but does not resolve constant pool entries directly so we never
-    // see Class entries here with the old verifier. Similarly the old
-    // verifier does not like Class entries in the input constant pool.
-    // The split-verifier is implemented in the VM so it can optionally
-    // and directly resolve constant pool entries to load classes. The
-    // split-verifier can accept either Class entries or UnresolvedClass
-    // entries in the input constant pool. We revert the appended copy
-    // back to UnresolvedClass so that either verifier will be happy
-    // with the constant pool entry.
-    case JVM_CONSTANT_Class:
-    {
-      // revert the copy to JVM_CONSTANT_UnresolvedClass
-      (*merge_cp_p)->unresolved_klass_at_put(*merge_cp_length_p,
-        scratch_cp->klass_name_at(scratch_i));
+  for (int i=0; i<all_affected_klasses.length(); i++) {
+    RC_TRACE(0x00000002, ("Processing affected class %d of %d",
+      i+1, all_affected_klasses.length()));
 
-      if (scratch_i != *merge_cp_length_p) {
-        // The new entry in *merge_cp_p is at a different index than
-        // the new entry in scratch_cp so we need to map the index values.
-        map_index(scratch_cp, scratch_i, *merge_cp_length_p);
-      }
-      (*merge_cp_length_p)++;
-    } break;
+    instanceKlassHandle the_class = all_affected_klasses.at(i);
+    RC_TRACE(0x00000002, ("name=%s",
+      the_class->name()->as_C_string()));
 
-    // these are direct CP entries so they can be directly appended,
-    // but double and long take two constant pool entries
-    case JVM_CONSTANT_Double:  // fall through
-    case JVM_CONSTANT_Long:
-    {
-      constantPoolOopDesc::copy_entry_to(scratch_cp, scratch_i, *merge_cp_p, *merge_cp_length_p,
-        THREAD);
+    the_class->link_class(THREAD);
+    result = check_exception();
+    if (result != JVMTI_ERROR_NONE) break;
 
-      if (scratch_i != *merge_cp_length_p) {
-        // The new entry in *merge_cp_p is at a different index than
-        // the new entry in scratch_cp so we need to map the index values.
-        map_index(scratch_cp, scratch_i, *merge_cp_length_p);
-      }
-      (*merge_cp_length_p) += 2;
-    } break;
+    // Find new class bytes
+    const unsigned char* class_bytes;
+    jint class_byte_count;
+    jvmtiError error;
+    jboolean not_changed;
+    if ((error = find_class_bytes(the_class, &class_bytes, &class_byte_count, &not_changed)) != JVMTI_ERROR_NONE) {
+      RC_TRACE(0x00000001, ("Error finding class bytes: %d",
+        (int)error));
+      result = error;
+      break;
+    }
+    assert(class_bytes != NULL && class_byte_count != 0, "Class bytes defined at this point!");
 
-    // these are direct CP entries so they can be directly appended
-    case JVM_CONSTANT_Float:   // fall through
-    case JVM_CONSTANT_Integer: // fall through
-    case JVM_CONSTANT_Utf8:    // fall through
 
-    // This was an indirect CP entry, but it has been changed into
-    // an interned string so this entry can be directly appended.
-    case JVM_CONSTANT_String:      // fall through
+    // Set redefined class handle in JvmtiThreadState class.
+    // This redefined class is sent to agent event handler for class file
+    // load hook event.
+    state->set_class_being_redefined(&the_class, _class_load_kind);
 
-    // These were indirect CP entries, but they have been changed into
-    // Symbol*s so these entries can be directly appended.
-    case JVM_CONSTANT_UnresolvedClass:  // fall through
-    case JVM_CONSTANT_UnresolvedString:
-    {
-      constantPoolOopDesc::copy_entry_to(scratch_cp, scratch_i, *merge_cp_p, *merge_cp_length_p,
-        THREAD);
+    RC_TRACE(0x00000002, ("Before resolving from stream"));
 
-      if (scratch_i != *merge_cp_length_p) {
-        // The new entry in *merge_cp_p is at a different index than
-        // the new entry in scratch_cp so we need to map the index values.
-        map_index(scratch_cp, scratch_i, *merge_cp_length_p);
-      }
-      (*merge_cp_length_p)++;
-    } break;
+    RC_TIMER_STOP(_timer_prologue);
+    RC_TIMER_START(_timer_class_loading);
 
-    // this is an indirect CP entry so it needs special handling
-    case JVM_CONSTANT_NameAndType:
-    {
-      int name_ref_i = scratch_cp->name_ref_index_at(scratch_i);
-      int new_name_ref_i = 0;
-      bool match = (name_ref_i < *merge_cp_length_p) &&
-        scratch_cp->compare_entry_to(name_ref_i, *merge_cp_p, name_ref_i,
-          THREAD);
-      if (!match) {
-        // forward reference in *merge_cp_p or not a direct match
 
-        int found_i = scratch_cp->find_matching_entry(name_ref_i, *merge_cp_p,
-          THREAD);
-        if (found_i != 0) {
-          guarantee(found_i != name_ref_i,
-            "compare_entry_to() and find_matching_entry() do not agree");
+    // Parse the stream.
+    Handle the_class_loader(THREAD, the_class->class_loader());
+    Handle protection_domain(THREAD, the_class->protection_domain());
+    Symbol* the_class_sym = the_class->name();
+    ClassFileStream st((u1*) class_bytes, class_byte_count, (char *)"__VM_RedefineClasses__");
+    instanceKlassHandle new_class(THREAD, SystemDictionary::resolve_from_stream(the_class_sym,
+      the_class_loader,
+      protection_domain,
+      &st,
+      true,
+      the_class,
+      THREAD));
 
-          // Found a matching entry somewhere else in *merge_cp_p so
-          // just need a mapping entry.
-          new_name_ref_i = found_i;
-          map_index(scratch_cp, name_ref_i, found_i);
-        } else {
-          // no match found so we have to append this entry to *merge_cp_p
-          append_entry(scratch_cp, name_ref_i, merge_cp_p, merge_cp_length_p,
-            THREAD);
-          // The above call to append_entry() can only append one entry
-          // so the post call query of *merge_cp_length_p is only for
-          // the sake of consistency.
-          new_name_ref_i = *merge_cp_length_p - 1;
+    not_changed = false;
+
+    RC_TIMER_STOP(_timer_class_loading);
+    RC_TIMER_START(_timer_prologue);
+
+    RC_TRACE(0x00000002, ("After resolving class from stream!"));
+    // Clear class_being_redefined just to be sure.
+    state->clear_class_being_redefined();
+
+    result = check_exception();
+    if (result != JVMTI_ERROR_NONE) break;
+
+#ifdef ASSERT
+
+    assert(new_class() != NULL, "Class could not be loaded!");
+    assert(new_class() != the_class(), "must be different");
+    assert(new_class->new_version() == NULL && new_class->old_version() != NULL, "");
+
+
+    objArrayOop k_interfaces = new_class->local_interfaces();
+    for (int j=0; j<k_interfaces->length(); j++) {
+      assert(((klassOop)k_interfaces->obj_at(j))->klass_part()->is_newest_version(), "just checking");
+    }
+
+    if (!THREAD->is_Compiler_thread()) {
+
+      RC_TRACE(0x00000002, ("name=%s loader=%d protection_domain=%d",
+        the_class->name()->as_C_string(),
+        (int)(the_class->class_loader()),
+        (int)(the_class->protection_domain())));
+      // If we are on the compiler thread, we must not try to resolve a class.
+      klassOop systemLookup = SystemDictionary::resolve_or_null(the_class->name(), the_class->class_loader(), the_class->protection_domain(), THREAD);
+      
+      if (systemLookup != NULL) {
+        assert(systemLookup == new_class->old_version(), "Old class must be in system dictionary!");
+      
+
+        Klass *subklass = new_class()->klass_part()->subklass();
+        while (subklass != NULL) {
+          assert(subklass->new_version() == NULL, "Most recent version of class!");
+          subklass = subklass->next_sibling();
         }
-      }
-
-      int signature_ref_i = scratch_cp->signature_ref_index_at(scratch_i);
-      int new_signature_ref_i = 0;
-      match = (signature_ref_i < *merge_cp_length_p) &&
-        scratch_cp->compare_entry_to(signature_ref_i, *merge_cp_p,
-          signature_ref_i, THREAD);
-      if (!match) {
-        // forward reference in *merge_cp_p or not a direct match
-
-        int found_i = scratch_cp->find_matching_entry(signature_ref_i,
-          *merge_cp_p, THREAD);
-        if (found_i != 0) {
-          guarantee(found_i != signature_ref_i,
-            "compare_entry_to() and find_matching_entry() do not agree");
-
-          // Found a matching entry somewhere else in *merge_cp_p so
-          // just need a mapping entry.
-          new_signature_ref_i = found_i;
-          map_index(scratch_cp, signature_ref_i, found_i);
-        } else {
-          // no match found so we have to append this entry to *merge_cp_p
-          append_entry(scratch_cp, signature_ref_i, merge_cp_p,
-            merge_cp_length_p, THREAD);
-          // The above call to append_entry() can only append one entry
-          // so the post call query of *merge_cp_length_p is only for
-          // the sake of consistency.
-          new_signature_ref_i = *merge_cp_length_p - 1;
-        }
-      }
-
-      // If the referenced entries already exist in *merge_cp_p, then
-      // both new_name_ref_i and new_signature_ref_i will both be 0.
-      // In that case, all we are appending is the current entry.
-      if (new_name_ref_i == 0) {
-        new_name_ref_i = name_ref_i;
       } else {
-        RC_TRACE(0x00080000,
-          ("NameAndType entry@%d name_ref_index change: %d to %d",
-          *merge_cp_length_p, name_ref_i, new_name_ref_i));
+        // This can happen for reflection generated classes.. ?
+        CLEAR_PENDING_EXCEPTION;
       }
-      if (new_signature_ref_i == 0) {
-        new_signature_ref_i = signature_ref_i;
-      } else {
-        RC_TRACE(0x00080000,
-          ("NameAndType entry@%d signature_ref_index change: %d to %d",
-          *merge_cp_length_p, signature_ref_i, new_signature_ref_i));
+    }
+
+#endif
+
+    if (RC_TRACE_ENABLED(0x00000001)) {
+      if (new_class->layout_helper() != the_class->layout_helper()) {
+        RC_TRACE(0x00000001, ("Instance size change for class %s: new=%d old=%d",
+         new_class->name()->as_C_string(),
+         new_class->layout_helper(),
+         the_class->layout_helper()));
       }
+    }
 
-      (*merge_cp_p)->name_and_type_at_put(*merge_cp_length_p,
-        new_name_ref_i, new_signature_ref_i);
-      if (scratch_i != *merge_cp_length_p) {
-        // The new entry in *merge_cp_p is at a different index than
-        // the new entry in scratch_cp so we need to map the index values.
-        map_index(scratch_cp, scratch_i, *merge_cp_length_p);
+    // Set the new version of the class
+    new_class->set_revision_number(_revision_number);
+    new_class->set_redefinition_index(i);
+    the_class->set_new_version(new_class());
+    _new_classes->append(new_class);
+
+    assert(new_class->new_version() == NULL, "");
+
+    int redefinition_flags = Klass::NoRedefinition;
+
+    if (not_changed) {
+      redefinition_flags = Klass::NoRedefinition;
+    } else if (AllowAdvancedClassRedefinition) {
+      redefinition_flags = calculate_redefinition_flags(new_class);
+    } else {
+      jvmtiError allowed = check_redefinition_allowed(new_class);
+      if (allowed != JVMTI_ERROR_NONE) {
+        RC_TRACE(0x00000001, ("Error redefinition not allowed!"));
+        result = allowed;
+        break;
       }
-      (*merge_cp_length_p)++;
-    } break;
+      redefinition_flags = Klass::ModifyClass;
+    }
 
-    // this is a double-indirect CP entry so it needs special handling
-    case JVM_CONSTANT_Fieldref:           // fall through
-    case JVM_CONSTANT_InterfaceMethodref: // fall through
-    case JVM_CONSTANT_Methodref:
-    {
-      int klass_ref_i = scratch_cp->uncached_klass_ref_index_at(scratch_i);
-      int new_klass_ref_i = 0;
-      bool match = (klass_ref_i < *merge_cp_length_p) &&
-        scratch_cp->compare_entry_to(klass_ref_i, *merge_cp_p, klass_ref_i,
-          THREAD);
-      if (!match) {
-        // forward reference in *merge_cp_p or not a direct match
+    if (new_class->super() != NULL) {
+      redefinition_flags = redefinition_flags | new_class->super()->klass_part()->redefinition_flags();
+    }
 
-        int found_i = scratch_cp->find_matching_entry(klass_ref_i, *merge_cp_p,
-          THREAD);
-        if (found_i != 0) {
-          guarantee(found_i != klass_ref_i,
-            "compare_entry_to() and find_matching_entry() do not agree");
+    for (int j=0; j<new_class->local_interfaces()->length(); j++) {
+      redefinition_flags = redefinition_flags | ((klassOop)new_class->local_interfaces()->obj_at(j))->klass_part()->redefinition_flags();
+    }
 
-          // Found a matching entry somewhere else in *merge_cp_p so
-          // just need a mapping entry.
-          new_klass_ref_i = found_i;
-          map_index(scratch_cp, klass_ref_i, found_i);
-        } else {
-          // no match found so we have to append this entry to *merge_cp_p
-          append_entry(scratch_cp, klass_ref_i, merge_cp_p, merge_cp_length_p,
-            THREAD);
-          // The above call to append_entry() can only append one entry
-          // so the post call query of *merge_cp_length_p is only for
-          // the sake of consistency. Without the optimization where we
-          // use JVM_CONSTANT_UnresolvedClass, then up to two entries
-          // could be appended.
-          new_klass_ref_i = *merge_cp_length_p - 1;
+    new_class->set_redefinition_flags(redefinition_flags);
+
+    _max_redefinition_flags = _max_redefinition_flags | redefinition_flags;
+
+    if ((redefinition_flags & Klass::ModifyInstances) != 0) {
+      // TODO: Check if watch access flags of static fields are updated correctly.
+      calculate_instance_update_information(_new_classes->at(i)());
+    } else {
+      assert(new_class->layout_helper() >> 1 == new_class->old_version()->klass_part()->layout_helper() >> 1, "must be equal");
+      assert(new_class->fields()->length() == ((instanceKlass*)new_class->old_version()->klass_part())->fields()->length(), "must be equal");
+
+      fieldDescriptor fd_new;
+      fieldDescriptor fd_old;
+      for (JavaFieldStream fs(new_class); !fs.done(); fs.next()) {
+        fd_new.initialize(new_class(), fs.index());
+        fd_old.initialize(new_class->old_version(), fs.index());
+        transfer_special_access_flags(&fd_old, &fd_new);
+      }
+    }
+
+    if (RC_TRACE_ENABLED(0x00000008)) {
+      if (new_class->super() != NULL) {
+        RC_TRACE(0x00000008, ("Super class is %s",
+          new_class->super()->klass_part()->name()->as_C_string()));
+      }
+    }
+
+#ifdef ASSERT
+    assert(new_class->super() == NULL || new_class->super()->klass_part()->new_version() == NULL, "Super klass must be newest version!");
+
+    the_class->vtable()->verify(tty);
+    new_class->vtable()->verify(tty);
+#endif
+
+    RC_TRACE(0x00000002, ("Verification done!"));
+
+    if (i == all_affected_klasses.length() - 1) {
+
+      // This was the last class processed => check if additional classes have been loaded in the meantime
+
+      RC_TIMER_STOP(_timer_prologue);
+      lock_threads();
+      RC_TIMER_START(_timer_prologue);
+
+      for (int j=0; j<all_affected_klasses.length(); j++) {
+
+        klassOop initial_klass = all_affected_klasses.at(j)();
+        Klass *initial_subklass = initial_klass->klass_part()->subklass();
+        Klass *cur_klass = initial_subklass;
+        while(cur_klass != NULL) {
+
+          if(cur_klass->oop_is_instance() && cur_klass->is_newest_version()) {
+            instanceKlassHandle handle(THREAD, cur_klass->as_klassOop());
+            if (!all_affected_klasses.contains(handle)) {
+
+              int k = i + 1;
+              for (; k<all_affected_klasses.length(); k++) {
+                if (all_affected_klasses.at(k)->is_subtype_of(cur_klass->as_klassOop())) {
+                  break;
+                }
+              }
+              all_affected_klasses.insert_before(k, handle);
+              RC_TRACE(0x00000002, ("Adding newly loaded class to affected classes: %s",
+                cur_klass->name()->as_C_string()));
+            }
+          }
+
+          cur_klass = cur_klass->next_sibling();
         }
       }
 
-      int name_and_type_ref_i =
-        scratch_cp->uncached_name_and_type_ref_index_at(scratch_i);
-      int new_name_and_type_ref_i = 0;
-      match = (name_and_type_ref_i < *merge_cp_length_p) &&
-        scratch_cp->compare_entry_to(name_and_type_ref_i, *merge_cp_p,
-          name_and_type_ref_i, THREAD);
-      if (!match) {
-        // forward reference in *merge_cp_p or not a direct match
+      int new_count = all_affected_klasses.length() - 1 - i;
+      if (new_count != 0) {
 
-        int found_i = scratch_cp->find_matching_entry(name_and_type_ref_i,
-          *merge_cp_p, THREAD);
-        if (found_i != 0) {
-          guarantee(found_i != name_and_type_ref_i,
-            "compare_entry_to() and find_matching_entry() do not agree");
-
-          // Found a matching entry somewhere else in *merge_cp_p so
-          // just need a mapping entry.
-          new_name_and_type_ref_i = found_i;
-          map_index(scratch_cp, name_and_type_ref_i, found_i);
-        } else {
-          // no match found so we have to append this entry to *merge_cp_p
-          append_entry(scratch_cp, name_and_type_ref_i, merge_cp_p,
-            merge_cp_length_p, THREAD);
-          // The above call to append_entry() can append more than
-          // one entry so the post call query of *merge_cp_length_p
-          // is required in order to get the right index for the
-          // JVM_CONSTANT_NameAndType entry.
-          new_name_and_type_ref_i = *merge_cp_length_p - 1;
-        }
+        unlock_threads();
+        RC_TRACE(0x00000001, ("Found new number of affected classes: %d",
+          new_count));
       }
+    }
+  }
 
-      // If the referenced entries already exist in *merge_cp_p, then
-      // both new_klass_ref_i and new_name_and_type_ref_i will both be
-      // 0. In that case, all we are appending is the current entry.
-      if (new_klass_ref_i == 0) {
-        new_klass_ref_i = klass_ref_i;
-      }
-      if (new_name_and_type_ref_i == 0) {
-        new_name_and_type_ref_i = name_and_type_ref_i;
-      }
+  if (result != JVMTI_ERROR_NONE) {
+    rollback();
+    return result;
+  }
 
-      const char *entry_name;
-      switch (scratch_cp->tag_at(scratch_i).value()) {
-      case JVM_CONSTANT_Fieldref:
-        entry_name = "Fieldref";
-        (*merge_cp_p)->field_at_put(*merge_cp_length_p, new_klass_ref_i,
-          new_name_and_type_ref_i);
-        break;
-      case JVM_CONSTANT_InterfaceMethodref:
-        entry_name = "IFMethodref";
-        (*merge_cp_p)->interface_method_at_put(*merge_cp_length_p,
-          new_klass_ref_i, new_name_and_type_ref_i);
-        break;
-      case JVM_CONSTANT_Methodref:
-        entry_name = "Methodref";
-        (*merge_cp_p)->method_at_put(*merge_cp_length_p, new_klass_ref_i,
-          new_name_and_type_ref_i);
-        break;
-      default:
-        guarantee(false, "bad switch");
-        break;
-      }
+  RC_TIMER_STOP(_timer_prologue);
+  RC_TIMER_START(_timer_class_linking);
+  // Link and verify new classes _after_ all classes have been updated in the system dictionary!
+  for (int i=0; i<all_affected_klasses.length(); i++) {
+    instanceKlassHandle the_class = all_affected_klasses.at(i);
+    instanceKlassHandle new_class(the_class->new_version());
 
-      if (klass_ref_i != new_klass_ref_i) {
-        RC_TRACE(0x00080000, ("%s entry@%d class_index changed: %d to %d",
-          entry_name, *merge_cp_length_p, klass_ref_i, new_klass_ref_i));
-      }
-      if (name_and_type_ref_i != new_name_and_type_ref_i) {
-        RC_TRACE(0x00080000,
-          ("%s entry@%d name_and_type_index changed: %d to %d",
-          entry_name, *merge_cp_length_p, name_and_type_ref_i,
-          new_name_and_type_ref_i));
-      }
+    RC_TRACE(0x00000002, ("Linking class %d/%d %s",
+      i,
+      all_affected_klasses.length(),
+      the_class->name()->as_C_string()));
+    new_class->link_class(THREAD);
 
-      if (scratch_i != *merge_cp_length_p) {
-        // The new entry in *merge_cp_p is at a different index than
-        // the new entry in scratch_cp so we need to map the index values.
-        map_index(scratch_cp, scratch_i, *merge_cp_length_p);
-      }
-      (*merge_cp_length_p)++;
-    } break;
+    result = check_exception();
+    if (result != JVMTI_ERROR_NONE) break;
+  }
+  RC_TIMER_STOP(_timer_class_linking);
+  RC_TIMER_START(_timer_prologue);
 
-    // At this stage, Class or UnresolvedClass could be here, but not
-    // ClassIndex
-    case JVM_CONSTANT_ClassIndex: // fall through
+  if (result != JVMTI_ERROR_NONE) {
+    rollback();
+    return result;
+  }
 
-    // Invalid is used as the tag for the second constant pool entry
-    // occupied by JVM_CONSTANT_Double or JVM_CONSTANT_Long. It should
-    // not be seen by itself.
-    case JVM_CONSTANT_Invalid: // fall through
+  RC_TRACE(0x00000002, ("All classes loaded!"));
 
-    // At this stage, String or UnresolvedString could be here, but not
-    // StringIndex
-    case JVM_CONSTANT_StringIndex: // fall through
+#ifdef ASSERT
+  for (int i=0; i<all_affected_klasses.length(); i++) {
+    instanceKlassHandle the_class = all_affected_klasses.at(i);
+    assert(the_class->new_version() != NULL, "Must have been redefined");
+    instanceKlassHandle new_version = instanceKlassHandle(THREAD, the_class->new_version());
+    assert(new_version->new_version() == NULL, "Must be newest version");
 
-    // At this stage JVM_CONSTANT_UnresolvedClassInError should not be
-    // here
-    case JVM_CONSTANT_UnresolvedClassInError: // fall through
+    if (!(new_version->super() == NULL || new_version->super()->klass_part()->new_version() == NULL)) {
+      new_version()->print();
+      new_version->super()->print();
+    }
+    assert(new_version->super() == NULL || new_version->super()->klass_part()->new_version() == NULL, "Super class must be newest version");
+  }
 
-    default:
-    {
-      // leave a breadcrumb
-      jbyte bad_value = scratch_cp->tag_at(scratch_i).value();
-      ShouldNotReachHere();
-    } break;
-  } // end switch tag value
-} // end append_entry()
+  SystemDictionary::classes_do(check_class, THREAD);
 
+#endif
 
-void VM_RedefineClasses::swap_all_method_annotations(int i, int j, instanceKlassHandle scratch_class) {
-  typeArrayOop save;
-
-  save = scratch_class->get_method_annotations_of(i);
-  scratch_class->set_method_annotations_of(i, scratch_class->get_method_annotations_of(j));
-  scratch_class->set_method_annotations_of(j, save);
-
-  save = scratch_class->get_method_parameter_annotations_of(i);
-  scratch_class->set_method_parameter_annotations_of(i, scratch_class->get_method_parameter_annotations_of(j));
-  scratch_class->set_method_parameter_annotations_of(j, save);
-
-  save = scratch_class->get_method_default_annotations_of(i);
-  scratch_class->set_method_default_annotations_of(i, scratch_class->get_method_default_annotations_of(j));
-  scratch_class->set_method_default_annotations_of(j, save);
+  RC_TRACE(0x00000001, ("Finished verification!"));
+  return JVMTI_ERROR_NONE;
 }
 
+void VM_RedefineClasses::lock_threads() {
 
-jvmtiError VM_RedefineClasses::compare_and_normalize_class_versions(
-             instanceKlassHandle the_class,
-             instanceKlassHandle scratch_class) {
+  RC_TIMER_START(_timer_wait_for_locks);
+
+
+  JavaThread *javaThread = Threads::first();
+  while (javaThread != NULL) {
+    if (javaThread->is_Compiler_thread() && javaThread != Thread::current()) {
+      CompilerThread *compilerThread = (CompilerThread *)javaThread;
+      compilerThread->set_should_bailout(true);
+    }
+    javaThread = javaThread->next();
+  }
+
+  int cnt = 0;
+  javaThread = Threads::first();
+  while (javaThread != NULL) {
+    if (javaThread->is_Compiler_thread() && javaThread != Thread::current()) {
+      CompilerThread *compilerThread = (CompilerThread *)javaThread;
+      compilerThread->compilation_mutex()->lock();
+      cnt++;
+    }
+    javaThread = javaThread->next();
+  }
+
+  RC_TRACE(0x00000002, ("Locked %d compiler threads", cnt));
+
+  cnt = 0;
+  javaThread = Threads::first();
+  while (javaThread != NULL) {
+    if (javaThread != Thread::current()) {
+      javaThread->redefine_classes_mutex()->lock();
+    }
+    javaThread = javaThread->next();
+  }
+
+
+  RC_TRACE(0x00000002, ("Locked %d threads", cnt));
+
+  RC_TIMER_STOP(_timer_wait_for_locks);
+}
+
+void VM_RedefineClasses::unlock_threads() {
+
+  int cnt = 0;
+  JavaThread *javaThread = Threads::first();
+  Thread *thread = Thread::current();
+  while (javaThread != NULL) {
+    if (javaThread->is_Compiler_thread() && javaThread != Thread::current()) {
+      CompilerThread *compilerThread = (CompilerThread *)javaThread;
+      if (compilerThread->compilation_mutex()->owned_by_self()) {
+        compilerThread->compilation_mutex()->unlock();
+        cnt++;
+      }
+    }
+    javaThread = javaThread->next();
+  }
+
+  RC_TRACE(0x00000002, ("Unlocked %d compiler threads", cnt));
+
+  cnt = 0;
+  javaThread = Threads::first();
+  while (javaThread != NULL) {
+    if (javaThread != Thread::current()) {
+      if (javaThread->redefine_classes_mutex()->owned_by_self()) {
+        javaThread->redefine_classes_mutex()->unlock();
+      }
+    }
+    javaThread = javaThread->next();
+  }
+
+  RC_TRACE(0x00000002, ("Unlocked %d threads", cnt));
+}
+
+jvmtiError VM_RedefineClasses::check_redefinition_allowed(instanceKlassHandle scratch_class) {
+
+
+  
+  // Compatibility mode => check for unsupported modification
+
+
+  assert(scratch_class->old_version() != NULL, "must have old version");
+  instanceKlassHandle the_class(scratch_class->old_version());
+
   int i;
 
   // Check superclasses, or rather their names, since superclasses themselves can be
   // requested to replace.
   // Check for NULL superclass first since this might be java.lang.Object
   if (the_class->super() != scratch_class->super() &&
-      (the_class->super() == NULL || scratch_class->super() == NULL ||
-       Klass::cast(the_class->super())->name() !=
-       Klass::cast(scratch_class->super())->name())) {
-    return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_HIERARCHY_CHANGED;
+    (the_class->super() == NULL || scratch_class->super() == NULL ||
+    Klass::cast(the_class->super())->name() !=
+    Klass::cast(scratch_class->super())->name())) {
+      return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_HIERARCHY_CHANGED;
   }
 
   // Check if the number, names and order of directly implemented interfaces are the same.
@@ -539,8 +677,8 @@ jvmtiError VM_RedefineClasses::compare_and_normalize_class_versions(
   }
   for (i = 0; i < n_intfs; i++) {
     if (Klass::cast((klassOop) k_interfaces->obj_at(i))->name() !=
-        Klass::cast((klassOop) k_new_interfaces->obj_at(i))->name()) {
-      return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_HIERARCHY_CHANGED;
+      Klass::cast((klassOop) k_new_interfaces->obj_at(i))->name()) {
+        return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_HIERARCHY_CHANGED;
     }
   }
 
@@ -559,34 +697,37 @@ jvmtiError VM_RedefineClasses::compare_and_normalize_class_versions(
 
   // Check if the number, names, types and order of fields declared in these classes
   // are the same.
-  JavaFieldStream old_fs(the_class);
-  JavaFieldStream new_fs(scratch_class);
-  for (; !old_fs.done() && !new_fs.done(); old_fs.next(), new_fs.next()) {
+  typeArrayOop k_old_fields = the_class->fields();
+  typeArrayOop k_new_fields = scratch_class->fields();
+  int n_fields = k_old_fields->length();
+  if (n_fields != k_new_fields->length()) {
+    return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_SCHEMA_CHANGED;
+  }
+
+  for (i = 0; i < n_fields; i++) {
+    FieldInfo* old_field = FieldInfo::from_field_array(k_old_fields, i);
+    FieldInfo* new_field = FieldInfo::from_field_array(k_new_fields, i);
+
     // access
-    old_flags = old_fs.access_flags().as_short();
-    new_flags = new_fs.access_flags().as_short();
+    old_flags = old_field->access_flags();
+    new_flags = new_field->access_flags();
     if ((old_flags ^ new_flags) & JVM_RECOGNIZED_FIELD_MODIFIERS) {
       return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_SCHEMA_CHANGED;
     }
     // offset
-    if (old_fs.offset() != new_fs.offset()) {
-      return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_SCHEMA_CHANGED;
+    if (old_field->offset() != new_field->offset()) {
+        return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_SCHEMA_CHANGED;
     }
     // name and signature
-    Symbol* name_sym1 = the_class->constants()->symbol_at(old_fs.name_index());
-    Symbol* sig_sym1 = the_class->constants()->symbol_at(old_fs.signature_index());
-    Symbol* name_sym2 = scratch_class->constants()->symbol_at(new_fs.name_index());
-    Symbol* sig_sym2 = scratch_class->constants()->symbol_at(new_fs.signature_index());
+    Symbol* name_sym1 = old_field->name(the_class->constants());
+    Symbol* sig_sym1 = old_field->signature(the_class->constants());
+    Symbol* name_sym2 = new_field->name(scratch_class->constants());
+    Symbol* sig_sym2 = new_field->name(scratch_class->constants());
     if (name_sym1 != name_sym2 || sig_sym1 != sig_sym2) {
       return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_SCHEMA_CHANGED;
     }
   }
 
-  // If both streams aren't done then we have a differing number of
-  // fields.
-  if (!old_fs.done() || !new_fs.done()) {
-    return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_SCHEMA_CHANGED;
-  }
 
   // Do a parallel walk through the old and new methods. Detect
   // cases where they match (exist in both), have been added in
@@ -689,12 +830,8 @@ jvmtiError VM_RedefineClasses::compare_and_normalize_class_versions(
             idnum_owner->set_method_idnum(new_num);
           }
           k_new_method->set_method_idnum(old_num);
-          swap_all_method_annotations(old_num, new_num, scratch_class);
         }
       }
-      RC_TRACE(0x00008000, ("Method matched: new: %s [%d] == old: %s [%d]",
-                            k_new_method->name_and_sig_as_C_string(), ni,
-                            k_old_method->name_and_sig_as_C_string(), oi));
       // advance to next pair of methods
       ++oi;
       ++ni;
@@ -703,11 +840,11 @@ jvmtiError VM_RedefineClasses::compare_and_normalize_class_versions(
       // method added, see if it is OK
       new_flags = (jushort) k_new_method->access_flags().get_flags();
       if ((new_flags & JVM_ACC_PRIVATE) == 0
-           // hack: private should be treated as final, but alas
-          || (new_flags & (JVM_ACC_FINAL|JVM_ACC_STATIC)) == 0
-         ) {
-        // new methods must be private
-        return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_METHOD_ADDED;
+        // hack: private should be treated as final, but alas
+        || (new_flags & (JVM_ACC_FINAL|JVM_ACC_STATIC)) == 0
+        ) {
+          // new methods must be private
+          return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_METHOD_ADDED;
       }
       {
         u2 num = the_class->next_method_idnum();
@@ -722,24 +859,19 @@ jvmtiError VM_RedefineClasses::compare_and_normalize_class_versions(
           idnum_owner->set_method_idnum(new_num);
         }
         k_new_method->set_method_idnum(num);
-        swap_all_method_annotations(new_num, num, scratch_class);
       }
-      RC_TRACE(0x00008000, ("Method added: new: %s [%d]",
-                            k_new_method->name_and_sig_as_C_string(), ni));
       ++ni; // advance to next new method
       break;
     case deleted:
       // method deleted, see if it is OK
       old_flags = (jushort) k_old_method->access_flags().get_flags();
       if ((old_flags & JVM_ACC_PRIVATE) == 0
-           // hack: private should be treated as final, but alas
-          || (old_flags & (JVM_ACC_FINAL|JVM_ACC_STATIC)) == 0
-         ) {
-        // deleted methods must be private
-        return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_METHOD_DELETED;
+        // hack: private should be treated as final, but alas
+        || (old_flags & (JVM_ACC_FINAL|JVM_ACC_STATIC)) == 0
+        ) {
+          // deleted methods must be private
+          return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_METHOD_DELETED;
       }
-      RC_TRACE(0x00008000, ("Method deleted: old: %s [%d]",
-                            k_old_method->name_and_sig_as_C_string(), oi));
       ++oi; // advance to next old method
       break;
     default:
@@ -750,2066 +882,2205 @@ jvmtiError VM_RedefineClasses::compare_and_normalize_class_versions(
   return JVMTI_ERROR_NONE;
 }
 
+int VM_RedefineClasses::calculate_redefinition_flags(instanceKlassHandle new_class) {
 
-// Find new constant pool index value for old constant pool index value
-// by seaching the index map. Returns zero (0) if there is no mapped
-// value for the old constant pool index.
-int VM_RedefineClasses::find_new_index(int old_index) {
-  if (_index_map_count == 0) {
-    // map is empty so nothing can be found
-    return 0;
+  int result = Klass::NoRedefinition;
+
+
+
+  RC_TRACE(0x00000002, ("Comparing different class versions of class %s",
+    new_class->name()->as_C_string()));
+
+  assert(new_class->old_version() != NULL, "must have old version");
+  instanceKlassHandle the_class(new_class->old_version());
+
+  // Check whether class is in the error init state.
+  if (the_class->is_in_error_state()) {
+    // TBD #5057930: special error code is needed in 1.6
+    //result = Klass::union_redefinition_level(result, Klass::Invalid);
   }
 
-  if (old_index < 1 || old_index >= _index_map_p->length()) {
-    // The old_index is out of range so it is not mapped. This should
-    // not happen in regular constant pool merging use, but it can
-    // happen if a corrupt annotation is processed.
-    return 0;
-  }
+  int i;
 
-  int value = _index_map_p->at(old_index);
-  if (value == -1) {
-    // the old_index is not mapped
-    return 0;
-  }
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Check superclasses
+  assert(new_class->super() == NULL || new_class->super()->klass_part()->is_newest_version(), "");
+  if (the_class->super() != new_class->super()) {
+    // Super class changed
 
-  return value;
-} // end find_new_index()
+    klassOop cur_klass = the_class->super();
+    while (cur_klass != NULL) {
+      if (!new_class->is_subclass_of(cur_klass->klass_part()->newest_version())) {
+        RC_TRACE(0x00000002, ("Removed super class %s",
+          cur_klass->klass_part()->name()->as_C_string()));
+        result = result | Klass::RemoveSuperType | Klass::ModifyInstances | Klass::ModifyClass;
 
-
-// Returns true if the current mismatch is due to a resolved/unresolved
-// class pair. Otherwise, returns false.
-bool VM_RedefineClasses::is_unresolved_class_mismatch(constantPoolHandle cp1,
-       int index1, constantPoolHandle cp2, int index2) {
-
-  jbyte t1 = cp1->tag_at(index1).value();
-  if (t1 != JVM_CONSTANT_Class && t1 != JVM_CONSTANT_UnresolvedClass) {
-    return false;  // wrong entry type; not our special case
-  }
-
-  jbyte t2 = cp2->tag_at(index2).value();
-  if (t2 != JVM_CONSTANT_Class && t2 != JVM_CONSTANT_UnresolvedClass) {
-    return false;  // wrong entry type; not our special case
-  }
-
-  if (t1 == t2) {
-    return false;  // not a mismatch; not our special case
-  }
-
-  char *s1 = cp1->klass_name_at(index1)->as_C_string();
-  char *s2 = cp2->klass_name_at(index2)->as_C_string();
-  if (strcmp(s1, s2) != 0) {
-    return false;  // strings don't match; not our special case
-  }
-
-  return true;  // made it through the gauntlet; this is our special case
-} // end is_unresolved_class_mismatch()
-
-
-// Returns true if the current mismatch is due to a resolved/unresolved
-// string pair. Otherwise, returns false.
-bool VM_RedefineClasses::is_unresolved_string_mismatch(constantPoolHandle cp1,
-       int index1, constantPoolHandle cp2, int index2) {
-
-  jbyte t1 = cp1->tag_at(index1).value();
-  if (t1 != JVM_CONSTANT_String && t1 != JVM_CONSTANT_UnresolvedString) {
-    return false;  // wrong entry type; not our special case
-  }
-
-  jbyte t2 = cp2->tag_at(index2).value();
-  if (t2 != JVM_CONSTANT_String && t2 != JVM_CONSTANT_UnresolvedString) {
-    return false;  // wrong entry type; not our special case
-  }
-
-  if (t1 == t2) {
-    return false;  // not a mismatch; not our special case
-  }
-
-  char *s1 = cp1->string_at_noresolve(index1);
-  char *s2 = cp2->string_at_noresolve(index2);
-  if (strcmp(s1, s2) != 0) {
-    return false;  // strings don't match; not our special case
-  }
-
-  return true;  // made it through the gauntlet; this is our special case
-} // end is_unresolved_string_mismatch()
-
-
-jvmtiError VM_RedefineClasses::load_new_class_versions(TRAPS) {
-  // For consistency allocate memory using os::malloc wrapper.
-  _scratch_classes = (instanceKlassHandle *)
-    os::malloc(sizeof(instanceKlassHandle) * _class_count, mtInternal);
-  if (_scratch_classes == NULL) {
-    return JVMTI_ERROR_OUT_OF_MEMORY;
-  }
-
-  ResourceMark rm(THREAD);
-
-  JvmtiThreadState *state = JvmtiThreadState::state_for(JavaThread::current());
-  // state can only be NULL if the current thread is exiting which
-  // should not happen since we're trying to do a RedefineClasses
-  guarantee(state != NULL, "exiting thread calling load_new_class_versions");
-  for (int i = 0; i < _class_count; i++) {
-    oop mirror = JNIHandles::resolve_non_null(_class_defs[i].klass);
-    // classes for primitives cannot be redefined
-    if (!is_modifiable_class(mirror)) {
-      return JVMTI_ERROR_UNMODIFIABLE_CLASS;
-    }
-    klassOop the_class_oop = java_lang_Class::as_klassOop(mirror);
-    instanceKlassHandle the_class = instanceKlassHandle(THREAD, the_class_oop);
-    Symbol*  the_class_sym = the_class->name();
-
-    // RC_TRACE_WITH_THREAD macro has an embedded ResourceMark
-    RC_TRACE_WITH_THREAD(0x00000001, THREAD,
-      ("loading name=%s kind=%d (avail_mem=" UINT64_FORMAT "K)",
-      the_class->external_name(), _class_load_kind,
-      os::available_memory() >> 10));
-
-    ClassFileStream st((u1*) _class_defs[i].class_bytes,
-      _class_defs[i].class_byte_count, (char *)"__VM_RedefineClasses__");
-
-    // Parse the stream.
-    Handle the_class_loader(THREAD, the_class->class_loader());
-    Handle protection_domain(THREAD, the_class->protection_domain());
-    // Set redefined class handle in JvmtiThreadState class.
-    // This redefined class is sent to agent event handler for class file
-    // load hook event.
-    state->set_class_being_redefined(&the_class, _class_load_kind);
-
-    klassOop k = SystemDictionary::parse_stream(the_class_sym,
-                                                the_class_loader,
-                                                protection_domain,
-                                                &st,
-                                                THREAD);
-    // Clear class_being_redefined just to be sure.
-    state->clear_class_being_redefined();
-
-    // TODO: if this is retransform, and nothing changed we can skip it
-
-    instanceKlassHandle scratch_class (THREAD, k);
-
-    if (HAS_PENDING_EXCEPTION) {
-      Symbol* ex_name = PENDING_EXCEPTION->klass()->klass_part()->name();
-      // RC_TRACE_WITH_THREAD macro has an embedded ResourceMark
-      RC_TRACE_WITH_THREAD(0x00000002, THREAD, ("parse_stream exception: '%s'",
-        ex_name->as_C_string()));
-      CLEAR_PENDING_EXCEPTION;
-
-      if (ex_name == vmSymbols::java_lang_UnsupportedClassVersionError()) {
-        return JVMTI_ERROR_UNSUPPORTED_VERSION;
-      } else if (ex_name == vmSymbols::java_lang_ClassFormatError()) {
-        return JVMTI_ERROR_INVALID_CLASS_FORMAT;
-      } else if (ex_name == vmSymbols::java_lang_ClassCircularityError()) {
-        return JVMTI_ERROR_CIRCULAR_CLASS_DEFINITION;
-      } else if (ex_name == vmSymbols::java_lang_NoClassDefFoundError()) {
-        // The message will be "XXX (wrong name: YYY)"
-        return JVMTI_ERROR_NAMES_DONT_MATCH;
-      } else if (ex_name == vmSymbols::java_lang_OutOfMemoryError()) {
-        return JVMTI_ERROR_OUT_OF_MEMORY;
-      } else {  // Just in case more exceptions can be thrown..
-        return JVMTI_ERROR_FAILS_VERIFICATION;
-      }
-    }
-
-    // Ensure class is linked before redefine
-    if (!the_class->is_linked()) {
-      the_class->link_class(THREAD);
-      if (HAS_PENDING_EXCEPTION) {
-        Symbol* ex_name = PENDING_EXCEPTION->klass()->klass_part()->name();
-        // RC_TRACE_WITH_THREAD macro has an embedded ResourceMark
-        RC_TRACE_WITH_THREAD(0x00000002, THREAD, ("link_class exception: '%s'",
-          ex_name->as_C_string()));
-        CLEAR_PENDING_EXCEPTION;
-        if (ex_name == vmSymbols::java_lang_OutOfMemoryError()) {
-          return JVMTI_ERROR_OUT_OF_MEMORY;
-        } else {
-          return JVMTI_ERROR_INTERNAL;
+        if (!cur_klass->klass_part()->has_subtype_changed()) {
+          RC_TRACE(0x00000002, ("Subtype changed of class %s",
+            cur_klass->klass_part()->name()->as_C_string()));
+          cur_klass->klass_part()->set_subtype_changed(true);
         }
       }
+
+      cur_klass = cur_klass->klass_part()->super();
     }
 
-    // Do the validity checks in compare_and_normalize_class_versions()
-    // before verifying the byte codes. By doing these checks first, we
-    // limit the number of functions that require redirection from
-    // the_class to scratch_class. In particular, we don't have to
-    // modify JNI GetSuperclass() and thus won't change its performance.
-    jvmtiError res = compare_and_normalize_class_versions(the_class,
-                       scratch_class);
-    if (res != JVMTI_ERROR_NONE) {
-      return res;
-    }
-
-    // verify what the caller passed us
-    {
-      // The bug 6214132 caused the verification to fail.
-      // Information about the_class and scratch_class is temporarily
-      // recorded into jvmtiThreadState. This data is used to redirect
-      // the_class to scratch_class in the JVM_* functions called by the
-      // verifier. Please, refer to jvmtiThreadState.hpp for the detailed
-      // description.
-      RedefineVerifyMark rvm(&the_class, &scratch_class, state);
-      Verifier::verify(
-        scratch_class, Verifier::ThrowException, true, THREAD);
-    }
-
-    if (HAS_PENDING_EXCEPTION) {
-      Symbol* ex_name = PENDING_EXCEPTION->klass()->klass_part()->name();
-      // RC_TRACE_WITH_THREAD macro has an embedded ResourceMark
-      RC_TRACE_WITH_THREAD(0x00000002, THREAD,
-        ("verify_byte_codes exception: '%s'", ex_name->as_C_string()));
-      CLEAR_PENDING_EXCEPTION;
-      if (ex_name == vmSymbols::java_lang_OutOfMemoryError()) {
-        return JVMTI_ERROR_OUT_OF_MEMORY;
-      } else {
-        // tell the caller the bytecodes are bad
-        return JVMTI_ERROR_FAILS_VERIFICATION;
+    cur_klass = new_class->super();
+    while (cur_klass != NULL) {
+      if (!the_class->is_subclass_of(cur_klass->klass_part()->old_version())) {
+        RC_TRACE(0x00000002, ("Added super class %s",
+          cur_klass->klass_part()->name()->as_C_string()));
+        result = result | Klass::ModifyClass | Klass::ModifyInstances;
       }
-    }
-
-    res = merge_cp_and_rewrite(the_class, scratch_class, THREAD);
-    if (res != JVMTI_ERROR_NONE) {
-      return res;
-    }
-
-    if (VerifyMergedCPBytecodes) {
-      // verify what we have done during constant pool merging
-      {
-        RedefineVerifyMark rvm(&the_class, &scratch_class, state);
-        Verifier::verify(scratch_class, Verifier::ThrowException, true, THREAD);
-      }
-
-      if (HAS_PENDING_EXCEPTION) {
-        Symbol* ex_name = PENDING_EXCEPTION->klass()->klass_part()->name();
-        // RC_TRACE_WITH_THREAD macro has an embedded ResourceMark
-        RC_TRACE_WITH_THREAD(0x00000002, THREAD,
-          ("verify_byte_codes post merge-CP exception: '%s'",
-          ex_name->as_C_string()));
-        CLEAR_PENDING_EXCEPTION;
-        if (ex_name == vmSymbols::java_lang_OutOfMemoryError()) {
-          return JVMTI_ERROR_OUT_OF_MEMORY;
-        } else {
-          // tell the caller that constant pool merging screwed up
-          return JVMTI_ERROR_INTERNAL;
-        }
-      }
-    }
-
-    Rewriter::rewrite(scratch_class, THREAD);
-    if (!HAS_PENDING_EXCEPTION) {
-      Rewriter::relocate_and_link(scratch_class, THREAD);
-    }
-    if (HAS_PENDING_EXCEPTION) {
-      Symbol* ex_name = PENDING_EXCEPTION->klass()->klass_part()->name();
-      CLEAR_PENDING_EXCEPTION;
-      if (ex_name == vmSymbols::java_lang_OutOfMemoryError()) {
-        return JVMTI_ERROR_OUT_OF_MEMORY;
-      } else {
-        return JVMTI_ERROR_INTERNAL;
-      }
-    }
-
-    _scratch_classes[i] = scratch_class;
-
-    // RC_TRACE_WITH_THREAD macro has an embedded ResourceMark
-    RC_TRACE_WITH_THREAD(0x00000001, THREAD,
-      ("loaded name=%s (avail_mem=" UINT64_FORMAT "K)",
-      the_class->external_name(), os::available_memory() >> 10));
-  }
-
-  return JVMTI_ERROR_NONE;
-}
-
-
-// Map old_index to new_index as needed. scratch_cp is only needed
-// for RC_TRACE() calls.
-void VM_RedefineClasses::map_index(constantPoolHandle scratch_cp,
-       int old_index, int new_index) {
-  if (find_new_index(old_index) != 0) {
-    // old_index is already mapped
-    return;
-  }
-
-  if (old_index == new_index) {
-    // no mapping is needed
-    return;
-  }
-
-  _index_map_p->at_put(old_index, new_index);
-  _index_map_count++;
-
-  RC_TRACE(0x00040000, ("mapped tag %d at index %d to %d",
-    scratch_cp->tag_at(old_index).value(), old_index, new_index));
-} // end map_index()
-
-
-// Merge old_cp and scratch_cp and return the results of the merge via
-// merge_cp_p. The number of entries in *merge_cp_p is returned via
-// merge_cp_length_p. The entries in old_cp occupy the same locations
-// in *merge_cp_p. Also creates a map of indices from entries in
-// scratch_cp to the corresponding entry in *merge_cp_p. Index map
-// entries are only created for entries in scratch_cp that occupy a
-// different location in *merged_cp_p.
-bool VM_RedefineClasses::merge_constant_pools(constantPoolHandle old_cp,
-       constantPoolHandle scratch_cp, constantPoolHandle *merge_cp_p,
-       int *merge_cp_length_p, TRAPS) {
-
-  if (merge_cp_p == NULL) {
-    assert(false, "caller must provide scatch constantPool");
-    return false; // robustness
-  }
-  if (merge_cp_length_p == NULL) {
-    assert(false, "caller must provide scatch CP length");
-    return false; // robustness
-  }
-  // Worst case we need old_cp->length() + scratch_cp()->length(),
-  // but the caller might be smart so make sure we have at least
-  // the minimum.
-  if ((*merge_cp_p)->length() < old_cp->length()) {
-    assert(false, "merge area too small");
-    return false; // robustness
-  }
-
-  RC_TRACE_WITH_THREAD(0x00010000, THREAD,
-    ("old_cp_len=%d, scratch_cp_len=%d", old_cp->length(),
-    scratch_cp->length()));
-
-  {
-    // Pass 0:
-    // The old_cp is copied to *merge_cp_p; this means that any code
-    // using old_cp does not have to change. This work looks like a
-    // perfect fit for constantPoolOop::copy_cp_to(), but we need to
-    // handle one special case:
-    // - revert JVM_CONSTANT_Class to JVM_CONSTANT_UnresolvedClass
-    // This will make verification happy.
-
-    int old_i;  // index into old_cp
-
-    // index zero (0) is not used in constantPools
-    for (old_i = 1; old_i < old_cp->length(); old_i++) {
-      // leave debugging crumb
-      jbyte old_tag = old_cp->tag_at(old_i).value();
-      switch (old_tag) {
-      case JVM_CONSTANT_Class:
-      case JVM_CONSTANT_UnresolvedClass:
-        // revert the copy to JVM_CONSTANT_UnresolvedClass
-        // May be resolving while calling this so do the same for
-        // JVM_CONSTANT_UnresolvedClass (klass_name_at() deals with transition)
-        (*merge_cp_p)->unresolved_klass_at_put(old_i,
-          old_cp->klass_name_at(old_i));
-        break;
-
-      case JVM_CONSTANT_Double:
-      case JVM_CONSTANT_Long:
-        // just copy the entry to *merge_cp_p, but double and long take
-        // two constant pool entries
-        constantPoolOopDesc::copy_entry_to(old_cp, old_i, *merge_cp_p, old_i, CHECK_0);
-        old_i++;
-        break;
-
-      default:
-        // just copy the entry to *merge_cp_p
-        constantPoolOopDesc::copy_entry_to(old_cp, old_i, *merge_cp_p, old_i, CHECK_0);
-        break;
-      }
-    } // end for each old_cp entry
-
-    // We don't need to sanity check that *merge_cp_length_p is within
-    // *merge_cp_p bounds since we have the minimum on-entry check above.
-    (*merge_cp_length_p) = old_i;
-  }
-
-  // merge_cp_len should be the same as old_cp->length() at this point
-  // so this trace message is really a "warm-and-breathing" message.
-  RC_TRACE_WITH_THREAD(0x00020000, THREAD,
-    ("after pass 0: merge_cp_len=%d", *merge_cp_length_p));
-
-  int scratch_i;  // index into scratch_cp
-  {
-    // Pass 1a:
-    // Compare scratch_cp entries to the old_cp entries that we have
-    // already copied to *merge_cp_p. In this pass, we are eliminating
-    // exact duplicates (matching entry at same index) so we only
-    // compare entries in the common indice range.
-    int increment = 1;
-    int pass1a_length = MIN2(old_cp->length(), scratch_cp->length());
-    for (scratch_i = 1; scratch_i < pass1a_length; scratch_i += increment) {
-      switch (scratch_cp->tag_at(scratch_i).value()) {
-      case JVM_CONSTANT_Double:
-      case JVM_CONSTANT_Long:
-        // double and long take two constant pool entries
-        increment = 2;
-        break;
-
-      default:
-        increment = 1;
-        break;
-      }
-
-      bool match = scratch_cp->compare_entry_to(scratch_i, *merge_cp_p,
-        scratch_i, CHECK_0);
-      if (match) {
-        // found a match at the same index so nothing more to do
-        continue;
-      } else if (is_unresolved_class_mismatch(scratch_cp, scratch_i,
-                                              *merge_cp_p, scratch_i)) {
-        // The mismatch in compare_entry_to() above is because of a
-        // resolved versus unresolved class entry at the same index
-        // with the same string value. Since Pass 0 reverted any
-        // class entries to unresolved class entries in *merge_cp_p,
-        // we go with the unresolved class entry.
-        continue;
-      } else if (is_unresolved_string_mismatch(scratch_cp, scratch_i,
-                                               *merge_cp_p, scratch_i)) {
-        // The mismatch in compare_entry_to() above is because of a
-        // resolved versus unresolved string entry at the same index
-        // with the same string value. We can live with whichever
-        // happens to be at scratch_i in *merge_cp_p.
-        continue;
-      }
-
-      int found_i = scratch_cp->find_matching_entry(scratch_i, *merge_cp_p,
-        CHECK_0);
-      if (found_i != 0) {
-        guarantee(found_i != scratch_i,
-          "compare_entry_to() and find_matching_entry() do not agree");
-
-        // Found a matching entry somewhere else in *merge_cp_p so
-        // just need a mapping entry.
-        map_index(scratch_cp, scratch_i, found_i);
-        continue;
-      }
-
-      // The find_matching_entry() call above could fail to find a match
-      // due to a resolved versus unresolved class or string entry situation
-      // like we solved above with the is_unresolved_*_mismatch() calls.
-      // However, we would have to call is_unresolved_*_mismatch() over
-      // all of *merge_cp_p (potentially) and that doesn't seem to be
-      // worth the time.
-
-      // No match found so we have to append this entry and any unique
-      // referenced entries to *merge_cp_p.
-      append_entry(scratch_cp, scratch_i, merge_cp_p, merge_cp_length_p,
-        CHECK_0);
+      cur_klass = cur_klass->klass_part()->super();
     }
   }
 
-  RC_TRACE_WITH_THREAD(0x00020000, THREAD,
-    ("after pass 1a: merge_cp_len=%d, scratch_i=%d, index_map_len=%d",
-    *merge_cp_length_p, scratch_i, _index_map_count));
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Check interfaces
 
-  if (scratch_i < scratch_cp->length()) {
-    // Pass 1b:
-    // old_cp is smaller than scratch_cp so there are entries in
-    // scratch_cp that we have not yet processed. We take care of
-    // those now.
-    int increment = 1;
-    for (; scratch_i < scratch_cp->length(); scratch_i += increment) {
-      switch (scratch_cp->tag_at(scratch_i).value()) {
-      case JVM_CONSTANT_Double:
-      case JVM_CONSTANT_Long:
-        // double and long take two constant pool entries
-        increment = 2;
-        break;
-
-      default:
-        increment = 1;
-        break;
+  // Interfaces removed?
+  objArrayOop old_interfaces = the_class->transitive_interfaces();
+  for (i = 0; i<old_interfaces->length(); i++) {
+    instanceKlassHandle old_interface((klassOop)old_interfaces->obj_at(i));
+    if (!new_class->implements_interface_any_version(old_interface())) {
+      result = result | Klass::RemoveSuperType | Klass::ModifyClass;
+      RC_TRACE(0x00000002, ("Removed interface %s",
+        old_interface->name()->as_C_string()));
+      
+      if (!old_interface->has_subtype_changed()) {
+        RC_TRACE(0x00000002, ("Subtype changed of interface %s",
+          old_interface->name()->as_C_string()));
+        old_interface->set_subtype_changed(true);
       }
-
-      int found_i =
-        scratch_cp->find_matching_entry(scratch_i, *merge_cp_p, CHECK_0);
-      if (found_i != 0) {
-        // Found a matching entry somewhere else in *merge_cp_p so
-        // just need a mapping entry.
-        map_index(scratch_cp, scratch_i, found_i);
-        continue;
-      }
-
-      // No match found so we have to append this entry and any unique
-      // referenced entries to *merge_cp_p.
-      append_entry(scratch_cp, scratch_i, merge_cp_p, merge_cp_length_p,
-        CHECK_0);
     }
-
-    RC_TRACE_WITH_THREAD(0x00020000, THREAD,
-      ("after pass 1b: merge_cp_len=%d, scratch_i=%d, index_map_len=%d",
-      *merge_cp_length_p, scratch_i, _index_map_count));
   }
 
-  return true;
-} // end merge_constant_pools()
+  // Interfaces added?
+  objArrayOop new_interfaces = new_class->transitive_interfaces();
+  for (i = 0; i<new_interfaces->length(); i++) {
+    if (!the_class->implements_interface_any_version((klassOop)new_interfaces->obj_at(i))) {
+      result = result | Klass::ModifyClass;
+      RC_TRACE(0x00000002, ("Added interface %s",
+        ((klassOop)new_interfaces->obj_at(i))->klass_part()->name()->as_C_string()));
+    }
+  }
 
 
-// Merge constant pools between the_class and scratch_class and
-// potentially rewrite bytecodes in scratch_class to use the merged
-// constant pool.
-jvmtiError VM_RedefineClasses::merge_cp_and_rewrite(
-             instanceKlassHandle the_class, instanceKlassHandle scratch_class,
-             TRAPS) {
-  // worst case merged constant pool length is old and new combined
-  int merge_cp_length = the_class->constants()->length()
-        + scratch_class->constants()->length();
+  // Check whether class modifiers are the same.
+  jushort old_flags = (jushort) the_class->access_flags().get_flags();
+  jushort new_flags = (jushort) new_class->access_flags().get_flags();
+  if (old_flags != new_flags) {
+    // TODO (tw): Can this have any effects?
+  }
 
-  constantPoolHandle old_cp(THREAD, the_class->constants());
-  constantPoolHandle scratch_cp(THREAD, scratch_class->constants());
-
-  // Constant pools are not easily reused so we allocate a new one
-  // each time.
-  // merge_cp is created unsafe for concurrent GC processing.  It
-  // should be marked safe before discarding it. Even though
-  // garbage,  if it crosses a card boundary, it may be scanned
-  // in order to find the start of the first complete object on the card.
-  constantPoolHandle merge_cp(THREAD,
-    oopFactory::new_constantPool(merge_cp_length,
-                                 oopDesc::IsUnsafeConc,
-                                 THREAD));
-  int orig_length = old_cp->orig_length();
-  if (orig_length == 0) {
-    // This old_cp is an actual original constant pool. We save
-    // the original length in the merged constant pool so that
-    // merge_constant_pools() can be more efficient. If a constant
-    // pool has a non-zero orig_length() value, then that constant
-    // pool was created by a merge operation in RedefineClasses.
-    merge_cp->set_orig_length(old_cp->length());
+  // Check if the number, names, types and order of fields declared in these classes
+  // are the same.
+  typeArrayOop k_old_fields = the_class->fields();
+  typeArrayOop k_new_fields = new_class->fields();
+  int n_fields = k_old_fields->length();
+  if (n_fields != k_new_fields->length()) {
+    result = result | Klass::ModifyInstances;
   } else {
-    // This old_cp is a merged constant pool from a previous
-    // RedefineClasses() calls so just copy the orig_length()
-    // value.
-    merge_cp->set_orig_length(old_cp->orig_length());
+    for (i = 0; i < n_fields; i ++) {
+      FieldInfo* old_field = FieldInfo::from_field_array(k_old_fields, i);
+      FieldInfo* new_field = FieldInfo::from_field_array(k_new_fields, i);
+
+      // access
+      old_flags = old_field->access_flags();
+      new_flags = new_field->access_flags();
+      if ((old_flags ^ new_flags) & JVM_RECOGNIZED_FIELD_MODIFIERS) {
+        // (tw) Can this have any effects?
+      }
+      // offset
+      if (old_field->offset() != new_field->offset()) {
+          result = result | Klass::ModifyInstances;
+      }
+      // name and signature
+      Symbol* name_sym1 = old_field->name(the_class->constants());
+      Symbol* sig_sym1 = old_field->signature(the_class->constants());
+      Symbol* name_sym2 = new_field->name(new_class->constants());
+      Symbol* sig_sym2 = new_field->signature(new_class->constants());
+      if (name_sym1 != name_sym2 || sig_sym1 != sig_sym2) {
+        result = result | Klass::ModifyInstances;
+      }
+    }
   }
 
-  ResourceMark rm(THREAD);
-  _index_map_count = 0;
-  _index_map_p = new intArray(scratch_cp->length(), -1);
+  // Do a parallel walk through the old and new methods. Detect
+  // cases where they match (exist in both), have been added in
+  // the new methods, or have been deleted (exist only in the
+  // old methods).  The class file parser places methods in order
+  // by method name, but does not order overloaded methods by
+  // signature.  In order to determine what fate befell the methods,
+  // this code places the overloaded new methods that have matching
+  // old methods in the same order as the old methods and places
+  // new overloaded methods at the end of overloaded methods of
+  // that name. The code for this order normalization is adapted
+  // from the algorithm used in instanceKlass::find_method().
+  // Since we are swapping out of order entries as we find them,
+  // we only have to search forward through the overloaded methods.
+  // Methods which are added and have the same name as an existing
+  // method (but different signature) will be put at the end of
+  // the methods with that name, and the name mismatch code will
+  // handle them.
+  objArrayHandle k_old_methods(the_class->methods());
+  objArrayHandle k_new_methods(new_class->methods());
+  int n_old_methods = k_old_methods->length();
+  int n_new_methods = k_new_methods->length();
 
-  bool result = merge_constant_pools(old_cp, scratch_cp, &merge_cp,
-                  &merge_cp_length, THREAD);
-  if (!result) {
-    // The merge can fail due to memory allocation failure or due
-    // to robustness checks.
-    return JVMTI_ERROR_INTERNAL;
-  }
+  int ni = 0;
+  int oi = 0;
+  while (true) {
+    methodOop k_old_method;
+    methodOop k_new_method;
+    enum { matched, added, deleted, undetermined } method_was = undetermined;
 
-  RC_TRACE_WITH_THREAD(0x00010000, THREAD,
-    ("merge_cp_len=%d, index_map_len=%d", merge_cp_length, _index_map_count));
-
-  if (_index_map_count == 0) {
-    // there is nothing to map between the new and merged constant pools
-
-    if (old_cp->length() == scratch_cp->length()) {
-      // The old and new constant pools are the same length and the
-      // index map is empty. This means that the three constant pools
-      // are equivalent (but not the same). Unfortunately, the new
-      // constant pool has not gone through link resolution nor have
-      // the new class bytecodes gone through constant pool cache
-      // rewriting so we can't use the old constant pool with the new
-      // class.
-
-      merge_cp()->set_is_conc_safe(true);
-      merge_cp = constantPoolHandle();  // toss the merged constant pool
-    } else if (old_cp->length() < scratch_cp->length()) {
-      // The old constant pool has fewer entries than the new constant
-      // pool and the index map is empty. This means the new constant
-      // pool is a superset of the old constant pool. However, the old
-      // class bytecodes have already gone through constant pool cache
-      // rewriting so we can't use the new constant pool with the old
-      // class.
-
-      merge_cp()->set_is_conc_safe(true);
-      merge_cp = constantPoolHandle();  // toss the merged constant pool
+    if (oi >= n_old_methods) {
+      if (ni >= n_new_methods) {
+        break; // we've looked at everything, done
+      }
+      // New method at the end
+      k_new_method = (methodOop) k_new_methods->obj_at(ni);
+      method_was = added;
+    } else if (ni >= n_new_methods) {
+      // Old method, at the end, is deleted
+      k_old_method = (methodOop) k_old_methods->obj_at(oi);
+      method_was = deleted;
     } else {
-      // The old constant pool has more entries than the new constant
-      // pool and the index map is empty. This means that both the old
-      // and merged constant pools are supersets of the new constant
-      // pool.
+      // There are more methods in both the old and new lists
+      k_old_method = (methodOop) k_old_methods->obj_at(oi);
+      k_new_method = (methodOop) k_new_methods->obj_at(ni);
+      if (k_old_method->name() != k_new_method->name()) {
+        // Methods are sorted by method name, so a mismatch means added
+        // or deleted
+        if (k_old_method->name()->fast_compare(k_new_method->name()) > 0) {
+          method_was = added;
+        } else {
+          method_was = deleted;
+        }
+      } else if (k_old_method->signature() == k_new_method->signature()) {
+        // Both the name and signature match
+        method_was = matched;
+      } else {
+        // The name matches, but the signature doesn't, which means we have to
+        // search forward through the new overloaded methods.
+        int nj;  // outside the loop for post-loop check
+        for (nj = ni + 1; nj < n_new_methods; nj++) {
+          methodOop m = (methodOop)k_new_methods->obj_at(nj);
+          if (k_old_method->name() != m->name()) {
+            // reached another method name so no more overloaded methods
+            method_was = deleted;
+            break;
+          }
+          if (k_old_method->signature() == m->signature()) {
+            // found a match so swap the methods
+            k_new_methods->obj_at_put(ni, m);
+            k_new_methods->obj_at_put(nj, k_new_method);
+            k_new_method = m;
+            method_was = matched;
+            break;
+          }
+        }
 
-      // Replace the new constant pool with a shrunken copy of the
-      // merged constant pool; the previous new constant pool will
-      // get GCed.
-      set_new_constant_pool(scratch_class, merge_cp, merge_cp_length, true,
-        THREAD);
-      // drop local ref to the merged constant pool
-      merge_cp()->set_is_conc_safe(true);
-      merge_cp = constantPoolHandle();
-    }
-  } else {
-    if (RC_TRACE_ENABLED(0x00040000)) {
-      // don't want to loop unless we are tracing
-      int count = 0;
-      for (int i = 1; i < _index_map_p->length(); i++) {
-        int value = _index_map_p->at(i);
-
-        if (value != -1) {
-          RC_TRACE_WITH_THREAD(0x00040000, THREAD,
-            ("index_map[%d]: old=%d new=%d", count, i, value));
-          count++;
+        if (nj >= n_new_methods) {
+          // reached the end without a match; so method was deleted
+          method_was = deleted;
         }
       }
     }
 
-    // We have entries mapped between the new and merged constant pools
-    // so we have to rewrite some constant pool references.
-    if (!rewrite_cp_refs(scratch_class, THREAD)) {
-      return JVMTI_ERROR_INTERNAL;
+    switch (method_was) {
+  case matched:
+    // methods match, be sure modifiers do too
+    old_flags = (jushort) k_old_method->access_flags().get_flags();
+    new_flags = (jushort) k_new_method->access_flags().get_flags();
+    if ((old_flags ^ new_flags) & ~(JVM_ACC_NATIVE)) {
+      // (tw) Can this have any effects? Probably yes on vtables?
+      result = result | Klass::ModifyClass;
     }
-
-    // Replace the new constant pool with a shrunken copy of the
-    // merged constant pool so now the rewritten bytecodes have
-    // valid references; the previous new constant pool will get
-    // GCed.
-    set_new_constant_pool(scratch_class, merge_cp, merge_cp_length, true,
-      THREAD);
-    merge_cp()->set_is_conc_safe(true);
-  }
-  assert(old_cp()->is_conc_safe(), "Just checking");
-  assert(scratch_cp()->is_conc_safe(), "Just checking");
-
-  return JVMTI_ERROR_NONE;
-} // end merge_cp_and_rewrite()
-
-
-// Rewrite constant pool references in klass scratch_class.
-bool VM_RedefineClasses::rewrite_cp_refs(instanceKlassHandle scratch_class,
-       TRAPS) {
-
-  // rewrite constant pool references in the methods:
-  if (!rewrite_cp_refs_in_methods(scratch_class, THREAD)) {
-    // propagate failure back to caller
-    return false;
-  }
-
-  // rewrite constant pool references in the class_annotations:
-  if (!rewrite_cp_refs_in_class_annotations(scratch_class, THREAD)) {
-    // propagate failure back to caller
-    return false;
-  }
-
-  // rewrite constant pool references in the fields_annotations:
-  if (!rewrite_cp_refs_in_fields_annotations(scratch_class, THREAD)) {
-    // propagate failure back to caller
-    return false;
-  }
-
-  // rewrite constant pool references in the methods_annotations:
-  if (!rewrite_cp_refs_in_methods_annotations(scratch_class, THREAD)) {
-    // propagate failure back to caller
-    return false;
-  }
-
-  // rewrite constant pool references in the methods_parameter_annotations:
-  if (!rewrite_cp_refs_in_methods_parameter_annotations(scratch_class,
-         THREAD)) {
-    // propagate failure back to caller
-    return false;
-  }
-
-  // rewrite constant pool references in the methods_default_annotations:
-  if (!rewrite_cp_refs_in_methods_default_annotations(scratch_class,
-         THREAD)) {
-    // propagate failure back to caller
-    return false;
-  }
-
-  return true;
-} // end rewrite_cp_refs()
-
-
-// Rewrite constant pool references in the methods.
-bool VM_RedefineClasses::rewrite_cp_refs_in_methods(
-       instanceKlassHandle scratch_class, TRAPS) {
-
-  objArrayHandle methods(THREAD, scratch_class->methods());
-
-  if (methods.is_null() || methods->length() == 0) {
-    // no methods so nothing to do
-    return true;
-  }
-
-  // rewrite constant pool references in the methods:
-  for (int i = methods->length() - 1; i >= 0; i--) {
-    methodHandle method(THREAD, (methodOop)methods->obj_at(i));
-    methodHandle new_method;
-    rewrite_cp_refs_in_method(method, &new_method, CHECK_false);
-    if (!new_method.is_null()) {
-      // the method has been replaced so save the new method version
-      methods->obj_at_put(i, new_method());
+    {
+      u2 new_num = k_new_method->method_idnum();
+      u2 old_num = k_old_method->method_idnum();
+      if (new_num != old_num) {
+        methodOop idnum_owner = new_class->method_with_idnum(old_num);
+        if (idnum_owner != NULL) {
+          // There is already a method assigned this idnum -- switch them
+          idnum_owner->set_method_idnum(new_num);
+        }
+        k_new_method->set_method_idnum(old_num);
+        RC_TRACE(0x00000002, ("swapping idnum of new and old method %d / %d!",
+          new_num,
+          old_num));
+       // swap_all_method_annotations(old_num, new_num, new_class);
+      }
+    }
+    RC_TRACE(0x00008000, ("Method matched: new: %s [%d] == old: %s [%d]",
+      k_new_method->name_and_sig_as_C_string(), ni,
+      k_old_method->name_and_sig_as_C_string(), oi));
+    // advance to next pair of methods
+    ++oi;
+    ++ni;
+    break;
+  case added:
+    // method added, see if it is OK
+    new_flags = (jushort) k_new_method->access_flags().get_flags();
+    if ((new_flags & JVM_ACC_PRIVATE) == 0
+      // hack: private should be treated as final, but alas
+      || (new_flags & (JVM_ACC_FINAL|JVM_ACC_STATIC)) == 0
+      ) {
+        // new methods must be private
+        result = result | Klass::ModifyClass;
+    }
+    {
+      u2 num = the_class->next_method_idnum();
+      if (num == constMethodOopDesc::UNSET_IDNUM) {
+        // cannot add any more methods
+        result = result | Klass::ModifyClass;
+      }
+      u2 new_num = k_new_method->method_idnum();
+      methodOop idnum_owner = new_class->method_with_idnum(num);
+      if (idnum_owner != NULL) {
+        // There is already a method assigned this idnum -- switch them
+        idnum_owner->set_method_idnum(new_num);
+      }
+      k_new_method->set_method_idnum(num);
+      //swap_all_method_annotations(new_num, num, new_class);
+    }
+    RC_TRACE(0x00000001, ("Method added: new: %s [%d]",
+      k_new_method->name_and_sig_as_C_string(), ni));
+    ++ni; // advance to next new method
+    break;
+  case deleted:
+    // method deleted, see if it is OK
+    old_flags = (jushort) k_old_method->access_flags().get_flags();
+    if ((old_flags & JVM_ACC_PRIVATE) == 0
+      // hack: private should be treated as final, but alas
+      || (old_flags & (JVM_ACC_FINAL|JVM_ACC_STATIC)) == 0
+      ) {
+        // deleted methods must be private
+        result = result | Klass::ModifyClass;
+    }
+    RC_TRACE(0x00000001, ("Method deleted: old: %s [%d]",
+      k_old_method->name_and_sig_as_C_string(), oi));
+    ++oi; // advance to next old method
+    break;
+  default:
+    ShouldNotReachHere();
     }
   }
 
-  return true;
+  if (new_class()->size() != new_class->old_version()->size()) {
+    result |= Klass::ModifyClassSize;
+  }
+
+  if (new_class->size_helper() != ((instanceKlass*)(new_class->old_version()->klass_part()))->size_helper()) {
+    result |= Klass::ModifyInstanceSize;
+  }
+
+  methodHandle instanceTransformerMethod(new_class->find_method(vmSymbols::transformer_name(), vmSymbols::void_method_signature()));
+  if (!instanceTransformerMethod.is_null() && !instanceTransformerMethod->is_static()) {
+    result |= Klass::HasInstanceTransformer;
+  }
+
+  // (tw) Check method bodies to be able to return NoChange?
+  return result;
 }
 
+void VM_RedefineClasses::calculate_instance_update_information(klassOop new_version) {
 
-// Rewrite constant pool references in the specific method. This code
-// was adapted from Rewriter::rewrite_method().
-void VM_RedefineClasses::rewrite_cp_refs_in_method(methodHandle method,
-       methodHandle *new_method_p, TRAPS) {
+  class UpdateFieldsEvolutionClosure : public FieldEvolutionClosure {
 
-  *new_method_p = methodHandle();  // default is no new method
+  private:
 
-  // We cache a pointer to the bytecodes here in code_base. If GC
-  // moves the methodOop, then the bytecodes will also move which
-  // will likely cause a crash. We create a No_Safepoint_Verifier
-  // object to detect whether we pass a possible safepoint in this
-  // code block.
-  No_Safepoint_Verifier nsv;
+    GrowableArray<int> info;
+    int curPosition;
+    bool copy_backwards;
 
-  // Bytecodes and their length
-  address code_base = method->code_base();
-  int code_length = method->code_size();
+  public:
 
-  int bc_length;
-  for (int bci = 0; bci < code_length; bci += bc_length) {
-    address bcp = code_base + bci;
-    Bytecodes::Code c = (Bytecodes::Code)(*bcp);
-
-    bc_length = Bytecodes::length_for(c);
-    if (bc_length == 0) {
-      // More complicated bytecodes report a length of zero so
-      // we have to try again a slightly different way.
-      bc_length = Bytecodes::length_at(method(), bcp);
+    bool does_copy_backwards() {
+      return copy_backwards;
     }
 
-    assert(bc_length != 0, "impossible bytecode length");
+    UpdateFieldsEvolutionClosure(klassOop klass) {
 
-    switch (c) {
-      case Bytecodes::_ldc:
-      {
-        int cp_index = *(bcp + 1);
-        int new_index = find_new_index(cp_index);
+      int base_offset = instanceOopDesc::base_offset_in_bytes();
 
-        if (StressLdcRewrite && new_index == 0) {
-          // If we are stressing ldc -> ldc_w rewriting, then we
-          // always need a new_index value.
-          new_index = cp_index;
-        }
-        if (new_index != 0) {
-          // the original index is mapped so we have more work to do
-          if (!StressLdcRewrite && new_index <= max_jubyte) {
-            // The new value can still use ldc instead of ldc_w
-            // unless we are trying to stress ldc -> ldc_w rewriting
-            RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-              ("%s@" INTPTR_FORMAT " old=%d, new=%d", Bytecodes::name(c),
-              bcp, cp_index, new_index));
-            *(bcp + 1) = new_index;
+      if (klass->klass_part()->newest_version() == SystemDictionary::Reference_klass()->klass_part()->newest_version()) {
+        base_offset += java_lang_ref_Reference::number_of_fake_oop_fields*size_of_type(T_OBJECT);
+      }
+
+      info.append(base_offset);
+      info.append(0);
+      curPosition = base_offset;
+      copy_backwards = false;
+    }
+
+    GrowableArray<int> &finish() {
+      info.append(0);
+      return info;
+    }
+
+    virtual void do_new_field(fieldDescriptor* fd){
+      int size = size_of_type(fd->field_type());
+      fill(size);
+    }
+
+  private:
+
+    void fill(int size) {
+      if (info.length() > 0 && info.at(info.length() - 1) < 0) {
+        (*info.adr_at(info.length() - 1)) -= size;
+      } else {
+        info.append(-size);
+      }
+
+      curPosition += size;
+    }
+
+    int size_of_type(BasicType type) {
+      int size = 0;
+      switch(type) {
+        case T_BOOLEAN:
+          size = sizeof(jboolean);
+          break;
+
+        case T_CHAR:
+          size = (sizeof(jchar));
+          break;
+
+        case T_FLOAT:
+          size = (sizeof(jfloat));
+          break;
+
+        case T_DOUBLE:
+          size = (sizeof(jdouble));
+          break;
+
+        case T_BYTE:
+          size = (sizeof(jbyte));
+          break;
+
+        case T_SHORT:
+          size = (sizeof(jshort));
+          break;
+
+        case T_INT:
+          size = (sizeof(jint));
+          break;
+
+        case T_LONG:
+          size = (sizeof(jlong));
+          break;
+
+        case T_OBJECT:
+        case T_ARRAY:
+          if (UseCompressedOops) {
+            size = sizeof(narrowOop);
           } else {
-            RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-              ("%s->ldc_w@" INTPTR_FORMAT " old=%d, new=%d",
-              Bytecodes::name(c), bcp, cp_index, new_index));
-            // the new value needs ldc_w instead of ldc
-            u_char inst_buffer[4]; // max instruction size is 4 bytes
-            bcp = (address)inst_buffer;
-            // construct new instruction sequence
-            *bcp = Bytecodes::_ldc_w;
-            bcp++;
-            // Rewriter::rewrite_method() does not rewrite ldc -> ldc_w.
-            // See comment below for difference between put_Java_u2()
-            // and put_native_u2().
-            Bytes::put_Java_u2(bcp, new_index);
+            size = (sizeof(oop));
+          }
+          break;
 
-            Relocator rc(method, NULL /* no RelocatorListener needed */);
-            methodHandle m;
-            {
-              Pause_No_Safepoint_Verifier pnsv(&nsv);
+        default:
+          ShouldNotReachHere();
+      }
 
-              // ldc is 2 bytes and ldc_w is 3 bytes
-              m = rc.insert_space_at(bci, 3, inst_buffer, THREAD);
-              if (m.is_null() || HAS_PENDING_EXCEPTION) {
-                guarantee(false, "insert_space_at() failed");
+      assert(size > 0, "");
+      return size;
+
+    }
+    
+  public:
+
+    virtual void do_old_field(fieldDescriptor* fd){}
+
+    virtual void do_changed_field(fieldDescriptor* old_fd, fieldDescriptor *new_fd){
+
+      int alignment = new_fd->offset() - curPosition;
+      if (alignment > 0) {
+        // This field was aligned, so we need to make sure that we fill the gap
+        fill(alignment);
+      }
+
+      assert(old_fd->field_type() == new_fd->field_type(), "");
+      assert(curPosition == new_fd->offset(), "must be correct offset!");
+
+      int offset = old_fd->offset();
+      int size = size_of_type(old_fd->field_type());
+
+      int prevEnd = -1;
+      if (info.length() > 0 && info.at(info.length() - 1) > 0) {
+        prevEnd = info.at(info.length() - 2) + info.at(info.length() - 1);
+      }
+
+      if (prevEnd == offset) {
+        info.at_put(info.length() - 2, info.at(info.length() - 2) + size);
+      } else {
+        info.append(size);
+        info.append(offset);
+      }
+
+      if (old_fd->offset() < new_fd->offset()) {
+        copy_backwards = true;
+      }
+
+      transfer_special_access_flags(old_fd, new_fd);
+
+      curPosition += size;
+    }
+  };
+
+  UpdateFieldsEvolutionClosure cl(new_version);
+  ((instanceKlass*)new_version->klass_part())->do_fields_evolution(&cl);
+
+  GrowableArray<int> result = cl.finish();
+  ((instanceKlass*)new_version->klass_part())->store_update_information(result);
+  ((instanceKlass*)new_version->klass_part())->set_copying_backwards(cl.does_copy_backwards());
+
+  if (RC_TRACE_ENABLED(0x00000002))  {
+    RC_TRACE(0x00000002, ("Instance update information for %s:",
+      new_version->klass_part()->name()->as_C_string()));
+    if (cl.does_copy_backwards()) {
+      RC_TRACE(0x00000002, ("\tDoes copy backwards!"));
+    }
+    for (int i=0; i<result.length(); i++) {
+      int curNum = result.at(i);
+      if (curNum < 0) {
+        RC_TRACE(0x00000002, ("\t%d CLEAN", curNum));
+      } else if (curNum > 0) {
+        RC_TRACE(0x00000002, ("\t%d COPY from %d", curNum, result.at(i + 1)));
+        i++;
+      } else {
+        RC_TRACE(0x00000002, ("\tEND"));
+      }
+    }
+  }
+}
+
+Symbol* VM_RedefineClasses::signature_to_class_name(Symbol* signature) {
+  assert(FieldType::is_obj(signature), "");
+  return SymbolTable::new_symbol(signature->as_C_string() + 1, signature->utf8_length() - 2, Thread::current());
+}
+
+void VM_RedefineClasses::calculate_type_check_information() {
+  class MarkAffectedClassesClosure : public ObjectClosure {
+
+    virtual void do_object(oop obj) {
+      klassOop klass = (klassOop)obj;
+
+      if (klass->klass_part()->is_redefining()) {
+        klass = klass->klass_part()->old_version();
+      }
+
+      // We found an instance klass!
+      instanceKlass *cur_instance_klass = instanceKlass::cast(klass);
+      GrowableArray< Pair<int, klassOop> > type_check_information;
+
+      class MyFieldClosure : public FieldClosure {
+
+      public:
+
+        GrowableArray< Pair<int, klassOop> > *_arr;
+
+        MyFieldClosure(GrowableArray< Pair<int, klassOop> > *arr) {
+          _arr = arr;
+        }
+
+        virtual void do_field(fieldDescriptor* fd) {
+          if (fd->field_type() == T_OBJECT) {
+            Symbol* signature = fd->signature();
+            if (FieldType::is_obj(signature)) {
+              Symbol* name = signature_to_class_name(signature);
+              klassOop field_klass;
+              if (is_field_dangerous(name, fd, field_klass)) {
+                RC_TRACE(0x00000002, ("Found dangerous field %s in klass %s of type %s",
+                  fd->name()->as_C_string(),
+                  fd->field_holder()->klass_part()->name()->as_C_string(),
+                  name->as_C_string()));
+                _arr->append(Pair<int, klassOop>(fd->offset(), field_klass->klass_part()->newest_version()));
               }
             }
 
-            // return the new method so that the caller can update
-            // the containing class
-            *new_method_p = method = m;
-            // switch our bytecode processing loop from the old method
-            // to the new method
-            code_base = method->code_base();
-            code_length = method->code_size();
-            bcp = code_base + bci;
-            c = (Bytecodes::Code)(*bcp);
-            bc_length = Bytecodes::length_for(c);
-            assert(bc_length != 0, "sanity check");
-          } // end we need ldc_w instead of ldc
-        } // end if there is a mapped index
-      } break;
-
-      // these bytecodes have a two-byte constant pool index
-      case Bytecodes::_anewarray      : // fall through
-      case Bytecodes::_checkcast      : // fall through
-      case Bytecodes::_getfield       : // fall through
-      case Bytecodes::_getstatic      : // fall through
-      case Bytecodes::_instanceof     : // fall through
-      case Bytecodes::_invokeinterface: // fall through
-      case Bytecodes::_invokespecial  : // fall through
-      case Bytecodes::_invokestatic   : // fall through
-      case Bytecodes::_invokevirtual  : // fall through
-      case Bytecodes::_ldc_w          : // fall through
-      case Bytecodes::_ldc2_w         : // fall through
-      case Bytecodes::_multianewarray : // fall through
-      case Bytecodes::_new            : // fall through
-      case Bytecodes::_putfield       : // fall through
-      case Bytecodes::_putstatic      :
-      {
-        address p = bcp + 1;
-        int cp_index = Bytes::get_Java_u2(p);
-        int new_index = find_new_index(cp_index);
-        if (new_index != 0) {
-          // the original index is mapped so update w/ new value
-          RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-            ("%s@" INTPTR_FORMAT " old=%d, new=%d", Bytecodes::name(c),
-            bcp, cp_index, new_index));
-          // Rewriter::rewrite_method() uses put_native_u2() in this
-          // situation because it is reusing the constant pool index
-          // location for a native index into the constantPoolCache.
-          // Since we are updating the constant pool index prior to
-          // verification and constantPoolCache initialization, we
-          // need to keep the new index in Java byte order.
-          Bytes::put_Java_u2(p, new_index);
+            // Array fields can never be a problem!
+          }
         }
-      } break;
-    }
-  } // end for each bytecode
-} // end rewrite_cp_refs_in_method()
 
-
-// Rewrite constant pool references in the class_annotations field.
-bool VM_RedefineClasses::rewrite_cp_refs_in_class_annotations(
-       instanceKlassHandle scratch_class, TRAPS) {
-
-  typeArrayHandle class_annotations(THREAD,
-    scratch_class->class_annotations());
-  if (class_annotations.is_null() || class_annotations->length() == 0) {
-    // no class_annotations so nothing to do
-    return true;
-  }
-
-  RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-    ("class_annotations length=%d", class_annotations->length()));
-
-  int byte_i = 0;  // byte index into class_annotations
-  return rewrite_cp_refs_in_annotations_typeArray(class_annotations, byte_i,
-           THREAD);
-}
-
-
-// Rewrite constant pool references in an annotations typeArray. This
-// "structure" is adapted from the RuntimeVisibleAnnotations_attribute
-// that is described in section 4.8.15 of the 2nd-edition of the VM spec:
-//
-// annotations_typeArray {
-//   u2 num_annotations;
-//   annotation annotations[num_annotations];
-// }
-//
-bool VM_RedefineClasses::rewrite_cp_refs_in_annotations_typeArray(
-       typeArrayHandle annotations_typeArray, int &byte_i_ref, TRAPS) {
-
-  if ((byte_i_ref + 2) > annotations_typeArray->length()) {
-    // not enough room for num_annotations field
-    RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-      ("length() is too small for num_annotations field"));
-    return false;
-  }
-
-  u2 num_annotations = Bytes::get_Java_u2((address)
-                         annotations_typeArray->byte_at_addr(byte_i_ref));
-  byte_i_ref += 2;
-
-  RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-    ("num_annotations=%d", num_annotations));
-
-  int calc_num_annotations = 0;
-  for (; calc_num_annotations < num_annotations; calc_num_annotations++) {
-    if (!rewrite_cp_refs_in_annotation_struct(annotations_typeArray,
-           byte_i_ref, THREAD)) {
-      RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-        ("bad annotation_struct at %d", calc_num_annotations));
-      // propagate failure back to caller
-      return false;
-    }
-  }
-  assert(num_annotations == calc_num_annotations, "sanity check");
-
-  return true;
-} // end rewrite_cp_refs_in_annotations_typeArray()
-
-
-// Rewrite constant pool references in the annotation struct portion of
-// an annotations_typeArray. This "structure" is from section 4.8.15 of
-// the 2nd-edition of the VM spec:
-//
-// struct annotation {
-//   u2 type_index;
-//   u2 num_element_value_pairs;
-//   {
-//     u2 element_name_index;
-//     element_value value;
-//   } element_value_pairs[num_element_value_pairs];
-// }
-//
-bool VM_RedefineClasses::rewrite_cp_refs_in_annotation_struct(
-       typeArrayHandle annotations_typeArray, int &byte_i_ref, TRAPS) {
-  if ((byte_i_ref + 2 + 2) > annotations_typeArray->length()) {
-    // not enough room for smallest annotation_struct
-    RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-      ("length() is too small for annotation_struct"));
-    return false;
-  }
-
-  u2 type_index = rewrite_cp_ref_in_annotation_data(annotations_typeArray,
-                    byte_i_ref, "mapped old type_index=%d", THREAD);
-
-  u2 num_element_value_pairs = Bytes::get_Java_u2((address)
-                                 annotations_typeArray->byte_at_addr(
-                                 byte_i_ref));
-  byte_i_ref += 2;
-
-  RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-    ("type_index=%d  num_element_value_pairs=%d", type_index,
-    num_element_value_pairs));
-
-  int calc_num_element_value_pairs = 0;
-  for (; calc_num_element_value_pairs < num_element_value_pairs;
-       calc_num_element_value_pairs++) {
-    if ((byte_i_ref + 2) > annotations_typeArray->length()) {
-      // not enough room for another element_name_index, let alone
-      // the rest of another component
-      RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-        ("length() is too small for element_name_index"));
-      return false;
-    }
-
-    u2 element_name_index = rewrite_cp_ref_in_annotation_data(
-                              annotations_typeArray, byte_i_ref,
-                              "mapped old element_name_index=%d", THREAD);
-
-    RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-      ("element_name_index=%d", element_name_index));
-
-    if (!rewrite_cp_refs_in_element_value(annotations_typeArray,
-           byte_i_ref, THREAD)) {
-      RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-        ("bad element_value at %d", calc_num_element_value_pairs));
-      // propagate failure back to caller
-      return false;
-    }
-  } // end for each component
-  assert(num_element_value_pairs == calc_num_element_value_pairs,
-    "sanity check");
-
-  return true;
-} // end rewrite_cp_refs_in_annotation_struct()
-
-
-// Rewrite a constant pool reference at the current position in
-// annotations_typeArray if needed. Returns the original constant
-// pool reference if a rewrite was not needed or the new constant
-// pool reference if a rewrite was needed.
-u2 VM_RedefineClasses::rewrite_cp_ref_in_annotation_data(
-     typeArrayHandle annotations_typeArray, int &byte_i_ref,
-     const char * trace_mesg, TRAPS) {
-
-  address cp_index_addr = (address)
-    annotations_typeArray->byte_at_addr(byte_i_ref);
-  u2 old_cp_index = Bytes::get_Java_u2(cp_index_addr);
-  u2 new_cp_index = find_new_index(old_cp_index);
-  if (new_cp_index != 0) {
-    RC_TRACE_WITH_THREAD(0x02000000, THREAD, (trace_mesg, old_cp_index));
-    Bytes::put_Java_u2(cp_index_addr, new_cp_index);
-    old_cp_index = new_cp_index;
-  }
-  byte_i_ref += 2;
-  return old_cp_index;
-}
-
-
-// Rewrite constant pool references in the element_value portion of an
-// annotations_typeArray. This "structure" is from section 4.8.15.1 of
-// the 2nd-edition of the VM spec:
-//
-// struct element_value {
-//   u1 tag;
-//   union {
-//     u2 const_value_index;
-//     {
-//       u2 type_name_index;
-//       u2 const_name_index;
-//     } enum_const_value;
-//     u2 class_info_index;
-//     annotation annotation_value;
-//     struct {
-//       u2 num_values;
-//       element_value values[num_values];
-//     } array_value;
-//   } value;
-// }
-//
-bool VM_RedefineClasses::rewrite_cp_refs_in_element_value(
-       typeArrayHandle annotations_typeArray, int &byte_i_ref, TRAPS) {
-
-  if ((byte_i_ref + 1) > annotations_typeArray->length()) {
-    // not enough room for a tag let alone the rest of an element_value
-    RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-      ("length() is too small for a tag"));
-    return false;
-  }
-
-  u1 tag = annotations_typeArray->byte_at(byte_i_ref);
-  byte_i_ref++;
-  RC_TRACE_WITH_THREAD(0x02000000, THREAD, ("tag='%c'", tag));
-
-  switch (tag) {
-    // These BaseType tag values are from Table 4.2 in VM spec:
-    case 'B':  // byte
-    case 'C':  // char
-    case 'D':  // double
-    case 'F':  // float
-    case 'I':  // int
-    case 'J':  // long
-    case 'S':  // short
-    case 'Z':  // boolean
-
-    // The remaining tag values are from Table 4.8 in the 2nd-edition of
-    // the VM spec:
-    case 's':
-    {
-      // For the above tag values (including the BaseType values),
-      // value.const_value_index is right union field.
-
-      if ((byte_i_ref + 2) > annotations_typeArray->length()) {
-        // not enough room for a const_value_index
-        RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-          ("length() is too small for a const_value_index"));
-        return false;
-      }
-
-      u2 const_value_index = rewrite_cp_ref_in_annotation_data(
-                               annotations_typeArray, byte_i_ref,
-                               "mapped old const_value_index=%d", THREAD);
-
-      RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-        ("const_value_index=%d", const_value_index));
-    } break;
-
-    case 'e':
-    {
-      // for the above tag value, value.enum_const_value is right union field
-
-      if ((byte_i_ref + 4) > annotations_typeArray->length()) {
-        // not enough room for a enum_const_value
-        RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-          ("length() is too small for a enum_const_value"));
-        return false;
-      }
-
-      u2 type_name_index = rewrite_cp_ref_in_annotation_data(
-                             annotations_typeArray, byte_i_ref,
-                             "mapped old type_name_index=%d", THREAD);
-
-      u2 const_name_index = rewrite_cp_ref_in_annotation_data(
-                              annotations_typeArray, byte_i_ref,
-                              "mapped old const_name_index=%d", THREAD);
-
-      RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-        ("type_name_index=%d  const_name_index=%d", type_name_index,
-        const_name_index));
-    } break;
-
-    case 'c':
-    {
-      // for the above tag value, value.class_info_index is right union field
-
-      if ((byte_i_ref + 2) > annotations_typeArray->length()) {
-        // not enough room for a class_info_index
-        RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-          ("length() is too small for a class_info_index"));
-        return false;
-      }
-
-      u2 class_info_index = rewrite_cp_ref_in_annotation_data(
-                              annotations_typeArray, byte_i_ref,
-                              "mapped old class_info_index=%d", THREAD);
-
-      RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-        ("class_info_index=%d", class_info_index));
-    } break;
-
-    case '@':
-      // For the above tag value, value.attr_value is the right union
-      // field. This is a nested annotation.
-      if (!rewrite_cp_refs_in_annotation_struct(annotations_typeArray,
-             byte_i_ref, THREAD)) {
-        // propagate failure back to caller
-        return false;
-      }
-      break;
-
-    case '[':
-    {
-      if ((byte_i_ref + 2) > annotations_typeArray->length()) {
-        // not enough room for a num_values field
-        RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-          ("length() is too small for a num_values field"));
-        return false;
-      }
-
-      // For the above tag value, value.array_value is the right union
-      // field. This is an array of nested element_value.
-      u2 num_values = Bytes::get_Java_u2((address)
-                        annotations_typeArray->byte_at_addr(byte_i_ref));
-      byte_i_ref += 2;
-      RC_TRACE_WITH_THREAD(0x02000000, THREAD, ("num_values=%d", num_values));
-
-      int calc_num_values = 0;
-      for (; calc_num_values < num_values; calc_num_values++) {
-        if (!rewrite_cp_refs_in_element_value(
-               annotations_typeArray, byte_i_ref, THREAD)) {
-          RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-            ("bad nested element_value at %d", calc_num_values));
-          // propagate failure back to caller
+        bool is_field_dangerous(Symbol* klass_name, fieldDescriptor *fd, klassOop &field_klass) {
+          field_klass = SystemDictionary::find(klass_name, fd->field_holder()->klass_part()->class_loader(), fd->field_holder()->klass_part()->protection_domain(), Thread::current());
+          if(field_klass != NULL) {
+            if (field_klass->klass_part()->is_redefining()) {
+              field_klass = field_klass->klass_part()->old_version();
+            }
+            if (field_klass->klass_part()->has_subtype_changed()) {
+              return true;
+            }
+          }
           return false;
         }
-      }
-      assert(num_values == calc_num_values, "sanity check");
-    } break;
+      };
 
-    default:
-      RC_TRACE_WITH_THREAD(0x02000000, THREAD, ("bad tag=0x%x", tag));
-      return false;
-  } // end decode tag field
+      MyFieldClosure fieldClosure(&type_check_information);
+      cur_instance_klass->do_nonstatic_fields(&fieldClosure);
 
-  return true;
-} // end rewrite_cp_refs_in_element_value()
-
-
-// Rewrite constant pool references in a fields_annotations field.
-bool VM_RedefineClasses::rewrite_cp_refs_in_fields_annotations(
-       instanceKlassHandle scratch_class, TRAPS) {
-
-  objArrayHandle fields_annotations(THREAD,
-    scratch_class->fields_annotations());
-
-  if (fields_annotations.is_null() || fields_annotations->length() == 0) {
-    // no fields_annotations so nothing to do
-    return true;
-  }
-
-  RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-    ("fields_annotations length=%d", fields_annotations->length()));
-
-  for (int i = 0; i < fields_annotations->length(); i++) {
-    typeArrayHandle field_annotations(THREAD,
-      (typeArrayOop)fields_annotations->obj_at(i));
-    if (field_annotations.is_null() || field_annotations->length() == 0) {
-      // this field does not have any annotations so skip it
-      continue;
-    }
-
-    int byte_i = 0;  // byte index into field_annotations
-    if (!rewrite_cp_refs_in_annotations_typeArray(field_annotations, byte_i,
-           THREAD)) {
-      RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-        ("bad field_annotations at %d", i));
-      // propagate failure back to caller
-      return false;
-    }
-  }
-
-  return true;
-} // end rewrite_cp_refs_in_fields_annotations()
-
-
-// Rewrite constant pool references in a methods_annotations field.
-bool VM_RedefineClasses::rewrite_cp_refs_in_methods_annotations(
-       instanceKlassHandle scratch_class, TRAPS) {
-
-  objArrayHandle methods_annotations(THREAD,
-    scratch_class->methods_annotations());
-
-  if (methods_annotations.is_null() || methods_annotations->length() == 0) {
-    // no methods_annotations so nothing to do
-    return true;
-  }
-
-  RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-    ("methods_annotations length=%d", methods_annotations->length()));
-
-  for (int i = 0; i < methods_annotations->length(); i++) {
-    typeArrayHandle method_annotations(THREAD,
-      (typeArrayOop)methods_annotations->obj_at(i));
-    if (method_annotations.is_null() || method_annotations->length() == 0) {
-      // this method does not have any annotations so skip it
-      continue;
-    }
-
-    int byte_i = 0;  // byte index into method_annotations
-    if (!rewrite_cp_refs_in_annotations_typeArray(method_annotations, byte_i,
-           THREAD)) {
-      RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-        ("bad method_annotations at %d", i));
-      // propagate failure back to caller
-      return false;
-    }
-  }
-
-  return true;
-} // end rewrite_cp_refs_in_methods_annotations()
-
-
-// Rewrite constant pool references in a methods_parameter_annotations
-// field. This "structure" is adapted from the
-// RuntimeVisibleParameterAnnotations_attribute described in section
-// 4.8.17 of the 2nd-edition of the VM spec:
-//
-// methods_parameter_annotations_typeArray {
-//   u1 num_parameters;
-//   {
-//     u2 num_annotations;
-//     annotation annotations[num_annotations];
-//   } parameter_annotations[num_parameters];
-// }
-//
-bool VM_RedefineClasses::rewrite_cp_refs_in_methods_parameter_annotations(
-       instanceKlassHandle scratch_class, TRAPS) {
-
-  objArrayHandle methods_parameter_annotations(THREAD,
-    scratch_class->methods_parameter_annotations());
-
-  if (methods_parameter_annotations.is_null()
-      || methods_parameter_annotations->length() == 0) {
-    // no methods_parameter_annotations so nothing to do
-    return true;
-  }
-
-  RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-    ("methods_parameter_annotations length=%d",
-    methods_parameter_annotations->length()));
-
-  for (int i = 0; i < methods_parameter_annotations->length(); i++) {
-    typeArrayHandle method_parameter_annotations(THREAD,
-      (typeArrayOop)methods_parameter_annotations->obj_at(i));
-    if (method_parameter_annotations.is_null()
-        || method_parameter_annotations->length() == 0) {
-      // this method does not have any parameter annotations so skip it
-      continue;
-    }
-
-    if (method_parameter_annotations->length() < 1) {
-      // not enough room for a num_parameters field
-      RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-        ("length() is too small for a num_parameters field at %d", i));
-      return false;
-    }
-
-    int byte_i = 0;  // byte index into method_parameter_annotations
-
-    u1 num_parameters = method_parameter_annotations->byte_at(byte_i);
-    byte_i++;
-
-    RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-      ("num_parameters=%d", num_parameters));
-
-    int calc_num_parameters = 0;
-    for (; calc_num_parameters < num_parameters; calc_num_parameters++) {
-      if (!rewrite_cp_refs_in_annotations_typeArray(
-             method_parameter_annotations, byte_i, THREAD)) {
-        RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-          ("bad method_parameter_annotations at %d", calc_num_parameters));
-        // propagate failure back to caller
-        return false;
+      if (type_check_information.length() > 0) {
+        type_check_information.append(Pair<int, klassOop>(-1, NULL));
+        cur_instance_klass->store_type_check_information(type_check_information);
       }
     }
-    assert(num_parameters == calc_num_parameters, "sanity check");
-  }
+  };
 
-  return true;
-} // end rewrite_cp_refs_in_methods_parameter_annotations()
+  MarkAffectedClassesClosure markAffectedClassesClosure;
+  SystemDictionary::classes_do(&markAffectedClassesClosure);
+}
 
+bool VM_RedefineClasses::check_field_value_types() {
 
-// Rewrite constant pool references in a methods_default_annotations
-// field. This "structure" is adapted from the AnnotationDefault_attribute
-// that is described in section 4.8.19 of the 2nd-edition of the VM spec:
-//
-// methods_default_annotations_typeArray {
-//   element_value default_value;
-// }
-//
-bool VM_RedefineClasses::rewrite_cp_refs_in_methods_default_annotations(
-       instanceKlassHandle scratch_class, TRAPS) {
+  Thread *THREAD = Thread::current();
+  class CheckFieldTypesClosure : public ObjectClosure {
 
-  objArrayHandle methods_default_annotations(THREAD,
-    scratch_class->methods_default_annotations());
+  private:
 
-  if (methods_default_annotations.is_null()
-      || methods_default_annotations->length() == 0) {
-    // no methods_default_annotations so nothing to do
-    return true;
-  }
+    bool _result;
 
-  RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-    ("methods_default_annotations length=%d",
-    methods_default_annotations->length()));
+  public:
 
-  for (int i = 0; i < methods_default_annotations->length(); i++) {
-    typeArrayHandle method_default_annotations(THREAD,
-      (typeArrayOop)methods_default_annotations->obj_at(i));
-    if (method_default_annotations.is_null()
-        || method_default_annotations->length() == 0) {
-      // this method does not have any default annotations so skip it
-      continue;
+    CheckFieldTypesClosure() {
+      _result = true;
     }
 
-    int byte_i = 0;  // byte index into method_default_annotations
+    bool result() { return _result; }
 
-    if (!rewrite_cp_refs_in_element_value(
-           method_default_annotations, byte_i, THREAD)) {
-      RC_TRACE_WITH_THREAD(0x02000000, THREAD,
-        ("bad default element_value at %d", i));
-      // propagate failure back to caller
-      return false;
-    }
-  }
+    virtual void do_object(oop obj) {
 
-  return true;
-} // end rewrite_cp_refs_in_methods_default_annotations()
-
-
-// Rewrite constant pool references in the method's stackmap table.
-// These "structures" are adapted from the StackMapTable_attribute that
-// is described in section 4.8.4 of the 6.0 version of the VM spec
-// (dated 2005.10.26):
-// file:///net/quincunx.sfbay/export/gbracha/ClassFile-Java6.pdf
-//
-// stack_map {
-//   u2 number_of_entries;
-//   stack_map_frame entries[number_of_entries];
-// }
-//
-void VM_RedefineClasses::rewrite_cp_refs_in_stack_map_table(
-       methodHandle method, TRAPS) {
-
-  if (!method->has_stackmap_table()) {
-    return;
-  }
-
-  typeArrayOop stackmap_data = method->stackmap_data();
-  address stackmap_p = (address)stackmap_data->byte_at_addr(0);
-  address stackmap_end = stackmap_p + stackmap_data->length();
-
-  assert(stackmap_p + 2 <= stackmap_end, "no room for number_of_entries");
-  u2 number_of_entries = Bytes::get_Java_u2(stackmap_p);
-  stackmap_p += 2;
-
-  RC_TRACE_WITH_THREAD(0x04000000, THREAD,
-    ("number_of_entries=%u", number_of_entries));
-
-  // walk through each stack_map_frame
-  u2 calc_number_of_entries = 0;
-  for (; calc_number_of_entries < number_of_entries; calc_number_of_entries++) {
-    // The stack_map_frame structure is a u1 frame_type followed by
-    // 0 or more bytes of data:
-    //
-    // union stack_map_frame {
-    //   same_frame;
-    //   same_locals_1_stack_item_frame;
-    //   same_locals_1_stack_item_frame_extended;
-    //   chop_frame;
-    //   same_frame_extended;
-    //   append_frame;
-    //   full_frame;
-    // }
-
-    assert(stackmap_p + 1 <= stackmap_end, "no room for frame_type");
-    // The Linux compiler does not like frame_type to be u1 or u2. It
-    // issues the following warning for the first if-statement below:
-    //
-    // "warning: comparison is always true due to limited range of data type"
-    //
-    u4 frame_type = *stackmap_p;
-    stackmap_p++;
-
-    // same_frame {
-    //   u1 frame_type = SAME; /* 0-63 */
-    // }
-    if (frame_type >= 0 && frame_type <= 63) {
-      // nothing more to do for same_frame
-    }
-
-    // same_locals_1_stack_item_frame {
-    //   u1 frame_type = SAME_LOCALS_1_STACK_ITEM; /* 64-127 */
-    //   verification_type_info stack[1];
-    // }
-    else if (frame_type >= 64 && frame_type <= 127) {
-      rewrite_cp_refs_in_verification_type_info(stackmap_p, stackmap_end,
-        calc_number_of_entries, frame_type, THREAD);
-    }
-
-    // reserved for future use
-    else if (frame_type >= 128 && frame_type <= 246) {
-      // nothing more to do for reserved frame_types
-    }
-
-    // same_locals_1_stack_item_frame_extended {
-    //   u1 frame_type = SAME_LOCALS_1_STACK_ITEM_EXTENDED; /* 247 */
-    //   u2 offset_delta;
-    //   verification_type_info stack[1];
-    // }
-    else if (frame_type == 247) {
-      stackmap_p += 2;
-      rewrite_cp_refs_in_verification_type_info(stackmap_p, stackmap_end,
-        calc_number_of_entries, frame_type, THREAD);
-    }
-
-    // chop_frame {
-    //   u1 frame_type = CHOP; /* 248-250 */
-    //   u2 offset_delta;
-    // }
-    else if (frame_type >= 248 && frame_type <= 250) {
-      stackmap_p += 2;
-    }
-
-    // same_frame_extended {
-    //   u1 frame_type = SAME_FRAME_EXTENDED; /* 251*/
-    //   u2 offset_delta;
-    // }
-    else if (frame_type == 251) {
-      stackmap_p += 2;
-    }
-
-    // append_frame {
-    //   u1 frame_type = APPEND; /* 252-254 */
-    //   u2 offset_delta;
-    //   verification_type_info locals[frame_type - 251];
-    // }
-    else if (frame_type >= 252 && frame_type <= 254) {
-      assert(stackmap_p + 2 <= stackmap_end,
-        "no room for offset_delta");
-      stackmap_p += 2;
-      u1 len = frame_type - 251;
-      for (u1 i = 0; i < len; i++) {
-        rewrite_cp_refs_in_verification_type_info(stackmap_p, stackmap_end,
-          calc_number_of_entries, frame_type, THREAD);
-      }
-    }
-
-    // full_frame {
-    //   u1 frame_type = FULL_FRAME; /* 255 */
-    //   u2 offset_delta;
-    //   u2 number_of_locals;
-    //   verification_type_info locals[number_of_locals];
-    //   u2 number_of_stack_items;
-    //   verification_type_info stack[number_of_stack_items];
-    // }
-    else if (frame_type == 255) {
-      assert(stackmap_p + 2 + 2 <= stackmap_end,
-        "no room for smallest full_frame");
-      stackmap_p += 2;
-
-      u2 number_of_locals = Bytes::get_Java_u2(stackmap_p);
-      stackmap_p += 2;
-
-      for (u2 locals_i = 0; locals_i < number_of_locals; locals_i++) {
-        rewrite_cp_refs_in_verification_type_info(stackmap_p, stackmap_end,
-          calc_number_of_entries, frame_type, THREAD);
+      if (!_result) {
+        return;
       }
 
-      // Use the largest size for the number_of_stack_items, but only get
-      // the right number of bytes.
-      u2 number_of_stack_items = Bytes::get_Java_u2(stackmap_p);
-      stackmap_p += 2;
+      if (obj->is_objArray()) {
 
-      for (u2 stack_i = 0; stack_i < number_of_stack_items; stack_i++) {
-        rewrite_cp_refs_in_verification_type_info(stackmap_p, stackmap_end,
-          calc_number_of_entries, frame_type, THREAD);
-      }
-    }
-  } // end while there is a stack_map_frame
-  assert(number_of_entries == calc_number_of_entries, "sanity check");
-} // end rewrite_cp_refs_in_stack_map_table()
+        objArrayOop array = objArrayOop(obj);
 
+        klassOop element_klass = objArrayKlass::cast(array->klass())->element_klass();
 
-// Rewrite constant pool references in the verification type info
-// portion of the method's stackmap table. These "structures" are
-// adapted from the StackMapTable_attribute that is described in
-// section 4.8.4 of the 6.0 version of the VM spec (dated 2005.10.26):
-// file:///net/quincunx.sfbay/export/gbracha/ClassFile-Java6.pdf
-//
-// The verification_type_info structure is a u1 tag followed by 0 or
-// more bytes of data:
-//
-// union verification_type_info {
-//   Top_variable_info;
-//   Integer_variable_info;
-//   Float_variable_info;
-//   Long_variable_info;
-//   Double_variable_info;
-//   Null_variable_info;
-//   UninitializedThis_variable_info;
-//   Object_variable_info;
-//   Uninitialized_variable_info;
-// }
-//
-void VM_RedefineClasses::rewrite_cp_refs_in_verification_type_info(
-       address& stackmap_p_ref, address stackmap_end, u2 frame_i,
-       u1 frame_type, TRAPS) {
-
-  assert(stackmap_p_ref + 1 <= stackmap_end, "no room for tag");
-  u1 tag = *stackmap_p_ref;
-  stackmap_p_ref++;
-
-  switch (tag) {
-  // Top_variable_info {
-  //   u1 tag = ITEM_Top; /* 0 */
-  // }
-  // verificationType.hpp has zero as ITEM_Bogus instead of ITEM_Top
-  case 0:  // fall through
-
-  // Integer_variable_info {
-  //   u1 tag = ITEM_Integer; /* 1 */
-  // }
-  case ITEM_Integer:  // fall through
-
-  // Float_variable_info {
-  //   u1 tag = ITEM_Float; /* 2 */
-  // }
-  case ITEM_Float:  // fall through
-
-  // Double_variable_info {
-  //   u1 tag = ITEM_Double; /* 3 */
-  // }
-  case ITEM_Double:  // fall through
-
-  // Long_variable_info {
-  //   u1 tag = ITEM_Long; /* 4 */
-  // }
-  case ITEM_Long:  // fall through
-
-  // Null_variable_info {
-  //   u1 tag = ITEM_Null; /* 5 */
-  // }
-  case ITEM_Null:  // fall through
-
-  // UninitializedThis_variable_info {
-  //   u1 tag = ITEM_UninitializedThis; /* 6 */
-  // }
-  case ITEM_UninitializedThis:
-    // nothing more to do for the above tag types
-    break;
-
-  // Object_variable_info {
-  //   u1 tag = ITEM_Object; /* 7 */
-  //   u2 cpool_index;
-  // }
-  case ITEM_Object:
-  {
-    assert(stackmap_p_ref + 2 <= stackmap_end, "no room for cpool_index");
-    u2 cpool_index = Bytes::get_Java_u2(stackmap_p_ref);
-    u2 new_cp_index = find_new_index(cpool_index);
-    if (new_cp_index != 0) {
-      RC_TRACE_WITH_THREAD(0x04000000, THREAD,
-        ("mapped old cpool_index=%d", cpool_index));
-      Bytes::put_Java_u2(stackmap_p_ref, new_cp_index);
-      cpool_index = new_cp_index;
-    }
-    stackmap_p_ref += 2;
-
-    RC_TRACE_WITH_THREAD(0x04000000, THREAD,
-      ("frame_i=%u, frame_type=%u, cpool_index=%d", frame_i,
-      frame_type, cpool_index));
-  } break;
-
-  // Uninitialized_variable_info {
-  //   u1 tag = ITEM_Uninitialized; /* 8 */
-  //   u2 offset;
-  // }
-  case ITEM_Uninitialized:
-    assert(stackmap_p_ref + 2 <= stackmap_end, "no room for offset");
-    stackmap_p_ref += 2;
-    break;
-
-  default:
-    RC_TRACE_WITH_THREAD(0x04000000, THREAD,
-      ("frame_i=%u, frame_type=%u, bad tag=0x%x", frame_i, frame_type, tag));
-    ShouldNotReachHere();
-    break;
-  } // end switch (tag)
-} // end rewrite_cp_refs_in_verification_type_info()
-
-
-// Change the constant pool associated with klass scratch_class to
-// scratch_cp. If shrink is true, then scratch_cp_length elements
-// are copied from scratch_cp to a smaller constant pool and the
-// smaller constant pool is associated with scratch_class.
-void VM_RedefineClasses::set_new_constant_pool(
-       instanceKlassHandle scratch_class, constantPoolHandle scratch_cp,
-       int scratch_cp_length, bool shrink, TRAPS) {
-  assert(!shrink || scratch_cp->length() >= scratch_cp_length, "sanity check");
-
-  if (shrink) {
-    // scratch_cp is a merged constant pool and has enough space for a
-    // worst case merge situation. We want to associate the minimum
-    // sized constant pool with the klass to save space.
-    constantPoolHandle smaller_cp(THREAD,
-      oopFactory::new_constantPool(scratch_cp_length,
-                                   oopDesc::IsUnsafeConc,
-                                   THREAD));
-    // preserve orig_length() value in the smaller copy
-    int orig_length = scratch_cp->orig_length();
-    assert(orig_length != 0, "sanity check");
-    smaller_cp->set_orig_length(orig_length);
-    scratch_cp->copy_cp_to(1, scratch_cp_length - 1, smaller_cp, 1, THREAD);
-    scratch_cp = smaller_cp;
-    smaller_cp()->set_is_conc_safe(true);
-  }
-
-  // attach new constant pool to klass
-  scratch_cp->set_pool_holder(scratch_class());
-
-  // attach klass to new constant pool
-  scratch_class->set_constants(scratch_cp());
-
-  int i;  // for portability
-
-  // update each field in klass to use new constant pool indices as needed
-  for (JavaFieldStream fs(scratch_class); !fs.done(); fs.next()) {
-    jshort cur_index = fs.name_index();
-    jshort new_index = find_new_index(cur_index);
-    if (new_index != 0) {
-      RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-        ("field-name_index change: %d to %d", cur_index, new_index));
-      fs.set_name_index(new_index);
-    }
-    cur_index = fs.signature_index();
-    new_index = find_new_index(cur_index);
-    if (new_index != 0) {
-      RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-        ("field-signature_index change: %d to %d", cur_index, new_index));
-      fs.set_signature_index(new_index);
-    }
-    cur_index = fs.initval_index();
-    new_index = find_new_index(cur_index);
-    if (new_index != 0) {
-      RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-        ("field-initval_index change: %d to %d", cur_index, new_index));
-      fs.set_initval_index(new_index);
-    }
-    cur_index = fs.generic_signature_index();
-    new_index = find_new_index(cur_index);
-    if (new_index != 0) {
-      RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-        ("field-generic_signature change: %d to %d", cur_index, new_index));
-      fs.set_generic_signature_index(new_index);
-    }
-  } // end for each field
-
-  // Update constant pool indices in the inner classes info to use
-  // new constant indices as needed. The inner classes info is a
-  // quadruple:
-  // (inner_class_info, outer_class_info, inner_name, inner_access_flags)
-  InnerClassesIterator iter(scratch_class);
-  for (; !iter.done(); iter.next()) {
-    int cur_index = iter.inner_class_info_index();
-    if (cur_index == 0) {
-      continue;  // JVM spec. allows null inner class refs so skip it
-    }
-    int new_index = find_new_index(cur_index);
-    if (new_index != 0) {
-      RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-        ("inner_class_info change: %d to %d", cur_index, new_index));
-      iter.set_inner_class_info_index(new_index);
-    }
-    cur_index = iter.outer_class_info_index();
-    new_index = find_new_index(cur_index);
-    if (new_index != 0) {
-      RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-        ("outer_class_info change: %d to %d", cur_index, new_index));
-      iter.set_outer_class_info_index(new_index);
-    }
-    cur_index = iter.inner_name_index();
-    new_index = find_new_index(cur_index);
-    if (new_index != 0) {
-      RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-        ("inner_name change: %d to %d", cur_index, new_index));
-      iter.set_inner_name_index(new_index);
-    }
-  } // end for each inner class
-
-  // Attach each method in klass to the new constant pool and update
-  // to use new constant pool indices as needed:
-  objArrayHandle methods(THREAD, scratch_class->methods());
-  for (i = methods->length() - 1; i >= 0; i--) {
-    methodHandle method(THREAD, (methodOop)methods->obj_at(i));
-    method->set_constants(scratch_cp());
-
-    int new_index = find_new_index(method->name_index());
-    if (new_index != 0) {
-      RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-        ("method-name_index change: %d to %d", method->name_index(),
-        new_index));
-      method->set_name_index(new_index);
-    }
-    new_index = find_new_index(method->signature_index());
-    if (new_index != 0) {
-      RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-        ("method-signature_index change: %d to %d",
-        method->signature_index(), new_index));
-      method->set_signature_index(new_index);
-    }
-    new_index = find_new_index(method->generic_signature_index());
-    if (new_index != 0) {
-      RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-        ("method-generic_signature_index change: %d to %d",
-        method->generic_signature_index(), new_index));
-      method->set_generic_signature_index(new_index);
-    }
-
-    // Update constant pool indices in the method's checked exception
-    // table to use new constant indices as needed.
-    int cext_length = method->checked_exceptions_length();
-    if (cext_length > 0) {
-      CheckedExceptionElement * cext_table =
-        method->checked_exceptions_start();
-      for (int j = 0; j < cext_length; j++) {
-        int cur_index = cext_table[j].class_cp_index;
-        int new_index = find_new_index(cur_index);
-        if (new_index != 0) {
-          RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-            ("cext-class_cp_index change: %d to %d", cur_index, new_index));
-          cext_table[j].class_cp_index = (u2)new_index;
+        if (element_klass->klass_part()->has_subtype_changed()) {
+          int length = array->length();
+          for (int i=0; i<length; i++) {
+            oop element = array->obj_at(i);
+            if (element != NULL && element->blueprint()->newest_version()->klass_part()->is_redefining()) {
+              // Check subtype relationship to static type of array
+              if (!element->blueprint()->newest_version()->klass_part()->is_subtype_of(element_klass->klass_part()->newest_version())) {
+                RC_TRACE(0x00000001, ("Array value is INVALID - abort redefinition (static_type=%s, index=%d, dynamic_type=%s)",
+                  element_klass->klass_part()->name()->as_C_string(),
+                  i,
+                  element->blueprint()->name()->as_C_string()));
+                _result = false;
+                break;
+              }
+            }
+          }
         }
-      } // end for each checked exception table entry
-    } // end if there are checked exception table entries
 
-    // Update each catch type index in the method's exception table
-    // to use new constant pool indices as needed. The exception table
-    // holds quadruple entries of the form:
-    //   (beg_bci, end_bci, handler_bci, klass_index)
-
-    ExceptionTable ex_table(method());
-    int ext_length = ex_table.length();
-
-    for (int j = 0; j < ext_length; j ++) {
-      int cur_index = ex_table.catch_type_index(j);
-      int new_index = find_new_index(cur_index);
-      if (new_index != 0) {
-        RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-          ("ext-klass_index change: %d to %d", cur_index, new_index));
-        ex_table.set_catch_type_index(j, new_index);
+      } else {
+        Pair<int, klassOop> *cur = obj->klass()->klass_part()->type_check_information();
+        if (cur != NULL) {
+          // Type check information exists for this oop
+          while ((*cur).left() != -1) {
+            check_field(obj, (*cur).left(), (*cur).right());
+            cur++;
+          }
+        }
       }
-    } // end for each exception table entry
+    }
 
-    // Update constant pool indices in the method's local variable
-    // table to use new constant indices as needed. The local variable
-    // table hold sextuple entries of the form:
-    // (start_pc, length, name_index, descriptor_index, signature_index, slot)
-    int lvt_length = method->localvariable_table_length();
-    if (lvt_length > 0) {
-      LocalVariableTableElement * lv_table =
-        method->localvariable_table_start();
-      for (int j = 0; j < lvt_length; j++) {
-        int cur_index = lv_table[j].name_cp_index;
-        int new_index = find_new_index(cur_index);
-        if (new_index != 0) {
-          RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-            ("lvt-name_cp_index change: %d to %d", cur_index, new_index));
-          lv_table[j].name_cp_index = (u2)new_index;
+    void check_field(oop obj, int offset, klassOop static_type) {
+      oop field_value = obj->obj_field(offset);
+      if (field_value != NULL) {
+        // Field is not null
+        if (field_value->klass()->klass_part()->newest_version()->klass_part()->is_subtype_of(static_type)) {
+          // We are OK
+          RC_TRACE(0x00008000, ("Field value is OK (klass=%s, static_type=%s, offset=%d, dynamic_type=%s)",
+            obj->klass()->klass_part()->name()->as_C_string(),
+            static_type->klass_part()->name()->as_C_string(),
+            offset,
+            field_value->klass()->klass_part()->name()->as_C_string()));
+        } else {
+          // Failure!
+          RC_TRACE(0x00000001, ("Field value is INVALID - abort redefinition (klass=%s, static_type=%s, offset=%d, dynamic_type=%s)",
+            obj->klass()->klass_part()->name()->as_C_string(),
+            static_type->klass_part()->name()->as_C_string(),
+            offset,
+            field_value->klass()->klass_part()->name()->as_C_string()));
+          _result = false;
         }
-        cur_index = lv_table[j].descriptor_cp_index;
-        new_index = find_new_index(cur_index);
-        if (new_index != 0) {
-          RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-            ("lvt-descriptor_cp_index change: %d to %d", cur_index,
-            new_index));
-          lv_table[j].descriptor_cp_index = (u2)new_index;
+      }
+    }
+  };
+
+  CheckFieldTypesClosure myObjectClosure;
+
+  // make sure that heap is parsable (fills TLABs with filler objects)
+  Universe::heap()->ensure_parsability(false);  // no need to retire TLABs
+
+  // do the iteration
+  // If this operation encounters a bad object when using CMS,
+  // consider using safe_object_iterate() which avoids perm gen
+  // objects that may contain bad references.
+  Universe::heap()->object_iterate(&myObjectClosure);
+
+  // when sharing is enabled we must iterate over the shared spaces
+  if (UseSharedSpaces) {
+    GenCollectedHeap* gch = GenCollectedHeap::heap();
+    CompactingPermGenGen* gen = (CompactingPermGenGen*)gch->perm_gen();
+    gen->ro_space()->object_iterate(&myObjectClosure);
+    gen->rw_space()->object_iterate(&myObjectClosure);
+  }
+
+  return myObjectClosure.result();
+}
+
+void VM_RedefineClasses::clear_type_check_information() {
+  class ClearTypeCheckInformationClosure : public ObjectClosure {
+    virtual void do_object(oop obj) {
+      klassOop klass = (klassOop)obj;
+
+      if (klass->klass_part()->is_redefining()) {
+        klass = klass->klass_part()->old_version();
+      }
+
+      // We found an instance klass!
+      instanceKlass *cur_instance_klass = instanceKlass::cast(klass);
+      cur_instance_klass->clear_type_check_information();
+    }
+  };
+
+  ClearTypeCheckInformationClosure clearTypeCheckInformationClosure;
+  SystemDictionary::classes_do(&clearTypeCheckInformationClosure);
+}
+
+void VM_RedefineClasses::update_active_methods() {
+
+  RC_TRACE(0x00000002, ("Updating active methods"));
+  JavaThread *java_thread = Threads::first();
+  while (java_thread != NULL) {
+
+    int stack_depth = 0;
+    if (java_thread->has_last_Java_frame()) {
+
+      RC_TRACE(0x0000000400, ("checking stack of Java thread %s", java_thread->name()));
+
+      // vframes are resource allocated
+      Thread* current_thread = Thread::current();
+      ResourceMark rm(current_thread);
+      HandleMark hm(current_thread);
+
+      RegisterMap reg_map(java_thread);
+      frame f = java_thread->last_frame();
+      vframe* vf = vframe::new_vframe(&f, &reg_map, java_thread);
+      frame* last_entry_frame = NULL;
+
+      while (vf != NULL) {
+        if (vf->is_java_frame()) {
+          // java frame (interpreted, compiled, ...)
+          javaVFrame *jvf = javaVFrame::cast(vf);
+
+          if (!(jvf->method()->is_native())) {
+            int bci = jvf->bci();
+            RC_TRACE(0x00000400, ("found method: %s / bci=%d", jvf->method()->name()->as_C_string(), bci));
+            ResourceMark rm(Thread::current());
+            HandleMark hm;
+            instanceKlassHandle klass(jvf->method()->method_holder());
+
+            if (jvf->method()->new_version() != NULL && jvf->is_interpreted_frame()) {
+
+              
+              RC_TRACE(0x00000002, ("Found method that should just be updated to the newest version %s",
+                jvf->method()->name_and_sig_as_C_string()));
+
+              if (RC_TRACE_ENABLED(0x01000000)) {
+                int code_size = jvf->method()->code_size();
+                char *code_base_old = (char*)jvf->method()->code_base();
+                char *code_base_new = (char*)jvf->method()->new_version()->code_base();
+                for (int i=0; i<code_size; i++) {
+                  tty->print_cr("old=%d new=%d", *code_base_old++, *code_base_new++);
+                }
+                jvf->method()->print_codes_on(tty);
+                jvf->method()->new_version()->print_codes_on(tty);
+              }
+              
+              assert(jvf->is_interpreted_frame(), "Every frame must be interpreted!");              
+              interpretedVFrame *iframe = (interpretedVFrame *)jvf;
+
+
+              if (RC_TRACE_ENABLED(0x01000000)) {
+                constantPoolCacheOop cp_old = jvf->method()->constants()->cache();
+                tty->print_cr("old cp");
+                for (int i=0; i<cp_old->length(); i++) {
+                  cp_old->entry_at(i)->print(tty, i);
+                }
+                constantPoolCacheOop cp_new = jvf->method()->new_version()->constants()->cache();
+                tty->print_cr("new cp");
+                for (int i=0; i<cp_new->length(); i++) {
+                  cp_new->entry_at(i)->print(tty, i);
+                }
+              }
+
+              iframe->set_method(jvf->method()->new_version(), bci);
+              RC_TRACE(0x00000002, ("Updated method to newer version"));
+              assert(jvf->method()->new_version() == NULL, "must be latest version");
+
+            }
+          } 
         }
-        cur_index = lv_table[j].signature_cp_index;
-        new_index = find_new_index(cur_index);
-        if (new_index != 0) {
-          RC_TRACE_WITH_THREAD(0x00080000, THREAD,
-            ("lvt-signature_cp_index change: %d to %d", cur_index, new_index));
-          lv_table[j].signature_cp_index = (u2)new_index;
+        vf = vf->sender();
+      }
+    }
+
+    // Advance to next thread
+    java_thread = java_thread->next();
+  }
+}
+
+void VM_RedefineClasses::method_forwarding() {
+
+  int forwarding_count = 0;
+  JavaThread *java_thread = Threads::first();
+  while (java_thread != NULL) {
+
+    int stack_depth = 0;
+    if (java_thread->has_last_Java_frame()) {
+
+      RC_TRACE(0x00000400, ("checking stack of Java thread %s", java_thread->name()));
+
+      // vframes are resource allocated
+      Thread* current_thread = Thread::current();
+      ResourceMark rm(current_thread);
+      HandleMark hm(current_thread);
+
+      RegisterMap reg_map(java_thread);
+      frame f = java_thread->last_frame();
+      vframe* vf = vframe::new_vframe(&f, &reg_map, java_thread);
+      frame* last_entry_frame = NULL;
+
+      while (vf != NULL) {
+        if (vf->is_java_frame()) {
+          // java frame (interpreted, compiled, ...)
+          javaVFrame *jvf = javaVFrame::cast(vf);
+
+          if (!(jvf->method()->is_native())) {
+            RC_TRACE(0x00008000, ("found method: %s",
+              jvf->method()->name()->as_C_string()));
+            ResourceMark rm(Thread::current());
+            HandleMark hm;
+            instanceKlassHandle klass(jvf->method()->method_holder());
+            methodOop m = jvf->method();
+            int bci = jvf->bci();
+            RC_TRACE(0x00008000, ("klass redef %d",
+              klass->is_redefining()));
+
+            if (klass->new_version() != NULL && m->new_version() == NULL) {
+              RC_TRACE(0x00008000, ("found potential forwarding method: %s",
+                m->name()->as_C_string()));
+              
+              klassOop new_klass = klass->newest_version();
+              methodOop new_method = new_klass->klass_part()->lookup_method(m->name(), m->signature());
+              RC_TRACE(0x00000002, ("%d %d",
+                new_method,
+                new_method->constMethod()->has_code_section_table()));
+
+              if (new_method != NULL && new_method->constMethod()->has_code_section_table()) {
+                RC_TRACE(0x00008000, ("found code section table for method: %s",
+                  new_method->name()->as_C_string()));
+                m->set_forward_method(new_method);
+                if (new_method->max_locals() != m->max_locals()) {
+                  tty->print_cr("new_m max locals: %d old_m max locals: %d", new_method->max_locals(), m->max_locals());
+                }
+                assert(new_method->max_locals() == m->max_locals(), "number of locals must match");
+                assert(new_method->max_stack() == m->max_stack(), "number of stack values must match");
+                if (jvf->is_interpreted_frame()) {
+                  if (m->is_in_code_section(bci)) {
+                    // We must transfer now and cannot delay until next NOP.
+                    int new_bci = m->calculate_forward_bci(bci, new_method);
+                    interpretedVFrame* iframe = interpretedVFrame::cast(jvf);
+                    RC_TRACE(0x00000002, ("Transfering execution of %s to new method old_bci=%d new_bci=%d",
+                      new_method->name()->as_C_string(),
+                      bci,
+                      new_bci));
+                    iframe->set_method(new_method, new_bci);
+                  } else {
+                    RC_TRACE(0x00000002, ("Delaying method forwarding of %s because %d is not in a code section",
+                      new_method->name()->as_C_string(),
+                      bci));
+                  }
+                } else {
+                  RC_TRACE(0x00000002, ("Delaying method forwarding of %s because method is compiled",
+                    new_method->name()->as_C_string()));
+                }
+              }
+            }
+          } 
         }
-      } // end for each local variable table entry
-    } // end if there are local variable table entries
+        vf = vf->sender();
+      }
+    }
 
-    rewrite_cp_refs_in_stack_map_table(method, THREAD);
-  } // end for each method
-  assert(scratch_cp()->is_conc_safe(), "Just checking");
-} // end set_new_constant_pool()
+    // Advance to next thread
+    java_thread = java_thread->next();
+  }
+
+  RC_TRACE(0x00000001, ("Method forwarding applied to %d methods",
+    forwarding_count));
+}
+
+bool VM_RedefineClasses::check_method_stacks() {
+
+  JavaThread *java_thread = Threads::first();
+  while (java_thread != NULL) {
+
+    int stack_depth = 0;
+    if (java_thread->has_last_Java_frame()) {
+
+      RC_TRACE(0x00000400, ("checking stack of Java thread %s", java_thread->name()));
+
+      // vframes are resource allocated
+      Thread* current_thread = Thread::current();
+      ResourceMark rm(current_thread);
+      HandleMark hm(current_thread);
+
+      RegisterMap reg_map(java_thread);
+      frame f = java_thread->last_frame();
+      vframe* vf = vframe::new_vframe(&f, &reg_map, java_thread);
+      frame* last_entry_frame = NULL;
+
+      while (vf != NULL) {
+        if (vf->is_java_frame()) {
+          // java frame (interpreted, compiled, ...)
+          javaVFrame *jvf = javaVFrame::cast(vf);
+
+          if (!(jvf->method()->is_native())) {
+            RC_TRACE(0x00000400, ("found method: %s", jvf->method()->name()->as_C_string()));
+            ResourceMark rm(Thread::current());
+            HandleMark hm;
+            instanceKlassHandle klass(jvf->method()->method_holder());
+
+            StackValueCollection *locals = jvf->locals();
+            const size_t message_buffer_len = klass->name()->utf8_length() + 1024;
+            char* message_buffer = NEW_RESOURCE_ARRAY(char, message_buffer_len);
+
+            for (int i=0; i<locals->size(); i++) {
+              StackValue *stack_value = locals->at(i);
+              if (stack_value->type() == T_OBJECT) {
+                Handle obj = stack_value->get_obj();
+                if (!obj.is_null() && obj->klass()->klass_part()->newest_version()->klass_part()->check_redefinition_flag(Klass::RemoveSuperType)) {
+                  
+                  // OK, so this is a possible failure => check local variable table, if it could be OK.
+                  bool result = false;
+                  methodOop method = jvf->method();
+                  if (method->has_localvariable_table()) {
+                    LocalVariableTableElement *elem = jvf->method()->localvariable_table_start();
+                    for (int j=0; j<method->localvariable_table_length(); j++) {
+
+                      if (elem->slot == i) {
+
+                        // Matching index found
+
+                        if (elem->start_bci <= jvf->bci() && elem->start_bci + elem->length > jvf->bci()) {
+
+                          // Also in range!!
+                          Symbol* signature = jvf->method()->constants()->symbol_at(elem->descriptor_cp_index);
+                          Symbol* klass_name = signature_to_class_name(signature);
+
+                          klassOop local_klass = SystemDictionary::find(klass_name, jvf->method()->method_holder()->klass_part()->class_loader(), jvf->method()->method_holder()->klass_part()->protection_domain(), Thread::current())->klass_part()->newest_version();
+                          klassOop cur = obj->klass()->klass_part()->newest_version();
+
+                          // Field is not null
+                          if (cur->klass_part()->newest_version()->klass_part()->is_subtype_of(local_klass)) {
+                            // We are OK
+                            RC_TRACE(0x00008000, ("Local variable value is OK (local_klass=%s, cur_klass=%s)",
+                              local_klass->klass_part()->name()->as_C_string(), cur->klass_part()->name()->as_C_string()));
+                            result = true;
+                          } else {
+                            // Failure!
+                            RC_TRACE(0x00000001, ("Local variable value is INVALID - abort redefinition (local_klass=%s, cur_klass=%s)",
+                              local_klass->klass_part()->name()->as_C_string(),
+                              cur->klass_part()->name()->as_C_string()));
+                            return false;
+                          }
+                        }
+                      }
+
+                      elem++;
+                    }
+                  } else {
+                    RC_TRACE(0x00000002, ("Method %s does not have a local variable table => abort",
+                      method->name_and_sig_as_C_string()));
+                  }
+                  
+                  if (!result) {
+                    return false;
+                  }
+
+                  RC_TRACE(0x00008000, ("Verifying class %s",
+                    jvf->method()->method_holder()->klass_part()->name()->as_C_string()));
+
+                  Symbol* exception_name;
+                  const size_t message_buffer_len = klass->name()->utf8_length() + 1024;
+                  char* message_buffer = NEW_RESOURCE_ARRAY(char, message_buffer_len);
+
+                  Thread::current()->set_pretend_new_universe(true);
+                  ClassVerifier split_verifier(klass, Thread::current());
+                  split_verifier.verify_method(jvf->method(), Thread::current());
+                  exception_name = split_verifier.result();
+                  Thread::current()->set_pretend_new_universe(false);
+
+                  if (exception_name != NULL) {
+                 
+                    RC_TRACE(0x00000001, ("Verification of class %s failed",
+                      jvf->method()->method_holder()->klass_part()->name()->as_C_string()));
+                    RC_TRACE(0x00000001, ("Exception: %s",
+                      exception_name->as_C_string()));
+                    RC_TRACE(0x00000001, ("Message: %s",
+                      message_buffer));
+                    Thread::current()->clear_pending_exception();
+                    return false;
+                  } 
+
+                }
+              }
+            }
+          } 
+        }
+        vf = vf->sender();
+      }
+    }
+
+    // Advance to next thread
+    java_thread = java_thread->next();
+  }
+
+  return true;
+}
+
+bool VM_RedefineClasses::check_method(methodOop method) {
 
 
-// Unevolving classes may point to methods of the_class directly
-// from their constant pool caches, itables, and/or vtables. We
-// use the SystemDictionary::classes_do() facility and this helper
-// to fix up these pointers.
-//
-// Note: We currently don't support updating the vtable in
-// arrayKlassOops. See Open Issues in jvmtiRedefineClasses.hpp.
-void VM_RedefineClasses::adjust_cpool_cache_and_vtable(klassOop k_oop,
-       oop initiating_loader, TRAPS) {
-  Klass *k = k_oop->klass_part();
-  if (k->oop_is_instance()) {
-    HandleMark hm(THREAD);
-    instanceKlass *ik = (instanceKlass *) k;
+  return true;
+}
 
-    // HotSpot specific optimization! HotSpot does not currently
-    // support delegation from the bootstrap class loader to a
-    // user-defined class loader. This means that if the bootstrap
-    // class loader is the initiating class loader, then it will also
-    // be the defining class loader. This also means that classes
-    // loaded by the bootstrap class loader cannot refer to classes
-    // loaded by a user-defined class loader. Note: a user-defined
-    // class loader can delegate to the bootstrap class loader.
-    //
-    // If the current class being redefined has a user-defined class
-    // loader as its defining class loader, then we can skip all
-    // classes loaded by the bootstrap class loader.
-    bool is_user_defined =
-           instanceKlass::cast(_the_class_oop)->class_loader() != NULL;
-    if (is_user_defined && ik->class_loader() == NULL) {
+// Warning: destroys redefinition level values of klasses.
+bool VM_RedefineClasses::check_loaded_methods() {
+
+  class CheckLoadedMethodsClosure : public ObjectClosure {
+
+  private:
+    
+    bool _result;
+    GrowableArray<klassOop> *_dangerous_klasses;
+
+  public:
+    CheckLoadedMethodsClosure(GrowableArray<klassOop> *dangerous_klasses) {
+      _result = true;
+      _dangerous_klasses = dangerous_klasses;
+    }
+
+    bool result() {
+      return _result;
+    }
+
+    bool is_class_dangerous(klassOop k) {
+      return k->klass_part()->newest_version()->klass_part()->check_redefinition_flag(Klass::RemoveSuperType);
+    }
+
+    bool can_be_affected(instanceKlass *klass) {
+
+      constantPoolOop cp = klass->constants();
+
+      Thread *THREAD = Thread::current();
+      klassOop k;
+      Symbol* symbol;
+
+      for (int i=1; i<cp->length(); i++) {
+        jbyte tag = cp->tag_at(i).value();
+        switch(tag) {
+          case JVM_CONSTANT_Long:
+          case JVM_CONSTANT_Double:
+            i++;
+            break;
+
+          case JVM_CONSTANT_Utf8:
+          case JVM_CONSTANT_Unicode:
+          case JVM_CONSTANT_Integer:
+          case JVM_CONSTANT_Float:
+          case JVM_CONSTANT_String:
+          case JVM_CONSTANT_Fieldref:
+          case JVM_CONSTANT_Methodref:
+          case JVM_CONSTANT_InterfaceMethodref:
+          case JVM_CONSTANT_ClassIndex:
+          case JVM_CONSTANT_UnresolvedString:
+          case JVM_CONSTANT_StringIndex:
+          case JVM_CONSTANT_UnresolvedClassInError:
+          case JVM_CONSTANT_Object:
+            // do nothing
+            break;
+
+          case JVM_CONSTANT_Class:
+            k = cp->klass_at(i, CHECK_(true));
+            if (is_class_dangerous(k)) {
+              RC_TRACE(0x00000002, ("Class %s is potentially affected, because at cp[%d] references class %s",
+                klass->name()->as_C_string(),
+                i,
+                k->klass_part()->name()->as_C_string()));
+              return true;
+            }
+            break;
+          
+          case JVM_CONSTANT_NameAndType:
+            symbol = cp->symbol_at(cp->signature_ref_index_at(i));
+            if (symbol->byte_at(0) == '(') {
+              // This must be a method
+              SignatureStream signatureStream(symbol);
+              while (true) {
+
+                if (signatureStream.is_array()) {
+                  Symbol* cur_signature = signatureStream.as_symbol(Thread::current());
+                  if (is_type_signature_dangerous(cur_signature)) {
+                    return true;
+                  }
+                } else if (signatureStream.is_object()) {
+                  if (is_symbol_dangerous(signatureStream.as_symbol(Thread::current()))) {
+                    return true;
+                  }
+                } 
+
+                if (signatureStream.at_return_type()) {
+                  break;
+                }
+
+                signatureStream.next();
+              }
+
+            } else if (is_type_signature_dangerous(symbol)) {
+              return true;
+            }
+            break;
+
+          case JVM_CONSTANT_UnresolvedClass:
+            symbol = cp->unresolved_klass_at(i);
+            if (is_symbol_dangerous(symbol)) {
+              return true;
+            }
+            break;
+
+          default:
+            ShouldNotReachHere();
+        }
+      }
+
+      return false;
+    }
+
+    bool is_type_signature_dangerous(Symbol* signature) {
+      // This must be a field type
+      if (FieldType::is_obj(signature)) {
+        Symbol* name = signature_to_class_name(signature);
+        if (is_symbol_dangerous(name)) {
+          return true;
+        }
+      } else if (FieldType::is_array(signature)) {
+        //jint dimension;
+        //Symbol* object_key;
+        FieldArrayInfo fd;
+        FieldType::get_array_info(signature, fd, Thread::current());
+        if (is_symbol_dangerous(fd.object_key())) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    bool is_symbol_dangerous(Symbol* symbol) {
+      for (int i=0; i<_dangerous_klasses->length(); i++) {
+        if(_dangerous_klasses->at(i)->klass_part()->name() == symbol) {
+          RC_TRACE(0x00000002, ("Found constant pool index %d references class %s",
+            i,
+            symbol->as_C_string()));
+          return true;
+        }
+      }
+      return false;
+    }
+
+    virtual void do_object(oop obj) {
+
+      if (!_result) return;
+
+      klassOop klassObj = (klassOop)obj;
+      Thread *THREAD = Thread::current();
+
+      // We found an instance klass!
+      instanceKlass *klass = instanceKlass::cast(klassObj);
+      instanceKlassHandle handle(klassObj);
+
+      RC_TRACE(0x00000400, ("Check if verification is necessary for class %s major_version=%d", handle->name()->as_C_string(), handle->major_version()));
+
+      if (!can_be_affected(klass)) {
+        RC_TRACE(0x00000400, ("Skipping verification of class %s major_version=%d", handle->name()->as_C_string(), handle->major_version()));
+        return;
+      }
+
+      if (handle->major_version() < Verifier::STACKMAP_ATTRIBUTE_MAJOR_VERSION) {
+        RC_TRACE(0x00000001, ("Failing because cannot verify class %s major_version=%d", handle->name()->as_C_string(), handle->major_version()));
+        _result = false;
+        return;
+      }
+
+      RC_TRACE(0x00000001, ("Verifying class %s", handle->name()->as_C_string()));
+
+      if (!Verifier::verify(handle, Verifier::NoException, true, false, Thread::current())) {
+        
+        RC_TRACE(0x00000001, ("Verification of class %s failed", handle->name()->as_C_string()));
+        //Symbol* ex_name = PENDING_EXCEPTION->klass()->klass_part()->name();
+        //RC_TRACE(0x00000002, ("exception when verifying class: '%s'", ex_name->as_C_string());
+        //PENDING_EXCEPTION->print();
+        CLEAR_PENDING_EXCEPTION;
+        _result = false;
+      } 
+
+      /*int method_count = klass->methods()->length();
+      for (int i=0; i<method_count; i++) {
+        methodOop cur_method = (methodOop)klass->methods()->obj_at(i);
+        if (!check_method(cur_method)) {
+          RC_TRACE(0x00000001, ("Failed to verify consistency of method %s of klass %s", cur_method->name()->as_C_string(), klass->name()->as_C_string());
+        }
+      }*/
+    }
+  };
+
+  // TODO: Check bytecodes in case of interface => class or class => interface etc..
+
+  GrowableArray<klassOop> dangerous_klasses;
+  for (int i=0; i<_new_classes->length(); i++) {
+    instanceKlassHandle handle = _new_classes->at(i);
+    if (handle->check_redefinition_flag(Klass::RemoveSuperType)) {
+      dangerous_klasses.append(handle());
+    }
+  }
+
+  CheckLoadedMethodsClosure checkLoadedMethodsClosure(&dangerous_klasses);
+  Thread::current()->set_pretend_new_universe(true);
+  SystemDictionary::classes_do(&checkLoadedMethodsClosure);
+  Thread::current()->set_pretend_new_universe(false);
+
+
+  return checkLoadedMethodsClosure.result();
+}
+
+bool VM_RedefineClasses::check_type_consistency() {
+
+  Universe::set_verify_in_progress(true);
+
+  calculate_type_check_information();
+  bool result = check_field_value_types();
+  clear_type_check_information();
+  if (!result) {
+    RC_TRACE(0x00000001, ("Aborting redefinition because of wrong field or array element value!"));
+    Universe::set_verify_in_progress(false);
+    return false;
+  }
+
+  result = check_method_stacks();
+  if (!result) {
+    RC_TRACE(0x00000001, ("Aborting redefinition because of wrong value on the stack"));
+    Universe::set_verify_in_progress(false);
+    return false;
+  }
+
+  result = check_loaded_methods();
+  if (!result) {
+    RC_TRACE(0x00000001, ("Aborting redefinition because of wrong loaded method"));
+    Universe::set_verify_in_progress(false);
+    return false;
+  }
+
+  RC_TRACE(0x00000001, ("Verification passed => hierarchy change is valid!"));
+  Universe::set_verify_in_progress(false);
+  return true;
+}
+
+void VM_RedefineClasses::rollback() {
+  RC_TRACE(0x00000001, ("Rolling back redefinition!"));
+  SystemDictionary::rollback_redefinition();
+
+  RC_TRACE(0x00000001, ("After rolling back system dictionary!"));
+  for (int i=0; i<_new_classes->length(); i++) {
+    SystemDictionary::remove_from_hierarchy(_new_classes->at(i));
+  }
+
+  for (int i=0; i<_new_classes->length(); i++) {
+    instanceKlassHandle new_class = _new_classes->at(i);
+    new_class->set_redefining(false);
+    new_class->old_version()->klass_part()->set_new_version(NULL);
+    new_class->set_old_version(NULL);
+  }
+
+}
+
+template <class T> void VM_RedefineClasses::do_oop_work(T* p) {
+  T heap_oop = oopDesc::load_heap_oop(p);
+  if (!oopDesc::is_null(heap_oop)) {
+    oop obj = oopDesc::decode_heap_oop_not_null(heap_oop);
+    if (obj->is_instanceKlass()) {
+      klassOop klass = (klassOop)obj;
+      if (klass->klass_part()->new_version() != NULL && klass->klass_part()->new_version()->klass_part()->is_redefining()) {
+        obj = klass->klass_part()->new_version();
+        oopDesc::encode_store_heap_oop_not_null(p, obj);
+      }
+    } else if (obj->blueprint()->newest_version() == SystemDictionary::Class_klass()->klass_part()->newest_version()) {
+
+      klassOop klass_oop = java_lang_Class::as_klassOop(obj);
+      if (klass_oop != NULL) {
+        if (klass_oop->klass_part()->new_version() != NULL && klass_oop->klass_part()->new_version()->klass_part()->is_redefining()) {
+          obj = klass_oop->klass_part()->new_version()->klass_part()->java_mirror();
+          oopDesc::encode_store_heap_oop_not_null(p, obj);
+        } else if (klass_oop->klass_part()->is_redefining()) {
+          obj = klass_oop->klass_part()->java_mirror();
+          oopDesc::encode_store_heap_oop_not_null(p, obj);
+        }
+      }
+    }
+  }
+}
+
+void VM_RedefineClasses::swap_marks(oop first, oop second) {
+  markOop first_mark = first->mark();
+  markOop second_mark = second->mark();
+  first->set_mark(second_mark);
+  second->set_mark(first_mark);
+}
+
+void VM_RedefineClasses::doit() {
+  Thread *thread = Thread::current();
+
+  RC_TRACE(0x00000001, ("Entering doit!"));
+
+
+  if ((_max_redefinition_flags & Klass::RemoveSuperType) != 0) {
+
+    RC_TIMER_START(_timer_check_type);
+
+    if (!check_type_consistency()) {
+      // (tw) TODO: Rollback the class redefinition
+      rollback();
+      RC_TRACE(0x00000001, ("Detected type inconsistency!"));
+      _result = JVMTI_ERROR_UNSUPPORTED_REDEFINITION_HIERARCHY_CHANGED;
+      RC_TIMER_STOP(_timer_check_type);
       return;
     }
 
-    // This is a very busy routine. We don't want too much tracing
-    // printed out.
-    bool trace_name_printed = false;
+    RC_TIMER_STOP(_timer_check_type);
 
-    // Very noisy: only enable this call if you are trying to determine
-    // that a specific class gets found by this routine.
-    // RC_TRACE macro has an embedded ResourceMark
-    // RC_TRACE_WITH_THREAD(0x00100000, THREAD,
-    //   ("adjust check: name=%s", ik->external_name()));
-    // trace_name_printed = true;
+  } else {
+    RC_TRACE(0x00000001, ("No type narrowing => skipping check for type inconsistency"));
+  }
 
-    // Fix the vtable embedded in the_class and subclasses of the_class,
-    // if one exists. We discard scratch_class and we don't keep an
-    // instanceKlass around to hold obsolete methods so we don't have
-    // any other instanceKlass embedded vtables to update. The vtable
-    // holds the methodOops for virtual (but not final) methods.
-    if (ik->vtable_length() > 0 && ik->is_subtype_of(_the_class_oop)) {
-      // ik->vtable() creates a wrapper object; rm cleans it up
-      ResourceMark rm(THREAD);
-      ik->vtable()->adjust_method_entries(_matching_old_methods,
-                                          _matching_new_methods,
-                                          _matching_methods_length,
-                                          &trace_name_printed);
+  if (UseMethodForwardPoints) {
+    RC_TRACE(0x00000001, ("Check stack for forwarding methods to new version"));
+    method_forwarding();
+  }
+
+  if (UseSharedSpaces) {
+    // Sharing is enabled so we remap the shared readonly space to
+    // shared readwrite, private just in case we need to redefine
+    // a shared class. We do the remap during the doit() phase of
+    // the safepoint to be safer.
+    if (!CompactingPermGenGen::remap_shared_readonly_as_readwrite()) {
+      RC_TRACE(0x00000001, ("failed to remap shared readonly space to readwrite, private"));
+      _result = JVMTI_ERROR_INTERNAL;
+      return;
+    }
+  }
+
+  RC_TIMER_START(_timer_prepare_redefinition);
+  for (int i = 0; i < _new_classes->length(); i++) {
+    redefine_single_class(_new_classes->at(i), thread);
+  }
+
+  // Deoptimize all compiled code that depends on this class
+  flush_dependent_code(instanceKlassHandle(Thread::current(), (klassOop)NULL), Thread::current());
+
+  // Adjust constantpool caches and vtables for all classes
+  // that reference methods of the evolved class.
+  SystemDictionary::classes_do(adjust_cpool_cache, Thread::current());
+
+  RC_TIMER_STOP(_timer_prepare_redefinition);
+  RC_TIMER_START(_timer_redefinition);
+
+    class ChangePointersOopClosure : public OopClosure {
+      virtual void do_oop(oop* o) {
+        do_oop_work(o);
+      }
+
+      virtual void do_oop(narrowOop* o) {
+        do_oop_work(o);
+      }
+    };
+
+    class ChangePointersObjectClosure : public ObjectClosure {
+
+    private:
+
+      OopClosure *_closure;
+      bool _needs_instance_update;
+      GrowableArray<oop> *_updated_oops;
+
+    public:
+      ChangePointersObjectClosure(OopClosure *closure) : _closure(closure), _needs_instance_update(false), _updated_oops(NULL) {}
+
+      bool needs_instance_update() {
+        return _needs_instance_update;
+      }
+
+      GrowableArray<oop> *updated_oops() { return _updated_oops; }
+
+      virtual void do_object(oop obj) {
+        if (!obj->is_instanceKlass()) {
+          obj->oop_iterate(_closure);
+          
+          if (obj->blueprint()->is_redefining()) {
+
+            if (obj->blueprint()->check_redefinition_flag(Klass::HasInstanceTransformer)) {
+              if (_updated_oops == NULL) {
+                _updated_oops = new (ResourceObj::C_HEAP, mtInternal) GrowableArray<oop>(100, true);
+              }
+              _updated_oops->append(obj);
+            }
+
+            if(obj->blueprint()->update_information() != NULL || obj->is_perm()) {
+
+              assert(obj->blueprint()->old_version() != NULL, "must have old version");
+              obj->set_klass_no_check(obj->blueprint()->old_version());
+
+              if (obj->size() != obj->size_given_klass(obj->blueprint()->new_version()->klass_part()) || obj->is_perm()) {
+                // We need an instance update => set back to old klass
+                _needs_instance_update = true;
+
+              } else {
+                MarkSweep::update_fields(obj, obj);
+                assert(obj->blueprint()->is_redefining(), "update fields resets the klass");
+              }
+            }
+          }
+
+        } else {
+          instanceKlass *klass = instanceKlass::cast((klassOop)obj);
+          if (klass->is_redefining()) {
+            // Initialize the new class! Special static initialization that does not execute the
+            // static constructor but copies static field values from the old class if name
+            // and signature of a static field match.
+            klass->initialize_redefined_class();
+          }
+          // idubrov: FIXME: 
+          //klass->iterate_static_fields(_closure);
+        }
+      }
+    };
+
+    ChangePointersOopClosure oopClosure;
+    ChangePointersObjectClosure objectClosure(&oopClosure);
+
+    {
+      SharedHeap::heap()->gc_prologue(true);
+      Universe::root_oops_do(&oopClosure);
+      Universe::heap()->object_iterate(&objectClosure);
+      SharedHeap::heap()->gc_epilogue(false);
     }
 
-    // If the current class has an itable and we are either redefining an
-    // interface or if the current class is a subclass of the_class, then
-    // we potentially have to fix the itable. If we are redefining an
-    // interface, then we have to call adjust_method_entries() for
-    // every instanceKlass that has an itable since there isn't a
-    // subclass relationship between an interface and an instanceKlass.
-    if (ik->itable_length() > 0 && (Klass::cast(_the_class_oop)->is_interface()
-        || ik->is_subclass_of(_the_class_oop))) {
-      // ik->itable() creates a wrapper object; rm cleans it up
-      ResourceMark rm(THREAD);
-      ik->itable()->adjust_method_entries(_matching_old_methods,
-                                          _matching_new_methods,
-                                          _matching_methods_length,
-                                          &trace_name_printed);
+    // Swap marks to have same hashcodes
+    for (int i=0; i<_new_classes->length(); i++) {
+      swap_marks(_new_classes->at(i)(), _new_classes->at(i)->old_version());
+      swap_marks(_new_classes->at(i)->java_mirror(), _new_classes->at(i)->old_version()->klass_part()->java_mirror());
+      ((instanceKlass*)_new_classes->at(i)->old_version()->klass_part())->constants()->set_pool_holder(_new_classes->at(i)->old_version());
     }
 
-    // The constant pools in other classes (other_cp) can refer to
-    // methods in the_class. We have to update method information in
-    // other_cp's cache. If other_cp has a previous version, then we
-    // have to repeat the process for each previous version. The
-    // constant pool cache holds the methodOops for non-virtual
-    // methods and for virtual, final methods.
-    //
-    // Special case: if the current class is the_class, then new_cp
-    // has already been attached to the_class and old_cp has already
-    // been added as a previous version. The new_cp doesn't have any
-    // cached references to old methods so it doesn't need to be
-    // updated. We can simply start with the previous version(s) in
-    // that case.
-    constantPoolHandle other_cp;
-    constantPoolCacheOop cp_cache;
+    _updated_oops = objectClosure.updated_oops();
 
-    if (k_oop != _the_class_oop) {
-      // this klass' constant pool cache may need adjustment
-      other_cp = constantPoolHandle(ik->constants());
-      cp_cache = other_cp->cache();
-      if (cp_cache != NULL) {
-        cp_cache->adjust_method_entries(_matching_old_methods,
-                                        _matching_new_methods,
-                                        _matching_methods_length,
-                                        &trace_name_printed);
+  if (objectClosure.needs_instance_update()){
+
+    // Do a full garbage collection to update the instance sizes accordingly
+    RC_TRACE(0x00000001, ("Before performing full GC!"));
+    Universe::set_redefining_gc_run(true);
+    JvmtiGCMarker jgcm;
+    notify_gc_begin(true);
+    Universe::heap()->collect_as_vm_thread(GCCause::_heap_inspection);
+    notify_gc_end();
+    Universe::set_redefining_gc_run(false);
+    RC_TRACE(0x00000001, ("GC done!"));
+  }
+
+
+  if (RC_TRACE_ENABLED(0x00000001)) {
+    if (_updated_oops != NULL) {
+      RC_TRACE(0x00000001, ("%d object(s) updated!", _updated_oops->length()));
+    } else {
+      RC_TRACE(0x00000001, ("No objects updated!"));
+    }
+  }
+
+  // Unmark klassOops as "redefining"
+  for (int i=0; i<_new_classes->length(); i++) {
+    klassOop cur = _new_classes->at(i)();
+    _new_classes->at(i)->set_redefining(false);
+    _new_classes->at(i)->clear_update_information();
+    _new_classes->at(i)->update_supers_to_newest_version();
+
+    if (((instanceKlass *)cur->klass_part()->old_version()->klass_part())->array_klasses() != NULL) {
+      update_array_classes_to_newest_version(((instanceKlass *)cur->klass_part()->old_version()->klass_part())->array_klasses());
+
+      // Transfer the array classes, otherwise we might get cast exceptions when casting array types.
+      ((instanceKlass*)cur->klass_part())->set_array_klasses(((instanceKlass*)cur->klass_part()->old_version()->klass_part())->array_klasses());
+
+      oop new_mirror = _new_classes->at(i)->java_mirror();
+      oop old_mirror = _new_classes->at(i)->old_version()->klass_part()->java_mirror();
+      java_lang_Class::set_array_klass(new_mirror, java_lang_Class::array_klass(old_mirror));
+    }
+  }
+
+  for (int i=T_BOOLEAN; i<=T_LONG; i++) {
+    update_array_classes_to_newest_version(Universe::typeArrayKlassObj((BasicType)i));
+  }
+
+  // Disable any dependent concurrent compilations
+  SystemDictionary::notice_modification();
+
+  // Set flag indicating that some invariants are no longer true.
+  // See jvmtiExport.hpp for detailed explanation.
+  JvmtiExport::set_has_redefined_a_class();
+
+  // Clean up caches in the compiler interface and compiler threads
+  CompileBroker::cleanup_after_redefinition();
+
+#ifdef ASSERT
+
+  // Universe::verify();
+  // JNIHandles::verify();
+
+  SystemDictionary::classes_do(check_class, thread);
+#endif
+
+  update_active_methods();
+  RC_TIMER_STOP(_timer_redefinition);
+
+}
+
+void VM_RedefineClasses::update_array_classes_to_newest_version(klassOop smallest_dimension) {
+
+  arrayKlass *curArrayKlass = arrayKlass::cast(smallest_dimension);
+  assert(curArrayKlass->lower_dimension() == NULL, "argument must be smallest dimension");
+
+
+  while (curArrayKlass != NULL) {
+    klassOop higher_dimension = curArrayKlass->higher_dimension();
+    klassOop lower_dimension = curArrayKlass->lower_dimension();
+    curArrayKlass->update_supers_to_newest_version();
+
+    curArrayKlass = NULL;
+    if (higher_dimension != NULL) {
+      curArrayKlass = arrayKlass::cast(higher_dimension);
+    }
+  }
+
+}
+
+void VM_RedefineClasses::doit_epilogue() {
+
+  RC_TIMER_START(_timer_vm_op_epilogue);
+
+  unlock_threads();
+
+  ResourceMark mark;
+
+  VM_GC_Operation::doit_epilogue();
+  RC_TRACE(0x00000001, ("GC Operation epilogue finished! "));
+
+  GrowableArray<methodHandle> instanceTransformerMethods;
+
+  // Call static transformers
+  for (int i=0; i<_new_classes->length(); i++) {
+    
+    instanceKlassHandle klass = _new_classes->at(i);
+    
+    // Find instance transformer method
+
+    if (klass->check_redefinition_flag(Klass::HasInstanceTransformer)) {
+
+      RC_TRACE(0x00008000, ("Call instance transformer of %s instance", klass->name()->as_C_string()));
+      klassOop cur_klass = klass();
+      while (cur_klass != NULL) {
+        methodOop method = ((instanceKlass*)cur_klass->klass_part())->find_method(vmSymbols::transformer_name(), vmSymbols::void_method_signature());
+        if (method != NULL) {
+          methodHandle instanceTransformerMethod(method);
+          instanceTransformerMethods.append(instanceTransformerMethod);
+          break;
+        } else {
+          cur_klass = cur_klass->klass_part()->super();
+        }
+      }
+      assert(cur_klass != NULL, "must have instance transformer method");
+    } else {
+      instanceTransformerMethods.append(methodHandle(Thread::current(), NULL));
+    }
+  }
+
+
+  // Call instance transformers
+  if (_updated_oops != NULL) {
+
+    for (int i=0; i<_updated_oops->length(); i++) {
+      assert(_updated_oops->at(i) != NULL, "must not be null!");
+      Handle cur(_updated_oops->at(i));
+      instanceKlassHandle klass(cur->klass());
+
+      if (klass->check_redefinition_flag(Klass::HasInstanceTransformer)) {
+
+        methodHandle method = instanceTransformerMethods.at(klass->redefinition_index());
+
+        RC_TRACE(0x00008000, ("executing transformer method"));
+        
+        Thread *__the_thread__ = Thread::current();
+        JavaValue result(T_VOID);
+        JavaCallArguments args(cur);
+        JavaCalls::call(&result,
+          method,
+          &args,
+          THREAD);
+
+        // TODO: What to do with an exception here?
+        if (HAS_PENDING_EXCEPTION) {
+          Symbol* ex_name = PENDING_EXCEPTION->klass()->klass_part()->name();
+          RC_TRACE(0x00000002, ("exception when executing transformer: '%s'",
+            ex_name->as_C_string()));
+          CLEAR_PENDING_EXCEPTION;
+        }
       }
     }
-    {
-      ResourceMark rm(THREAD);
-      // PreviousVersionInfo objects returned via PreviousVersionWalker
-      // contain a GrowableArray of handles. We have to clean up the
-      // GrowableArray _after_ the PreviousVersionWalker destructor
-      // has destroyed the handles.
-      {
-        // the previous versions' constant pool caches may need adjustment
-        PreviousVersionWalker pvw(ik);
-        for (PreviousVersionInfo * pv_info = pvw.next_previous_version();
-             pv_info != NULL; pv_info = pvw.next_previous_version()) {
-          other_cp = pv_info->prev_constant_pool_handle();
-          cp_cache = other_cp->cache();
-          if (cp_cache != NULL) {
-            cp_cache->adjust_method_entries(_matching_old_methods,
-                                            _matching_new_methods,
-                                            _matching_methods_length,
-                                            &trace_name_printed);
+
+    delete _updated_oops;
+    _updated_oops = NULL;
+  }
+
+  // Free the array of scratch classes
+  delete _new_classes;
+  _new_classes = NULL;
+  RC_TRACE(0x00000001, ("Redefinition finished!"));
+
+  RC_TIMER_STOP(_timer_vm_op_epilogue);
+}
+
+bool VM_RedefineClasses::is_modifiable_class(oop klass_mirror) {
+  // classes for primitives cannot be redefined
+  if (java_lang_Class::is_primitive(klass_mirror)) {
+    return false;
+  }
+  klassOop the_class_oop = java_lang_Class::as_klassOop(klass_mirror);
+  // classes for arrays cannot be redefined
+  if (the_class_oop == NULL || !Klass::cast(the_class_oop)->oop_is_instance()) {
+    return false;
+  }
+  return true;
+}
+
+#ifdef ASSERT
+
+void VM_RedefineClasses::verify_classes(klassOop k_oop_latest, oop initiating_loader, TRAPS) {
+  klassOop k_oop = k_oop_latest;
+  while (k_oop != NULL) {
+
+    instanceKlassHandle k_handle(THREAD, k_oop);
+    Verifier::verify(k_handle, Verifier::ThrowException, true, true, THREAD);
+    k_oop = k_oop->klass_part()->old_version();
+  }
+}
+
+#endif
+
+
+// Unevolving classes may point to old methods directly
+// from their constant pool caches, itables, and/or vtables. We
+// use the SystemDictionary::classes_do() facility and this helper
+// to fix up these pointers. Additional field offsets and vtable indices
+// in the constant pool cache entries are fixed.
+//
+// Note: We currently don't support updating the vtable in
+// arrayKlassOops. See Open Issues in jvmtiRedefineClasses.hpp.
+void VM_RedefineClasses::adjust_cpool_cache(klassOop k_oop_latest, oop initiating_loader, TRAPS) {
+  klassOop k_oop = k_oop_latest;
+  while (k_oop != NULL) {
+    //tty->print_cr("name=%s", k_oop->klass_part()->name()->as_C_string());
+/*
+    methodOop *matching_old_methods = NEW_RESOURCE_ARRAY(methodOop, _old_methods->length());
+    methodOop *matching_new_methods = NEW_RESOURCE_ARRAY(methodOop, _old_methods->length());
+
+    for (int i=0; i<_matching_methods_length; i++) {
+      matching_old_methods[i] = (methodOop)_old_methods->obj_at(_matching_old_methods[i]);
+      matching_new_methods[i] = (methodOop)_new_methods->obj_at(_matching_new_methods[i]);
+    }*/
+
+    Klass *k = k_oop->klass_part();
+    if (k->oop_is_instance()) {
+      HandleMark hm(THREAD);
+      instanceKlass *ik = (instanceKlass *) k;
+
+      constantPoolHandle other_cp;
+      constantPoolCacheOop cp_cache;
+
+      other_cp = constantPoolHandle(ik->constants());
+
+      for (int i=0; i<other_cp->length(); i++) {
+        if (other_cp->tag_at(i).is_klass()) {
+          klassOop klass = other_cp->klass_at(i, THREAD);
+          if (klass->klass_part()->new_version() != NULL) {
+
+            // (tw) TODO: check why/if this is necessary
+            other_cp->klass_at_put(i, klass->klass_part()->new_version());
           }
+          klass = other_cp->klass_at(i, THREAD);
+          assert(klass->klass_part()->new_version() == NULL, "Must be new klass!");
         }
-      } // pvw is cleaned up
-    } // rm is cleaned up
+      }
+
+      cp_cache = other_cp->cache();
+
+      if (cp_cache != NULL) {
+        cp_cache->adjust_entries(NULL,
+          NULL,
+          0);
+      }
+    }
+    k_oop = k_oop->klass_part()->old_version();
   }
 }
 
 void VM_RedefineClasses::update_jmethod_ids() {
   for (int j = 0; j < _matching_methods_length; ++j) {
-    methodOop old_method = _matching_old_methods[j];
+    methodOop old_method = (methodOop)_old_methods->obj_at(_matching_old_methods[j]);
+    RC_TRACE(0x00008000, ("matching method %s", old_method->name_and_sig_as_C_string()));
+    
     jmethodID jmid = old_method->find_jmethod_id_or_null();
+    if (old_method->new_version() != NULL && jmid == NULL) {
+       // (tw) Have to create jmethodID in this case
+       jmid = old_method->jmethod_id();
+    }
+
     if (jmid != NULL) {
       // There is a jmethodID, change it to point to the new method
-      methodHandle new_method_h(_matching_new_methods[j]);
+      methodHandle new_method_h((methodOop)_new_methods->obj_at(_matching_new_methods[j]));
+      if (old_method->new_version() == NULL) {
+        methodHandle old_method_h((methodOop)_old_methods->obj_at(_matching_old_methods[j]));
+        jmethodID new_jmethod_id = JNIHandles::make_jmethod_id(old_method_h);
+        bool result = instanceKlass::cast(old_method_h->method_holder())->update_jmethod_id(old_method_h(), new_jmethod_id);
+        //RC_TRACE(0x00008000, ("Changed jmethodID for old method assigned to %d / result=%d", new_jmethod_id, result);
+        //RC_TRACE(0x00008000, ("jmethodID new method: %d jmethodID old method: %d", new_method_h->jmethod_id(), old_method->jmethod_id());
+      } else {
+        jmethodID mid = new_method_h->jmethod_id();
+        bool result = instanceKlass::cast(new_method_h->method_holder())->update_jmethod_id(new_method_h(), jmid);
+        //RC_TRACE(0x00008000, ("Changed jmethodID for new method assigned to %d / result=%d", jmid, result);
+
+      }
       JNIHandles::change_method_associated_with_jmethod_id(jmid, new_method_h);
-      assert(JNIHandles::resolve_jmethod_id(jmid) == _matching_new_methods[j],
-             "should be replaced");
+      //RC_TRACE(0x00008000, ("changing method associated with jmethod id %d to %s", (int)jmid, new_method_h->name()->as_C_string());
+      assert(JNIHandles::resolve_jmethod_id(jmid) == (methodOop)_new_methods->obj_at(_matching_new_methods[j]), "should be replaced");
+      jmethodID mid = ((methodOop)_new_methods->obj_at(_matching_new_methods[j]))->jmethod_id();
+      assert(JNIHandles::resolve_non_null((jobject)mid) == new_method_h(), "must match!");
+
+      //RC_TRACE(0x00008000, ("jmethodID new method: %d jmethodID old method: %d", new_method_h->jmethod_id(), old_method->jmethod_id());
     }
   }
 }
 
-void VM_RedefineClasses::check_methods_and_mark_as_obsolete(
-       BitMap *emcp_methods, int * emcp_method_count_p) {
-  *emcp_method_count_p = 0;
-  int obsolete_count = 0;
-  int old_index = 0;
-  for (int j = 0; j < _matching_methods_length; ++j, ++old_index) {
-    methodOop old_method = _matching_old_methods[j];
-    methodOop new_method = _matching_new_methods[j];
-    methodOop old_array_method;
 
-    // Maintain an old_index into the _old_methods array by skipping
-    // deleted methods
-    while ((old_array_method = (methodOop) _old_methods->obj_at(old_index))
-                                                            != old_method) {
-      ++old_index;
-    }
+// Deoptimize all compiled code that depends on this class.
+//
+// If the can_redefine_classes capability is obtained in the onload
+// phase then the compiler has recorded all dependencies from startup.
+// In that case we need only deoptimize and throw away all compiled code
+// that depends on the class.
+//
+// If can_redefine_classes is obtained sometime after the onload
+// phase then the dependency information may be incomplete. In that case
+// the first call to RedefineClasses causes all compiled code to be
+// thrown away. As can_redefine_classes has been obtained then
+// all future compilations will record dependencies so second and
+// subsequent calls to RedefineClasses need only throw away code
+// that depends on the class.
+//
+void VM_RedefineClasses::flush_dependent_code(instanceKlassHandle k_h, TRAPS) {
+  assert_locked_or_safepoint(Compile_lock);
 
-    if (MethodComparator::methods_EMCP(old_method, new_method)) {
-      // The EMCP definition from JSR-163 requires the bytecodes to be
-      // the same with the exception of constant pool indices which may
-      // differ. However, the constants referred to by those indices
-      // must be the same.
-      //
-      // We use methods_EMCP() for comparison since constant pool
-      // merging can remove duplicate constant pool entries that were
-      // present in the old method and removed from the rewritten new
-      // method. A faster binary comparison function would consider the
-      // old and new methods to be different when they are actually
-      // EMCP.
-      //
-      // The old and new methods are EMCP and you would think that we
-      // could get rid of one of them here and now and save some space.
-      // However, the concept of EMCP only considers the bytecodes and
-      // the constant pool entries in the comparison. Other things,
-      // e.g., the line number table (LNT) or the local variable table
-      // (LVT) don't count in the comparison. So the new (and EMCP)
-      // method can have a new LNT that we need so we can't just
-      // overwrite the new method with the old method.
-      //
-      // When this routine is called, we have already attached the new
-      // methods to the_class so the old methods are effectively
-      // overwritten. However, if an old method is still executing,
-      // then the old method cannot be collected until sometime after
-      // the old method call has returned. So the overwriting of old
-      // methods by new methods will save us space except for those
-      // (hopefully few) old methods that are still executing.
-      //
-      // A method refers to a constMethodOop and this presents another
-      // possible avenue to space savings. The constMethodOop in the
-      // new method contains possibly new attributes (LNT, LVT, etc).
-      // At first glance, it seems possible to save space by replacing
-      // the constMethodOop in the old method with the constMethodOop
-      // from the new method. The old and new methods would share the
-      // same constMethodOop and we would save the space occupied by
-      // the old constMethodOop. However, the constMethodOop contains
-      // a back reference to the containing method. Sharing the
-      // constMethodOop between two methods could lead to confusion in
-      // the code that uses the back reference. This would lead to
-      // brittle code that could be broken in non-obvious ways now or
-      // in the future.
-      //
-      // Another possibility is to copy the constMethodOop from the new
-      // method to the old method and then overwrite the new method with
-      // the old method. Since the constMethodOop contains the bytecodes
-      // for the method embedded in the oop, this option would change
-      // the bytecodes out from under any threads executing the old
-      // method and make the thread's bcp invalid. Since EMCP requires
-      // that the bytecodes be the same modulo constant pool indices, it
-      // is straight forward to compute the correct new bcp in the new
-      // constMethodOop from the old bcp in the old constMethodOop. The
-      // time consuming part would be searching all the frames in all
-      // of the threads to find all of the calls to the old method.
-      //
-      // It looks like we will have to live with the limited savings
-      // that we get from effectively overwriting the old methods
-      // when the new methods are attached to the_class.
+  // All dependencies have been recorded from startup or this is a second or
+  // subsequent use of RedefineClasses
 
-      // track which methods are EMCP for add_previous_version() call
-      emcp_methods->set_bit(old_index);
-      (*emcp_method_count_p)++;
+  // For now deopt all
+  // (tw) TODO: Improve the dependency system such that we can safely deopt only a subset of the methods
+  if (0 && JvmtiExport::all_dependencies_are_recorded()) {
+    Universe::flush_evol_dependents_on(k_h);
+  } else {
+    CodeCache::mark_all_nmethods_for_deoptimization();
 
-      // An EMCP method is _not_ obsolete. An obsolete method has a
-      // different jmethodID than the current method. An EMCP method
-      // has the same jmethodID as the current method. Having the
-      // same jmethodID for all EMCP versions of a method allows for
-      // a consistent view of the EMCP methods regardless of which
-      // EMCP method you happen to have in hand. For example, a
-      // breakpoint set in one EMCP method will work for all EMCP
-      // versions of the method including the current one.
-    } else {
-      // mark obsolete methods as such
-      old_method->set_is_obsolete();
-      obsolete_count++;
+    ResourceMark rm(THREAD);
+    DeoptimizationMarker dm;
 
-      // obsolete methods need a unique idnum
-      u2 num = instanceKlass::cast(_the_class_oop)->next_method_idnum();
-      if (num != constMethodOopDesc::UNSET_IDNUM) {
-//      u2 old_num = old_method->method_idnum();
-        old_method->set_method_idnum(num);
-// TO DO: attach obsolete annotations to obsolete method's new idnum
+    // Deoptimize all activations depending on marked nmethods
+    Deoptimization::deoptimize_dependents();
+
+    // Make the dependent methods not entrant (in VM_Deoptimize they are made zombies)
+    CodeCache::make_marked_nmethods_not_entrant();
+
+    // From now on we know that the dependency information is complete
+    JvmtiExport::set_all_dependencies_are_recorded(true);
+  }
+}
+
+void VM_RedefineClasses::compute_added_deleted_matching_methods() {
+  methodOop old_method;
+  methodOop new_method;
+
+  _matching_old_methods = NEW_RESOURCE_ARRAY(int, _old_methods->length());
+  _matching_new_methods = NEW_RESOURCE_ARRAY(int, _old_methods->length());
+  _added_methods        = NEW_RESOURCE_ARRAY(int, _new_methods->length());
+  _deleted_methods      = NEW_RESOURCE_ARRAY(int, _old_methods->length());
+
+  _matching_methods_length = 0;
+  _deleted_methods_length  = 0;
+  _added_methods_length    = 0;
+
+  int nj = 0;
+  int oj = 0;
+  while (true) {
+    if (oj >= _old_methods->length()) {
+      if (nj >= _new_methods->length()) {
+        break; // we've looked at everything, done
       }
+      // New method at the end
+      new_method = (methodOop) _new_methods->obj_at(nj);
+      _added_methods[_added_methods_length++] = nj;
+      ++nj;
+    } else if (nj >= _new_methods->length()) {
+      // Old method, at the end, is deleted
+      old_method = (methodOop) _old_methods->obj_at(oj);
+      _deleted_methods[_deleted_methods_length++] = oj;
+      ++oj;
+    } else {
+      old_method = (methodOop) _old_methods->obj_at(oj);
+      new_method = (methodOop) _new_methods->obj_at(nj);
+      if (old_method->name() == new_method->name()) {
+        if (old_method->signature() == new_method->signature()) {
+          _matching_old_methods[_matching_methods_length  ] = oj;//old_method;
+          _matching_new_methods[_matching_methods_length++] = nj;//new_method;
+          ++nj;
+          ++oj;
+        } else {
+          // added overloaded have already been moved to the end,
+          // so this is a deleted overloaded method
+          _deleted_methods[_deleted_methods_length++] = oj;//old_method;
+          ++oj;
+        }
+      } else { // names don't match
+        if (old_method->name()->fast_compare(new_method->name()) > 0) {
+          // new method
+          _added_methods[_added_methods_length++] = nj;//new_method;
+          ++nj;
+        } else {
+          // deleted method
+          _deleted_methods[_deleted_methods_length++] = oj;//old_method;
+          ++oj;
+        }
+      }
+    }
+  }
+  assert(_matching_methods_length + _deleted_methods_length == _old_methods->length(), "sanity");
+  assert(_matching_methods_length + _added_methods_length == _new_methods->length(), "sanity");
+  RC_TRACE(0x00008000, ("Matching methods = %d / deleted methods = %d / added methods = %d",
+    _matching_methods_length, _deleted_methods_length, _added_methods_length));
+}
+
+
+
+// Install the redefinition of a class:
+//    - house keeping (flushing breakpoints and caches, deoptimizing
+//      dependent compiled code)
+//    - adjusting constant pool caches and vtables in other classes
+void VM_RedefineClasses::redefine_single_class(instanceKlassHandle the_new_class, TRAPS) {
+
+  ResourceMark rm(THREAD);
+
+  assert(the_new_class->old_version() != NULL, "Must not be null");
+  assert(the_new_class->old_version()->klass_part()->new_version() == the_new_class(), "Must equal");
+
+  instanceKlassHandle the_old_class = instanceKlassHandle(THREAD, the_new_class->old_version());
+
+#ifndef JVMTI_KERNEL
+  // Remove all breakpoints in methods of this class
+  JvmtiBreakpoints& jvmti_breakpoints = JvmtiCurrentBreakpoints::get_jvmti_breakpoints();
+  jvmti_breakpoints.clearall_in_class_at_safepoint(the_old_class());
+#endif // !JVMTI_KERNEL
+
+  if (the_old_class() == Universe::reflect_invoke_cache()->klass()) {
+    // We are redefining java.lang.reflect.Method. Method.invoke() is
+    // cached and users of the cache care about each active version of
+    // the method so we have to track this previous version.
+    // Do this before methods get switched
+    Universe::reflect_invoke_cache()->add_previous_version(
+      the_old_class->method_with_idnum(Universe::reflect_invoke_cache()->method_idnum()));
+  }
+
+  _old_methods = the_old_class->methods();
+  _new_methods = the_new_class->methods();
+  _the_class_oop = the_old_class();
+  compute_added_deleted_matching_methods();
+
+  // track which methods are EMCP for add_previous_version() call below
+  
+  // (tw) TODO: Check if we need the concept of EMCP?
+   BitMap emcp_methods(_old_methods->length());
+  int emcp_method_count = 0;
+  emcp_methods.clear();  // clears 0..(length() - 1)
+  
+  // We need to mark methods as old!!
+  check_methods_and_mark_as_obsolete(&emcp_methods, &emcp_method_count);
+  update_jmethod_ids();
+
+  // keep track of previous versions of this class
+  the_new_class->add_previous_version(the_old_class, &emcp_methods,
+    emcp_method_count);
+
+  // TODO:
+  transfer_old_native_function_registrations(the_old_class);
+
+
+#ifdef ASSERT
+
+//  klassOop systemLookup1 = SystemDictionary::resolve_or_null(the_old_class->name(), the_old_class->class_loader(), the_old_class->protection_domain(), THREAD);
+//  assert(systemLookup1 == the_new_class(), "New class must be in system dictionary!");
+
+  //JNIHandles::verify();
+
+//  klassOop systemLookup = SystemDictionary::resolve_or_null(the_old_class->name(), the_old_class->class_loader(), the_old_class->protection_domain(), THREAD);
+
+//  assert(systemLookup == the_new_class(), "New class must be in system dictionary!");
+  assert(the_new_class->old_version() != NULL, "Must not be null");
+  assert(the_new_class->old_version()->klass_part()->new_version() == the_new_class(), "Must equal");
+
+  for (int i=0; i<the_new_class->methods()->length(); i++) {
+    assert(((methodOop)the_new_class->methods()->obj_at(i))->method_holder() == the_new_class(), "method holder must match!");
+  }
+
+  _old_methods->verify();
+  _new_methods->verify();
+
+  the_new_class->vtable()->verify(tty);
+  the_old_class->vtable()->verify(tty);
+
+#endif
+
+  // increment the classRedefinedCount field in the_class and in any
+  // direct and indirect subclasses of the_class
+  increment_class_counter((instanceKlass *)the_old_class()->klass_part(), THREAD);
+
+}
+
+
+void VM_RedefineClasses::check_methods_and_mark_as_obsolete(BitMap *emcp_methods, int * emcp_method_count_p) {
+    RC_TRACE(0x00008000, ("Checking matching methods for EMCP"));
+    *emcp_method_count_p = 0;
+    int obsolete_count = 0;
+    int old_index = 0;
+    for (int j = 0; j < _matching_methods_length; ++j, ++old_index) {
+      methodOop old_method = (methodOop)_old_methods->obj_at(_matching_old_methods[j]);
+      methodOop new_method = (methodOop)_new_methods->obj_at(_matching_new_methods[j]);
+      methodOop old_array_method;
+
+      // Maintain an old_index into the _old_methods array by skipping
+      // deleted methods
+      while ((old_array_method = (methodOop) _old_methods->obj_at(old_index))
+        != old_method) {
+          ++old_index;
+      }
+
+      if (MethodComparator::methods_EMCP(old_method, new_method)) {
+        // The EMCP definition from JSR-163 requires the bytecodes to be
+        // the same with the exception of constant pool indices which may
+        // differ. However, the constants referred to by those indices
+        // must be the same.
+        //
+        // We use methods_EMCP() for comparison since constant pool
+        // merging can remove duplicate constant pool entries that were
+        // present in the old method and removed from the rewritten new
+        // method. A faster binary comparison function would consider the
+        // old and new methods to be different when they are actually
+        // EMCP.
+
+        // track which methods are EMCP for add_previous_version() call
+        emcp_methods->set_bit(old_index);
+        (*emcp_method_count_p)++;
+
+        // An EMCP method is _not_ obsolete. An obsolete method has a
+        // different jmethodID than the current method. An EMCP method
+        // has the same jmethodID as the current method. Having the
+        // same jmethodID for all EMCP versions of a method allows for
+        // a consistent view of the EMCP methods regardless of which
+        // EMCP method you happen to have in hand. For example, a
+        // breakpoint set in one EMCP method will work for all EMCP
+        // versions of the method including the current one.
+
+        old_method->set_new_version(new_method);
+        new_method->set_old_version(old_method);
+
+        RC_TRACE(0x00008000, ("Found EMCP method %s", old_method->name_and_sig_as_C_string()));
+
+        // Transfer breakpoints
+        instanceKlass *ik = instanceKlass::cast(old_method->method_holder());
+        for (BreakpointInfo* bp = ik->breakpoints(); bp != NULL; bp = bp->next()) {
+          RC_TRACE(0x00000002, ("Checking breakpoint"));
+          RC_TRACE(0x00000002, ("%d / %d",
+            bp->match(old_method), bp->match(new_method)));
+          if (bp->match(old_method)) {
+            assert(bp->match(new_method), "if old method is method, then new method must match too");
+            RC_TRACE(0x00000002, ("Found a breakpoint in an old EMCP method"));
+            new_method->set_breakpoint(bp->bci());
+          }
+        }
+
+
+
+      } else {
+        // mark obsolete methods as such
+        old_method->set_is_obsolete();
+        obsolete_count++;
+
+        // With tracing we try not to "yack" too much. The position of
+        // this trace assumes there are fewer obsolete methods than
+        // EMCP methods.
+        RC_TRACE(0x00008000, ("mark %s(%s) as obsolete",
+          old_method->name()->as_C_string(),
+          old_method->signature()->as_C_string()));
+      }
+      old_method->set_is_old();
+    }
+    for (int i = 0; i < _deleted_methods_length; ++i) {
+      methodOop old_method = (methodOop)_old_methods->obj_at(_deleted_methods[i]);
+
+      //assert(old_method->vtable_index() < 0,
+      //  "cannot delete methods with vtable entries");;
+
+      // Mark all deleted methods as old and obsolete
+      old_method->set_is_old();
+      old_method->set_is_obsolete();
+      ++obsolete_count;
       // With tracing we try not to "yack" too much. The position of
       // this trace assumes there are fewer obsolete methods than
       // EMCP methods.
-      RC_TRACE(0x00000100, ("mark %s(%s) as obsolete",
+      RC_TRACE(0x00008000, ("mark deleted %s(%s) as obsolete",
         old_method->name()->as_C_string(),
         old_method->signature()->as_C_string()));
     }
-    old_method->set_is_old();
-  }
-  for (int i = 0; i < _deleted_methods_length; ++i) {
-    methodOop old_method = _deleted_methods[i];
-
-    assert(old_method->vtable_index() < 0,
-           "cannot delete methods with vtable entries");;
-
-    // Mark all deleted methods as old and obsolete
-    old_method->set_is_old();
-    old_method->set_is_obsolete();
-    ++obsolete_count;
-    // With tracing we try not to "yack" too much. The position of
-    // this trace assumes there are fewer obsolete methods than
-    // EMCP methods.
-    RC_TRACE(0x00000100, ("mark deleted %s(%s) as obsolete",
-                          old_method->name()->as_C_string(),
-                          old_method->signature()->as_C_string()));
-  }
-  assert((*emcp_method_count_p + obsolete_count) == _old_methods->length(),
-    "sanity check");
-  RC_TRACE(0x00000100, ("EMCP_cnt=%d, obsolete_cnt=%d", *emcp_method_count_p,
-    obsolete_count));
+    //assert((*emcp_method_count_p + obsolete_count) == _old_methods->length(), "sanity check");
+    RC_TRACE(0x00008000, ("EMCP_cnt=%d, obsolete_cnt=%d !", *emcp_method_count_p, obsolete_count));
 }
+
+// Increment the classRedefinedCount field in the specific instanceKlass
+// and in all direct and indirect subclasses.
+void VM_RedefineClasses::increment_class_counter(instanceKlass *ik, TRAPS) {
+  oop class_mirror = ik->java_mirror();
+  klassOop class_oop = java_lang_Class::as_klassOop(class_mirror);
+  int new_count = java_lang_Class::classRedefinedCount(class_mirror) + 1;
+  java_lang_Class::set_classRedefinedCount(class_mirror, new_count);
+  RC_TRACE(0x00008000, ("updated count for class=%s to %d", ik->external_name(), new_count));
+}
+
+#ifndef PRODUCT
+void VM_RedefineClasses::check_class(klassOop k_oop, TRAPS) {
+  Klass *k = k_oop->klass_part();
+  if (k->oop_is_instance()) {
+    HandleMark hm(THREAD);
+    instanceKlass *ik = (instanceKlass *) k;
+    assert(ik->is_newest_version(), "must be latest version in system dictionary");
+
+    if (ik->vtable_length() > 0) {
+      ResourceMark rm(THREAD);
+      if (!ik->vtable()->check_no_old_entries()) {
+        RC_TRACE(0x00000001, ("size of class: %d\n",
+          k_oop->size()));
+        RC_TRACE(0x00000001, ("klassVtable::check_no_old_entries failure -- OLD method found -- class: %s",
+          ik->signature_name()));
+        assert(false, "OLD method found");
+      }
+
+      ik->vtable()->verify(tty, true);
+    }
+  }
+}
+
+#endif
+
+VM_RedefineClasses::FindAffectedKlassesClosure::FindAffectedKlassesClosure( GrowableArray<instanceKlassHandle> *original_klasses, GrowableArray<instanceKlassHandle> *result )
+{
+  assert(original_klasses != NULL && result != NULL, "");
+  this->_original_klasses = original_klasses;
+  this->_result = result;
+  SystemDictionary::classes_do(this);
+}
+
+void VM_RedefineClasses::FindAffectedKlassesClosure::do_object( oop obj )
+{
+  klassOop klass = (klassOop)obj;
+  assert(!_result->contains(klass), "must not occur more than once!");
+  assert(klass->klass_part()->new_version() == NULL, "Only last version is valid entry in system dictionary");
+
+  for(int i=0; i<_original_klasses->length(); i++) {
+    instanceKlassHandle cur = _original_klasses->at(i);
+    if (cur() != klass && klass->klass_part()->is_subtype_of(cur()) && !_original_klasses->contains(klass)) {  
+      RC_TRACE(0x00008000, ("Found affected class: %s", klass->klass_part()->name()->as_C_string()));
+      _result->append(klass);
+      break;
+    }
+  }
+}
+
+jvmtiError VM_RedefineClasses::do_topological_class_sorting( const jvmtiClassDefinition *class_defs, int class_count, GrowableArray<instanceKlassHandle> *affected, GrowableArray<instanceKlassHandle> *arr, TRAPS)
+{
+  GrowableArray< Pair<klassOop, klassOop> > *links = new GrowableArray< Pair<klassOop, klassOop> >();
+
+  for (int i=0; i<class_count; i++) {
+
+    oop mirror = JNIHandles::resolve_non_null(class_defs[i].klass);
+    klassOop the_class_oop = java_lang_Class::as_klassOop(mirror);
+    instanceKlassHandle the_class(THREAD, the_class_oop);
+    Handle the_class_loader(THREAD, the_class->class_loader());
+    Handle protection_domain(THREAD, the_class->protection_domain());
+
+    ClassFileStream st((u1*) class_defs[i].class_bytes,
+      class_defs[i].class_byte_count, (char *)"__VM_RedefineClasses__");
+    ClassFileParser cfp(&st);
+
+    GrowableArray<Symbol*> symbolArr;
+    RC_TRACE(0x00000002, ("Before find super symbols of class %s",
+      the_class->name()->as_C_string()));
+    cfp.findSuperSymbols(the_class->name(), the_class_loader, protection_domain, the_class, symbolArr, THREAD);
+    
+    for (int j=0; j<symbolArr.length(); j++) {
+      Symbol* sym = symbolArr.at(j);
+
+      RC_TRACE(0x00008000, ("Before adding link to super class %s", sym->as_C_string()));
+
+      for (int k=0; k<arr->length(); k++) {
+        klassOop curOop = arr->at(k)();
+        // (tw) TODO: Check if we get aliasing problems with different class loaders?
+        if (curOop->klass_part()->name() == sym /*&& curOop->klass_part()->class_loader() == the_class_loader()*/) {
+          RC_TRACE(0x00000002, ("Found class to link"));
+          links->append(Pair<klassOop, klassOop>(curOop, the_class()));
+          break;
+        }
+      }
+    }
+  }
+
+
+  RC_TRACE(0x00000001, ("Identified links between classes! "));
+
+  for (int i=0; i<affected->length(); i++) {
+
+    instanceKlassHandle klass = affected->at(i);
+
+    klassOop superKlass = klass->super();
+    if (affected->contains(superKlass)) {
+      links->append(Pair<klassOop, klassOop>(superKlass, klass()));
+    }
+
+    objArrayOop superInterfaces = klass->local_interfaces();
+    for (int j=0; j<superInterfaces->length(); j++) {
+      klassOop interfaceKlass = (klassOop)superInterfaces->obj_at(j);
+      if (arr->contains(interfaceKlass)) {
+        links->append(Pair<klassOop, klassOop>(interfaceKlass, klass()));
+      }
+    }
+  }
+
+  if (RC_TRACE_ENABLED(0x00000002))  {
+    RC_TRACE(0x00000002, ("Identified links: "));
+    for (int i=0; i<links->length(); i++) {
+      RC_TRACE(0x00000002, ("%s to %s",
+        links->at(i).left()->klass_part()->name()->as_C_string(),
+        links->at(i).right()->klass_part()->name()->as_C_string()));
+    }
+  }
+
+  for (int i=0; i<arr->length(); i++) {
+
+    int j;
+    for (j=i; j<arr->length(); j++) {
+
+      int k;
+      for (k=0; k<links->length(); k++) {
+
+        klassOop k1 = links->adr_at(k)->right();
+        klassOop k2 = arr->at(j)();
+        if (k1 == k2) {
+          break;
+        }
+      }
+
+      if (k == links->length()) {
+        break;
+      }
+    }
+
+    if (j == arr->length()) {
+      // circle detected
+      return JVMTI_ERROR_CIRCULAR_CLASS_DEFINITION;
+    }
+
+    for (int k=0; k<links->length(); k++) {
+      if (links->adr_at(k)->left() == arr->at(j)()) {
+        links->at_put(k, links->at(links->length() - 1));
+        links->remove_at(links->length() - 1);
+        k--;
+      }
+    }
+
+    instanceKlassHandle tmp = arr->at(j);
+    arr->at_put(j, arr->at(i));
+    arr->at_put(i, tmp);
+  }
+
+  return JVMTI_ERROR_NONE;
+}
+
+void VM_RedefineClasses::oops_do(OopClosure *closure) {
+
+  if (_updated_oops != NULL) {
+    for (int i=0; i<_updated_oops->length(); i++) {
+      closure->do_oop(_updated_oops->adr_at(i));
+    }
+  }
+}
+
+void VM_RedefineClasses::transfer_special_access_flags(fieldDescriptor *from, fieldDescriptor *to) {
+  to->set_is_field_modification_watched(from->is_field_modification_watched());
+  to->set_is_field_access_watched(from->is_field_access_watched());
+  if (from->is_field_modification_watched() || from->is_field_access_watched()) {
+    RC_TRACE(0x00000002, ("Transfered watch for field %s",
+      from->name()->as_C_string()));
+  }
+  update_klass_field_access_flag(to);
+}
+
+void VM_RedefineClasses::update_klass_field_access_flag(fieldDescriptor *fd) {
+  instanceKlass* ik = instanceKlass::cast(fd->field_holder());
+  typeArrayOop fields = ik->fields();
+  fields->ushort_at_put(fd->index(), (jushort)fd->access_flags().as_short());
+}
+
 
 // This internal class transfers the native function registration from old methods
 // to new methods.  It is designed to handle both the simple case of unchanged
@@ -2832,7 +3103,7 @@ void VM_RedefineClasses::check_methods_and_mark_as_obsolete(
 // Same, caused by prefix removal only  3_2_1_m ->  3_2_m
 //
 class TransferNativeFunctionRegistration {
- private:
+private:
   instanceKlassHandle the_class;
   int prefix_count;
   char** prefixes;
@@ -2845,42 +3116,42 @@ class TransferNativeFunctionRegistration {
   //    (2) with the prefix.
   // where 'prefix' is the prefix at that 'depth' (first prefix, second prefix,...)
   methodOop search_prefix_name_space(int depth, char* name_str, size_t name_len,
-                                     Symbol* signature) {
-    TempNewSymbol name_symbol = SymbolTable::probe(name_str, (int)name_len);
-    if (name_symbol != NULL) {
-      methodOop method = Klass::cast(the_class())->lookup_method(name_symbol, signature);
-      if (method != NULL) {
-        // Even if prefixed, intermediate methods must exist.
-        if (method->is_native()) {
-          // Wahoo, we found a (possibly prefixed) version of the method, return it.
-          return method;
-        }
-        if (depth < prefix_count) {
-          // Try applying further prefixes (other than this one).
-          method = search_prefix_name_space(depth+1, name_str, name_len, signature);
-          if (method != NULL) {
-            return method; // found
+    Symbol* signature) {
+      Symbol* name_symbol = SymbolTable::probe(name_str, (int)name_len);
+      if (name_symbol != NULL) {
+        methodOop method = Klass::cast(the_class()->klass_part()->new_version())->lookup_method(name_symbol, signature);
+        if (method != NULL) {
+          // Even if prefixed, intermediate methods must exist.
+          if (method->is_native()) {
+            // Wahoo, we found a (possibly prefixed) version of the method, return it.
+            return method;
           }
+          if (depth < prefix_count) {
+            // Try applying further prefixes (other than this one).
+            method = search_prefix_name_space(depth+1, name_str, name_len, signature);
+            if (method != NULL) {
+              return method; // found
+            }
 
-          // Try adding this prefix to the method name and see if it matches
-          // another method name.
-          char* prefix = prefixes[depth];
-          size_t prefix_len = strlen(prefix);
-          size_t trial_len = name_len + prefix_len;
-          char* trial_name_str = NEW_RESOURCE_ARRAY(char, trial_len + 1);
-          strcpy(trial_name_str, prefix);
-          strcat(trial_name_str, name_str);
-          method = search_prefix_name_space(depth+1, trial_name_str, trial_len,
-                                            signature);
-          if (method != NULL) {
-            // If found along this branch, it was prefixed, mark as such
-            method->set_is_prefixed_native();
-            return method; // found
+            // Try adding this prefix to the method name and see if it matches
+            // another method name.
+            char* prefix = prefixes[depth];
+            size_t prefix_len = strlen(prefix);
+            size_t trial_len = name_len + prefix_len;
+            char* trial_name_str = NEW_RESOURCE_ARRAY(char, trial_len + 1);
+            strcpy(trial_name_str, prefix);
+            strcat(trial_name_str, name_str);
+            method = search_prefix_name_space(depth+1, trial_name_str, trial_len,
+              signature);
+            if (method != NULL) {
+              // If found along this branch, it was prefixed, mark as such
+              method->set_is_prefixed_native();
+              return method; // found
+            }
           }
         }
       }
-    }
-    return NULL;  // This whole branch bore nothing
+      return NULL;  // This whole branch bore nothing
   }
 
   // Return the method name with old prefixes stripped away.
@@ -2905,10 +3176,10 @@ class TransferNativeFunctionRegistration {
     ResourceMark rm;
     char* name_str = method_name_without_prefixes(method);
     return search_prefix_name_space(0, name_str, strlen(name_str),
-                                    method->signature());
+      method->signature());
   }
 
- public:
+public:
 
   // Construct a native method transfer processor for this class.
   TransferNativeFunctionRegistration(instanceKlassHandle _the_class) {
@@ -2919,9 +3190,9 @@ class TransferNativeFunctionRegistration {
   }
 
   // Attempt to transfer any of the old or deleted methods that are native
-  void transfer_registrations(methodOop* old_methods, int methods_length) {
+  void transfer_registrations(instanceKlassHandle old_klass, int* old_methods, int methods_length) {
     for (int j = 0; j < methods_length; j++) {
-      methodOop old_method = old_methods[j];
+      methodOop old_method = (methodOop)old_klass->methods()->obj_at(old_methods[j]);
 
       if (old_method->is_native() && old_method->has_native_function()) {
         methodOop new_method = strip_and_search_for_new_native(old_method);
@@ -2930,7 +3201,9 @@ class TransferNativeFunctionRegistration {
           // Redefine does not send events (except CFLH), certainly not this
           // behind the scenes re-registration.
           new_method->set_native_function(old_method->native_function(),
-                              !methodOopDesc::native_bind_event_is_interesting);
+            !methodOopDesc::native_bind_event_is_interesting);
+
+          RC_TRACE(0x00008000, ("Transfering native function for method %s", old_method->name()->as_C_string()));
         }
       }
     }
@@ -2938,534 +3211,8 @@ class TransferNativeFunctionRegistration {
 };
 
 // Don't lose the association between a native method and its JNI function.
-void VM_RedefineClasses::transfer_old_native_function_registrations(instanceKlassHandle the_class) {
-  TransferNativeFunctionRegistration transfer(the_class);
-  transfer.transfer_registrations(_deleted_methods, _deleted_methods_length);
-  transfer.transfer_registrations(_matching_old_methods, _matching_methods_length);
-}
-
-// Deoptimize all compiled code that depends on this class.
-//
-// If the can_redefine_classes capability is obtained in the onload
-// phase then the compiler has recorded all dependencies from startup.
-// In that case we need only deoptimize and throw away all compiled code
-// that depends on the class.
-//
-// If can_redefine_classes is obtained sometime after the onload
-// phase then the dependency information may be incomplete. In that case
-// the first call to RedefineClasses causes all compiled code to be
-// thrown away. As can_redefine_classes has been obtained then
-// all future compilations will record dependencies so second and
-// subsequent calls to RedefineClasses need only throw away code
-// that depends on the class.
-//
-void VM_RedefineClasses::flush_dependent_code(instanceKlassHandle k_h, TRAPS) {
-  assert_locked_or_safepoint(Compile_lock);
-
-  // All dependencies have been recorded from startup or this is a second or
-  // subsequent use of RedefineClasses
-  if (JvmtiExport::all_dependencies_are_recorded()) {
-    Universe::flush_evol_dependents_on(k_h);
-  } else {
-    CodeCache::mark_all_nmethods_for_deoptimization();
-
-    ResourceMark rm(THREAD);
-    DeoptimizationMarker dm;
-
-    // Deoptimize all activations depending on marked nmethods
-    Deoptimization::deoptimize_dependents();
-
-    // Make the dependent methods not entrant (in VM_Deoptimize they are made zombies)
-    CodeCache::make_marked_nmethods_not_entrant();
-
-    // From now on we know that the dependency information is complete
-    JvmtiExport::set_all_dependencies_are_recorded(true);
-  }
-}
-
-void VM_RedefineClasses::compute_added_deleted_matching_methods() {
-  methodOop old_method;
-  methodOop new_method;
-
-  _matching_old_methods = NEW_RESOURCE_ARRAY(methodOop, _old_methods->length());
-  _matching_new_methods = NEW_RESOURCE_ARRAY(methodOop, _old_methods->length());
-  _added_methods        = NEW_RESOURCE_ARRAY(methodOop, _new_methods->length());
-  _deleted_methods      = NEW_RESOURCE_ARRAY(methodOop, _old_methods->length());
-
-  _matching_methods_length = 0;
-  _deleted_methods_length  = 0;
-  _added_methods_length    = 0;
-
-  int nj = 0;
-  int oj = 0;
-  while (true) {
-    if (oj >= _old_methods->length()) {
-      if (nj >= _new_methods->length()) {
-        break; // we've looked at everything, done
-      }
-      // New method at the end
-      new_method = (methodOop) _new_methods->obj_at(nj);
-      _added_methods[_added_methods_length++] = new_method;
-      ++nj;
-    } else if (nj >= _new_methods->length()) {
-      // Old method, at the end, is deleted
-      old_method = (methodOop) _old_methods->obj_at(oj);
-      _deleted_methods[_deleted_methods_length++] = old_method;
-      ++oj;
-    } else {
-      old_method = (methodOop) _old_methods->obj_at(oj);
-      new_method = (methodOop) _new_methods->obj_at(nj);
-      if (old_method->name() == new_method->name()) {
-        if (old_method->signature() == new_method->signature()) {
-          _matching_old_methods[_matching_methods_length  ] = old_method;
-          _matching_new_methods[_matching_methods_length++] = new_method;
-          ++nj;
-          ++oj;
-        } else {
-          // added overloaded have already been moved to the end,
-          // so this is a deleted overloaded method
-          _deleted_methods[_deleted_methods_length++] = old_method;
-          ++oj;
-        }
-      } else { // names don't match
-        if (old_method->name()->fast_compare(new_method->name()) > 0) {
-          // new method
-          _added_methods[_added_methods_length++] = new_method;
-          ++nj;
-        } else {
-          // deleted method
-          _deleted_methods[_deleted_methods_length++] = old_method;
-          ++oj;
-        }
-      }
-    }
-  }
-  assert(_matching_methods_length + _deleted_methods_length == _old_methods->length(), "sanity");
-  assert(_matching_methods_length + _added_methods_length == _new_methods->length(), "sanity");
-}
-
-
-
-// Install the redefinition of a class:
-//    - house keeping (flushing breakpoints and caches, deoptimizing
-//      dependent compiled code)
-//    - replacing parts in the_class with parts from scratch_class
-//    - adding a weak reference to track the obsolete but interesting
-//      parts of the_class
-//    - adjusting constant pool caches and vtables in other classes
-//      that refer to methods in the_class. These adjustments use the
-//      SystemDictionary::classes_do() facility which only allows
-//      a helper method to be specified. The interesting parameters
-//      that we would like to pass to the helper method are saved in
-//      static global fields in the VM operation.
-void VM_RedefineClasses::redefine_single_class(jclass the_jclass,
-       instanceKlassHandle scratch_class, TRAPS) {
-
-  RC_TIMER_START(_timer_rsc_phase1);
-
-  oop the_class_mirror = JNIHandles::resolve_non_null(the_jclass);
-  klassOop the_class_oop = java_lang_Class::as_klassOop(the_class_mirror);
-  instanceKlassHandle the_class = instanceKlassHandle(THREAD, the_class_oop);
-
-  // Remove all breakpoints in methods of this class
-  JvmtiBreakpoints& jvmti_breakpoints = JvmtiCurrentBreakpoints::get_jvmti_breakpoints();
-  jvmti_breakpoints.clearall_in_class_at_safepoint(the_class_oop);
-
-  if (the_class_oop == Universe::reflect_invoke_cache()->klass()) {
-    // We are redefining java.lang.reflect.Method. Method.invoke() is
-    // cached and users of the cache care about each active version of
-    // the method so we have to track this previous version.
-    // Do this before methods get switched
-    Universe::reflect_invoke_cache()->add_previous_version(
-      the_class->method_with_idnum(Universe::reflect_invoke_cache()->method_idnum()));
-  }
-
-  // Deoptimize all compiled code that depends on this class
-  flush_dependent_code(the_class, THREAD);
-
-  _old_methods = the_class->methods();
-  _new_methods = scratch_class->methods();
-  _the_class_oop = the_class_oop;
-  compute_added_deleted_matching_methods();
-  update_jmethod_ids();
-
-  // Attach new constant pool to the original klass. The original
-  // klass still refers to the old constant pool (for now).
-  scratch_class->constants()->set_pool_holder(the_class());
-
-#if 0
-  // In theory, with constant pool merging in place we should be able
-  // to save space by using the new, merged constant pool in place of
-  // the old constant pool(s). By "pool(s)" I mean the constant pool in
-  // the klass version we are replacing now and any constant pool(s) in
-  // previous versions of klass. Nice theory, doesn't work in practice.
-  // When this code is enabled, even simple programs throw NullPointer
-  // exceptions. I'm guessing that this is caused by some constant pool
-  // cache difference between the new, merged constant pool and the
-  // constant pool that was just being used by the klass. I'm keeping
-  // this code around to archive the idea, but the code has to remain
-  // disabled for now.
-
-  // Attach each old method to the new constant pool. This can be
-  // done here since we are past the bytecode verification and
-  // constant pool optimization phases.
-  for (int i = _old_methods->length() - 1; i >= 0; i--) {
-    methodOop method = (methodOop)_old_methods->obj_at(i);
-    method->set_constants(scratch_class->constants());
-  }
-
-  {
-    // walk all previous versions of the klass
-    instanceKlass *ik = (instanceKlass *)the_class()->klass_part();
-    PreviousVersionWalker pvw(ik);
-    instanceKlassHandle ikh;
-    do {
-      ikh = pvw.next_previous_version();
-      if (!ikh.is_null()) {
-        ik = ikh();
-
-        // attach previous version of klass to the new constant pool
-        ik->set_constants(scratch_class->constants());
-
-        // Attach each method in the previous version of klass to the
-        // new constant pool
-        objArrayOop prev_methods = ik->methods();
-        for (int i = prev_methods->length() - 1; i >= 0; i--) {
-          methodOop method = (methodOop)prev_methods->obj_at(i);
-          method->set_constants(scratch_class->constants());
-        }
-      }
-    } while (!ikh.is_null());
-  }
-#endif
-
-  // Replace methods and constantpool
-  the_class->set_methods(_new_methods);
-  scratch_class->set_methods(_old_methods);     // To prevent potential GCing of the old methods,
-                                          // and to be able to undo operation easily.
-
-  constantPoolOop old_constants = the_class->constants();
-  the_class->set_constants(scratch_class->constants());
-  scratch_class->set_constants(old_constants);  // See the previous comment.
-#if 0
-  // We are swapping the guts of "the new class" with the guts of "the
-  // class". Since the old constant pool has just been attached to "the
-  // new class", it seems logical to set the pool holder in the old
-  // constant pool also. However, doing this will change the observable
-  // class hierarchy for any old methods that are still executing. A
-  // method can query the identity of its "holder" and this query uses
-  // the method's constant pool link to find the holder. The change in
-  // holding class from "the class" to "the new class" can confuse
-  // things.
-  //
-  // Setting the old constant pool's holder will also cause
-  // verification done during vtable initialization below to fail.
-  // During vtable initialization, the vtable's class is verified to be
-  // a subtype of the method's holder. The vtable's class is "the
-  // class" and the method's holder is gotten from the constant pool
-  // link in the method itself. For "the class"'s directly implemented
-  // methods, the method holder is "the class" itself (as gotten from
-  // the new constant pool). The check works fine in this case. The
-  // check also works fine for methods inherited from super classes.
-  //
-  // Miranda methods are a little more complicated. A miranda method is
-  // provided by an interface when the class implementing the interface
-  // does not provide its own method.  These interfaces are implemented
-  // internally as an instanceKlass. These special instanceKlasses
-  // share the constant pool of the class that "implements" the
-  // interface. By sharing the constant pool, the method holder of a
-  // miranda method is the class that "implements" the interface. In a
-  // non-redefine situation, the subtype check works fine. However, if
-  // the old constant pool's pool holder is modified, then the check
-  // fails because there is no class hierarchy relationship between the
-  // vtable's class and "the new class".
-
-  old_constants->set_pool_holder(scratch_class());
-#endif
-
-  // track which methods are EMCP for add_previous_version() call below
-  BitMap emcp_methods(_old_methods->length());
-  int emcp_method_count = 0;
-  emcp_methods.clear();  // clears 0..(length() - 1)
-  check_methods_and_mark_as_obsolete(&emcp_methods, &emcp_method_count);
-  transfer_old_native_function_registrations(the_class);
-
-  // The class file bytes from before any retransformable agents mucked
-  // with them was cached on the scratch class, move to the_class.
-  // Note: we still want to do this if nothing needed caching since it
-  // should get cleared in the_class too.
-  if (the_class->get_cached_class_file_bytes() == 0) {
-    // the_class doesn't have a cache yet so copy it
-    the_class->set_cached_class_file(
-      scratch_class->get_cached_class_file_bytes(),
-      scratch_class->get_cached_class_file_len());
-  }
-#ifndef PRODUCT
-  else {
-    assert(the_class->get_cached_class_file_bytes() ==
-      scratch_class->get_cached_class_file_bytes(), "cache ptrs must match");
-    assert(the_class->get_cached_class_file_len() ==
-      scratch_class->get_cached_class_file_len(), "cache lens must match");
-  }
-#endif
-
-  // Replace inner_classes
-  typeArrayOop old_inner_classes = the_class->inner_classes();
-  the_class->set_inner_classes(scratch_class->inner_classes());
-  scratch_class->set_inner_classes(old_inner_classes);
-
-  // Initialize the vtable and interface table after
-  // methods have been rewritten
-  {
-    ResourceMark rm(THREAD);
-    // no exception should happen here since we explicitly
-    // do not check loader constraints.
-    // compare_and_normalize_class_versions has already checked:
-    //  - classloaders unchanged, signatures unchanged
-    //  - all instanceKlasses for redefined classes reused & contents updated
-    the_class->vtable()->initialize_vtable(false, THREAD);
-    the_class->itable()->initialize_itable(false, THREAD);
-    assert(!HAS_PENDING_EXCEPTION || (THREAD->pending_exception()->is_a(SystemDictionary::ThreadDeath_klass())), "redefine exception");
-  }
-
-  // Leave arrays of jmethodIDs and itable index cache unchanged
-
-  // Copy the "source file name" attribute from new class version
-  the_class->set_source_file_name(scratch_class->source_file_name());
-
-  // Copy the "source debug extension" attribute from new class version
-  the_class->set_source_debug_extension(
-    scratch_class->source_debug_extension(),
-    scratch_class->source_debug_extension() == NULL ? 0 :
-    (int)strlen(scratch_class->source_debug_extension()));
-
-  // Use of javac -g could be different in the old and the new
-  if (scratch_class->access_flags().has_localvariable_table() !=
-      the_class->access_flags().has_localvariable_table()) {
-
-    AccessFlags flags = the_class->access_flags();
-    if (scratch_class->access_flags().has_localvariable_table()) {
-      flags.set_has_localvariable_table();
-    } else {
-      flags.clear_has_localvariable_table();
-    }
-    the_class->set_access_flags(flags);
-  }
-
-  // Replace class annotation fields values
-  typeArrayOop old_class_annotations = the_class->class_annotations();
-  the_class->set_class_annotations(scratch_class->class_annotations());
-  scratch_class->set_class_annotations(old_class_annotations);
-
-  // Replace fields annotation fields values
-  objArrayOop old_fields_annotations = the_class->fields_annotations();
-  the_class->set_fields_annotations(scratch_class->fields_annotations());
-  scratch_class->set_fields_annotations(old_fields_annotations);
-
-  // Replace methods annotation fields values
-  objArrayOop old_methods_annotations = the_class->methods_annotations();
-  the_class->set_methods_annotations(scratch_class->methods_annotations());
-  scratch_class->set_methods_annotations(old_methods_annotations);
-
-  // Replace methods parameter annotation fields values
-  objArrayOop old_methods_parameter_annotations =
-    the_class->methods_parameter_annotations();
-  the_class->set_methods_parameter_annotations(
-    scratch_class->methods_parameter_annotations());
-  scratch_class->set_methods_parameter_annotations(old_methods_parameter_annotations);
-
-  // Replace methods default annotation fields values
-  objArrayOop old_methods_default_annotations =
-    the_class->methods_default_annotations();
-  the_class->set_methods_default_annotations(
-    scratch_class->methods_default_annotations());
-  scratch_class->set_methods_default_annotations(old_methods_default_annotations);
-
-  // Replace minor version number of class file
-  u2 old_minor_version = the_class->minor_version();
-  the_class->set_minor_version(scratch_class->minor_version());
-  scratch_class->set_minor_version(old_minor_version);
-
-  // Replace major version number of class file
-  u2 old_major_version = the_class->major_version();
-  the_class->set_major_version(scratch_class->major_version());
-  scratch_class->set_major_version(old_major_version);
-
-  // Replace CP indexes for class and name+type of enclosing method
-  u2 old_class_idx  = the_class->enclosing_method_class_index();
-  u2 old_method_idx = the_class->enclosing_method_method_index();
-  the_class->set_enclosing_method_indices(
-    scratch_class->enclosing_method_class_index(),
-    scratch_class->enclosing_method_method_index());
-  scratch_class->set_enclosing_method_indices(old_class_idx, old_method_idx);
-
-  // keep track of previous versions of this class
-  the_class->add_previous_version(scratch_class, &emcp_methods,
-    emcp_method_count);
-
-  RC_TIMER_STOP(_timer_rsc_phase1);
-  RC_TIMER_START(_timer_rsc_phase2);
-
-  // Adjust constantpool caches and vtables for all classes
-  // that reference methods of the evolved class.
-  SystemDictionary::classes_do(adjust_cpool_cache_and_vtable, THREAD);
-
-  if (the_class->oop_map_cache() != NULL) {
-    // Flush references to any obsolete methods from the oop map cache
-    // so that obsolete methods are not pinned.
-    the_class->oop_map_cache()->flush_obsolete_entries();
-  }
-
-  // increment the classRedefinedCount field in the_class and in any
-  // direct and indirect subclasses of the_class
-  increment_class_counter((instanceKlass *)the_class()->klass_part(), THREAD);
-
-  // RC_TRACE macro has an embedded ResourceMark
-  RC_TRACE_WITH_THREAD(0x00000001, THREAD,
-    ("redefined name=%s, count=%d (avail_mem=" UINT64_FORMAT "K)",
-    the_class->external_name(),
-    java_lang_Class::classRedefinedCount(the_class_mirror),
-    os::available_memory() >> 10));
-
-  RC_TIMER_STOP(_timer_rsc_phase2);
-} // end redefine_single_class()
-
-
-// Increment the classRedefinedCount field in the specific instanceKlass
-// and in all direct and indirect subclasses.
-void VM_RedefineClasses::increment_class_counter(instanceKlass *ik, TRAPS) {
-  oop class_mirror = ik->java_mirror();
-  klassOop class_oop = java_lang_Class::as_klassOop(class_mirror);
-  int new_count = java_lang_Class::classRedefinedCount(class_mirror) + 1;
-  java_lang_Class::set_classRedefinedCount(class_mirror, new_count);
-
-  if (class_oop != _the_class_oop) {
-    // _the_class_oop count is printed at end of redefine_single_class()
-    RC_TRACE_WITH_THREAD(0x00000008, THREAD,
-      ("updated count in subclass=%s to %d", ik->external_name(), new_count));
-  }
-
-  for (Klass *subk = ik->subklass(); subk != NULL;
-       subk = subk->next_sibling()) {
-    if (subk->oop_is_instance()) {
-      // Only update instanceKlasses
-      instanceKlass *subik = (instanceKlass*)subk;
-      // recursively do subclasses of the current subclass
-      increment_class_counter(subik, THREAD);
-    }
-  }
-}
-
-void VM_RedefineClasses::check_class(klassOop k_oop,
-       oop initiating_loader, TRAPS) {
-  Klass *k = k_oop->klass_part();
-  if (k->oop_is_instance()) {
-    HandleMark hm(THREAD);
-    instanceKlass *ik = (instanceKlass *) k;
-    bool no_old_methods = true;  // be optimistic
-    ResourceMark rm(THREAD);
-
-    // a vtable should never contain old or obsolete methods
-    if (ik->vtable_length() > 0 &&
-        !ik->vtable()->check_no_old_or_obsolete_entries()) {
-      if (RC_TRACE_ENABLED(0x00004000)) {
-        RC_TRACE_WITH_THREAD(0x00004000, THREAD,
-          ("klassVtable::check_no_old_or_obsolete_entries failure"
-           " -- OLD or OBSOLETE method found -- class: %s",
-           ik->signature_name()));
-        ik->vtable()->dump_vtable();
-      }
-      no_old_methods = false;
-    }
-
-    // an itable should never contain old or obsolete methods
-    if (ik->itable_length() > 0 &&
-        !ik->itable()->check_no_old_or_obsolete_entries()) {
-      if (RC_TRACE_ENABLED(0x00004000)) {
-        RC_TRACE_WITH_THREAD(0x00004000, THREAD,
-          ("klassItable::check_no_old_or_obsolete_entries failure"
-           " -- OLD or OBSOLETE method found -- class: %s",
-           ik->signature_name()));
-        ik->itable()->dump_itable();
-      }
-      no_old_methods = false;
-    }
-
-    // the constant pool cache should never contain old or obsolete methods
-    if (ik->constants() != NULL &&
-        ik->constants()->cache() != NULL &&
-        !ik->constants()->cache()->check_no_old_or_obsolete_entries()) {
-      if (RC_TRACE_ENABLED(0x00004000)) {
-        RC_TRACE_WITH_THREAD(0x00004000, THREAD,
-          ("cp-cache::check_no_old_or_obsolete_entries failure"
-           " -- OLD or OBSOLETE method found -- class: %s",
-           ik->signature_name()));
-        ik->constants()->cache()->dump_cache();
-      }
-      no_old_methods = false;
-    }
-
-    if (!no_old_methods) {
-      if (RC_TRACE_ENABLED(0x00004000)) {
-        dump_methods();
-      } else {
-        tty->print_cr("INFO: use the '-XX:TraceRedefineClasses=16384' option "
-          "to see more info about the following guarantee() failure.");
-      }
-      guarantee(false, "OLD and/or OBSOLETE method(s) found");
-    }
-  }
-}
-
-void VM_RedefineClasses::dump_methods() {
-  int j;
-  RC_TRACE(0x00004000, ("_old_methods --"));
-  for (j = 0; j < _old_methods->length(); ++j) {
-    methodOop m = (methodOop) _old_methods->obj_at(j);
-    RC_TRACE_NO_CR(0x00004000, ("%4d  (%5d)  ", j, m->vtable_index()));
-    m->access_flags().print_on(tty);
-    tty->print(" --  ");
-    m->print_name(tty);
-    tty->cr();
-  }
-  RC_TRACE(0x00004000, ("_new_methods --"));
-  for (j = 0; j < _new_methods->length(); ++j) {
-    methodOop m = (methodOop) _new_methods->obj_at(j);
-    RC_TRACE_NO_CR(0x00004000, ("%4d  (%5d)  ", j, m->vtable_index()));
-    m->access_flags().print_on(tty);
-    tty->print(" --  ");
-    m->print_name(tty);
-    tty->cr();
-  }
-  RC_TRACE(0x00004000, ("_matching_(old/new)_methods --"));
-  for (j = 0; j < _matching_methods_length; ++j) {
-    methodOop m = _matching_old_methods[j];
-    RC_TRACE_NO_CR(0x00004000, ("%4d  (%5d)  ", j, m->vtable_index()));
-    m->access_flags().print_on(tty);
-    tty->print(" --  ");
-    m->print_name(tty);
-    tty->cr();
-    m = _matching_new_methods[j];
-    RC_TRACE_NO_CR(0x00004000, ("      (%5d)  ", m->vtable_index()));
-    m->access_flags().print_on(tty);
-    tty->cr();
-  }
-  RC_TRACE(0x00004000, ("_deleted_methods --"));
-  for (j = 0; j < _deleted_methods_length; ++j) {
-    methodOop m = _deleted_methods[j];
-    RC_TRACE_NO_CR(0x00004000, ("%4d  (%5d)  ", j, m->vtable_index()));
-    m->access_flags().print_on(tty);
-    tty->print(" --  ");
-    m->print_name(tty);
-    tty->cr();
-  }
-  RC_TRACE(0x00004000, ("_added_methods --"));
-  for (j = 0; j < _added_methods_length; ++j) {
-    methodOop m = _added_methods[j];
-    RC_TRACE_NO_CR(0x00004000, ("%4d  (%5d)  ", j, m->vtable_index()));
-    m->access_flags().print_on(tty);
-    tty->print(" --  ");
-    m->print_name(tty);
-    tty->cr();
-  }
+void VM_RedefineClasses::transfer_old_native_function_registrations(instanceKlassHandle old_klass) {
+  TransferNativeFunctionRegistration transfer(old_klass);
+  transfer.transfer_registrations(old_klass, _deleted_methods, _deleted_methods_length);
+  transfer.transfer_registrations(old_klass, _matching_old_methods, _matching_methods_length);
 }

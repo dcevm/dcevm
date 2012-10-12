@@ -100,6 +100,8 @@
 #include "gc_implementation/parallelScavenge/parallelScavengeHeap.hpp"
 #endif
 
+bool Universe::_is_redefining_gc_run = false;
+
 // Known objects
 klassOop Universe::_boolArrayKlassObj                 = NULL;
 klassOop Universe::_byteArrayKlassObj                 = NULL;
@@ -202,6 +204,38 @@ void Universe::system_classes_do(void f(klassOop)) {
   f(instanceKlassKlassObj());
   f(constantPoolKlassObj());
   f(systemObjArrayKlassObj());
+}
+
+// DCEVM: This method should iterate all pointers that are not within heap objects.
+void Universe::root_oops_do(OopClosure *oopClosure) {
+
+  class AlwaysTrueClosure: public BoolObjectClosure {
+  public:
+    void do_object(oop p) { ShouldNotReachHere(); }
+    bool do_object_b(oop p) { return true; }
+  };
+  AlwaysTrueClosure always_true;
+
+  // General strong roots
+  Universe::oops_do(oopClosure);
+  JNIHandles::oops_do(oopClosure);
+  Threads::oops_do(oopClosure, NULL);
+  ObjectSynchronizer::oops_do(oopClosure);
+  FlatProfiler::oops_do(oopClosure);
+  //Management::oops_do(oopClosure); // DCEVM: TODO: Check if this is correct?
+  JvmtiExport::oops_do(oopClosure);
+  // SO_AllClasses
+  SystemDictionary::oops_do(oopClosure);
+  
+  // Now adjust pointers in remaining weak roots.  (All of which should
+  // have been cleared if they pointed to non-surviving objects.)
+  // Global (weak) JNI handles
+  JNIHandles::weak_oops_do(&always_true, oopClosure);
+  
+  CodeCache::oops_do(oopClosure);
+  StringTable::oops_do(oopClosure);
+  //ref_processor()->weak_oops_do(&oopClosure); // DCEVM: TODO: Check if this is correct?
+  //PSScavenge::reference_processor()->weak_oops_do(&oopClosure); // DCEVM: TODO: Check if this is correct?
 }
 
 void Universe::oops_do(OopClosure* f, bool do_all) {

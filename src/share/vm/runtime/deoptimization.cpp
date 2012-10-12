@@ -599,6 +599,38 @@ JRT_LEAF(BasicType, Deoptimization::unpack_frames(JavaThread* thread, int exec_m
   // Cleanup thread deopt data
   cleanup_deopt_info(thread, array);
 
+  // (tw) Redefinition support: Check if we need to transfer method execution points to new versions
+  {
+    ResourceMark res_mark;
+
+    // Verify that the just-unpacked frames match the interpreter's
+    // notions of expression stack and locals
+    vframeArray* cur_array = thread->vframe_array_last();
+    RegisterMap rm(thread, false);
+    rm.set_include_argument_oops(false);
+    for (int i = 0; i < cur_array->frames(); i++) {
+      vframeArrayElement* el = cur_array->element(i);
+      frame* frame = el->iframe();
+      guarantee(frame->is_interpreted_frame(), "Wrong frame type");
+      RegisterMap reg_map(thread);
+      vframe* vf = vframe::new_vframe(frame, &reg_map, thread);
+      interpretedVFrame *iframe = (interpretedVFrame *)vf;
+      methodOop method = iframe->method();
+      int bci = iframe->bci();
+      method = method->newest_version();
+      iframe->set_method(method, bci);
+
+      methodOop forward_method = method->forward_method();
+      if (forward_method != NULL && method->is_in_code_section(bci)) {
+        int new_bci = method->calculate_forward_bci(bci, forward_method);
+        if (TraceRedefineClasses >= 2) {
+          tty->print_cr("Transfering execution of %s to new method old_bci=%d new_bci=%d", forward_method->name()->as_C_string(), bci, new_bci);
+        }
+        iframe->set_method(forward_method, new_bci);
+      }
+    }
+  }
+
 #ifndef PRODUCT
   if (VerifyStack) {
     ResourceMark res_mark;

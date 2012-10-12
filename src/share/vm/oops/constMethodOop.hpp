@@ -129,7 +129,7 @@ private:
 
 public:
   oop* oop_block_beg() const { return adr_constants(); }
-  oop* oop_block_end() const { return adr_stackmap_data() + 1; }
+  oop* oop_block_end() const { return adr_code_section_table() + 1; }
 
 private:
   //
@@ -140,6 +140,9 @@ private:
 
   // Raw stackmap data for the method
   typeArrayOop      _stackmap_data;
+
+  // (tw) Table mapping code sections for method forward points.
+  typeArrayOop      _code_section_table;
 
   //
   // End of the oop block.
@@ -194,6 +197,28 @@ public:
     oop_store_without_check((oop*)&_stackmap_data, (oop)sd);
   }
   bool has_stackmap_table() const { return _stackmap_data != NULL; }
+
+  // code section table
+  typeArrayOop code_section_table() const         { return _code_section_table; }
+  void set_code_section_table(typeArrayOop e)     { oop_store_without_check((oop*) &_code_section_table, (oop) e); }
+  bool has_code_section_table() const             { return code_section_table() != NULL && code_section_table()->length() > 0; }
+  static const int ValuesPerCodeSectionEntry = 3;
+  int code_section_entries() const {
+    if (!has_code_section_table()) return 0;
+    return _code_section_table->length() / ValuesPerCodeSectionEntry;
+  }
+
+  int code_section_new_index_at(int index) const {
+    return _code_section_table->short_at(index * ValuesPerCodeSectionEntry);
+  }
+
+  int code_section_original_index_at(int index) const {
+    return _code_section_table->short_at(index * ValuesPerCodeSectionEntry + 1);
+  }
+
+  int code_section_length_at(int index) const {
+    return _code_section_table->short_at(index * ValuesPerCodeSectionEntry + 2);
+  }
 
   void init_fingerprint() {
     const uint64_t initval = CONST64(0x8000000000000000);
@@ -301,6 +326,7 @@ public:
   // Garbage collection support
   oop*  adr_constants() const          { return (oop*)&_constants; }
   oop*  adr_stackmap_data() const      { return (oop*)&_stackmap_data;   }
+  oop*  adr_code_section_table() const { return (oop*)&_code_section_table; }
   bool is_conc_safe() { return _is_conc_safe; }
   void set_is_conc_safe(bool v) { _is_conc_safe = v; }
 

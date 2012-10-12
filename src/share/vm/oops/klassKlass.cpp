@@ -68,6 +68,8 @@ void klassKlass::oop_follow_contents(oop obj) {
   Klass* k = Klass::cast(klassOop(obj));
   // If we are alive it is valid to keep our superclass and subtype caches alive
   MarkSweep::mark_and_push(k->adr_super());
+  MarkSweep::mark_and_push(k->adr_old_version());
+  MarkSweep::mark_and_push(k->adr_new_version());
   for (juint i = 0; i < Klass::primary_super_limit(); i++)
     MarkSweep::mark_and_push(k->adr_primary_supers()+i);
   MarkSweep::mark_and_push(k->adr_secondary_super_cache());
@@ -87,6 +89,8 @@ void klassKlass::oop_follow_contents(ParCompactionManager* cm,
   Klass* k = Klass::cast(klassOop(obj));
   // If we are alive it is valid to keep our superclass and subtype caches alive
   PSParallelCompact::mark_and_push(cm, k->adr_super());
+  PSParallelCompact::mark_and_push(cm, k->adr_old_version());
+  PSParallelCompact::mark_and_push(cm, k->adr_new_version());
   for (juint i = 0; i < Klass::primary_super_limit(); i++)
     PSParallelCompact::mark_and_push(cm, k->adr_primary_supers()+i);
   PSParallelCompact::mark_and_push(cm, k->adr_secondary_super_cache());
@@ -106,6 +110,8 @@ int klassKlass::oop_oop_iterate(oop obj, OopClosure* blk) {
   int size = oop_size(obj);
   Klass* k = Klass::cast(klassOop(obj));
   blk->do_oop(k->adr_super());
+  blk->do_oop(k->adr_old_version());
+  blk->do_oop(k->adr_new_version());
   for (juint i = 0; i < Klass::primary_super_limit(); i++)
     blk->do_oop(k->adr_primary_supers()+i);
   blk->do_oop(k->adr_secondary_super_cache());
@@ -133,6 +139,10 @@ int klassKlass::oop_oop_iterate_m(oop obj, OopClosure* blk, MemRegion mr) {
   Klass* k = Klass::cast(klassOop(obj));
   oop* adr;
   adr = k->adr_super();
+  if (mr.contains(adr)) blk->do_oop(adr);
+  adr = k->adr_old_version();
+  if (mr.contains(adr)) blk->do_oop(adr);
+  adr = k->adr_new_version();
   if (mr.contains(adr)) blk->do_oop(adr);
   for (juint i = 0; i < Klass::primary_super_limit(); i++) {
     adr = k->adr_primary_supers()+i;
@@ -167,6 +177,8 @@ int klassKlass::oop_adjust_pointers(oop obj) {
   Klass* k = Klass::cast(klassOop(obj));
 
   MarkSweep::adjust_pointer(k->adr_super());
+  MarkSweep::adjust_pointer(k->adr_new_version());
+  MarkSweep::adjust_pointer(k->adr_old_version());
   for (juint i = 0; i < Klass::primary_super_limit(); i++)
     MarkSweep::adjust_pointer(k->adr_primary_supers()+i);
   MarkSweep::adjust_pointer(k->adr_secondary_super_cache());

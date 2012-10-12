@@ -136,7 +136,8 @@ class ConstantPoolCacheEntry VALUE_OBJ_CLASS_SPEC {
   void set_bytecode_2(Bytecodes::Code code);
   void set_f1(oop f1)                            {
     oop existing_f1 = _f1; // read once
-    assert(existing_f1 == NULL || existing_f1 == f1, "illegal field change");
+    // (tw) need to relax assertion for redefinition
+    // assert(existing_f1 == NULL || existing_f1 == f1, "illegal field change");
     oop_store(&_f1, f1);
   }
   void release_set_f1(oop f1);
@@ -167,6 +168,7 @@ class ConstantPoolCacheEntry VALUE_OBJ_CLASS_SPEC {
     tos_state_mask             = right_n_bits(tos_state_bits),
     tos_state_shift            = BitsPerInt - tos_state_bits,  // see verify_tos_state_shift below
     // misc. option bits; can be any bit position in [16..27]
+    is_old_method_shift        = 19,
     is_vfinal_shift            = 20,
     is_volatile_shift          = 21,
     is_final_shift             = 22,
@@ -199,6 +201,8 @@ class ConstantPoolCacheEntry VALUE_OBJ_CLASS_SPEC {
   // Initialization
   void initialize_entry(int original_index);     // initialize primary entry
   void initialize_secondary_entry(int main_index); // initialize secondary entry
+
+  void copy_from(ConstantPoolCacheEntry *other);
 
   void set_field(                                // sets entry to resolved field state
     Bytecodes::Code get_code,                    // the bytecode used for reading the field
@@ -361,10 +365,7 @@ class ConstantPoolCacheEntry VALUE_OBJ_CLASS_SPEC {
   // trace_name_printed is set to true if the current call has
   // printed the klass name so that other routines in the adjust_*
   // group don't print the klass name.
-  bool adjust_method_entry(methodOop old_method, methodOop new_method,
-         bool * trace_name_printed);
-  bool check_no_old_or_obsolete_entries();
-  bool is_interesting_method_entry(klassOop k);
+  bool adjust_method_entry(methodOop old_method, methodOop new_method);
 
   // Debugging & Printing
   void print (outputStream* st, int index) const;
@@ -485,16 +486,9 @@ class constantPoolCacheOopDesc: public oopDesc {
     return (base_offset() + ConstantPoolCacheEntry::size_in_bytes() * index);
   }
 
-  // RedefineClasses() API support:
-  // If any entry of this constantPoolCache points to any of
-  // old_methods, replace it with the corresponding new_method.
-  // trace_name_printed is set to true if the current call has
-  // printed the klass name so that other routines in the adjust_*
-  // group don't print the klass name.
-  void adjust_method_entries(methodOop* old_methods, methodOop* new_methods,
-                             int methods_length, bool * trace_name_printed);
-  bool check_no_old_or_obsolete_entries();
-  void dump_cache();
+  // (tw) Update method and field references
+  void adjust_entries(methodOop* old_methods, methodOop* new_methods,
+                             int methods_length);
 };
 
 #endif // SHARE_VM_OOPS_CPCACHEOOP_HPP

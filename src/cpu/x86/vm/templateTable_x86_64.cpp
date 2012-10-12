@@ -2151,6 +2151,22 @@ void TemplateTable::resolve_cache_and_index(int byte_no,
   // resolve first time through
   address entry;
   switch (bytecode()) {
+  case Bytecodes::_fast_agetfield : // fall through
+  case Bytecodes::_fast_bgetfield : // fall through
+  case Bytecodes::_fast_cgetfield : // fall through
+  case Bytecodes::_fast_dgetfield : // fall through
+  case Bytecodes::_fast_fgetfield : // fall through
+  case Bytecodes::_fast_igetfield : // fall through
+  case Bytecodes::_fast_lgetfield : // fall through
+  case Bytecodes::_fast_sgetfield : // fall through
+  case Bytecodes::_fast_aputfield : // fall through
+  case Bytecodes::_fast_bputfield : // fall through
+  case Bytecodes::_fast_cputfield : // fall through
+  case Bytecodes::_fast_dputfield : // fall through
+  case Bytecodes::_fast_fputfield : // fall through
+  case Bytecodes::_fast_iputfield : // fall through
+  case Bytecodes::_fast_lputfield : // fall through
+  case Bytecodes::_fast_sputfield : // fall through
   case Bytecodes::_getstatic:
   case Bytecodes::_putstatic:
   case Bytecodes::_getfield:
@@ -2267,7 +2283,7 @@ void TemplateTable::load_invoke_cp_cache_entry(int byte_no,
 // The registers cache and index expected to be set before call.
 // Correct values of the cache and index registers are preserved.
 void TemplateTable::jvmti_post_field_access(Register cache, Register index,
-                                            bool is_static, bool has_tos) {
+                                            int byte_no, bool is_static, bool has_tos) {
   // do the JVMTI work here to avoid disturbing the register state below
   // We use c_rarg registers here because we want to use the register used in
   // the call to the VM
@@ -2298,7 +2314,11 @@ void TemplateTable::jvmti_post_field_access(Register cache, Register index,
     __ call_VM(noreg, CAST_FROM_FN_PTR(address,
                                        InterpreterRuntime::post_field_access),
                c_rarg1, c_rarg2, c_rarg3);
-    __ get_cache_and_index_at_bcp(cache, index, 1);
+    
+    // DCEVM: Redefinition might have occured => reresolve the cp entry.
+    __ restore_bcp();
+    resolve_cache_and_index(byte_no, noreg, cache, index, sizeof(u2));
+
     __ bind(L1);
   }
 }
@@ -2320,7 +2340,7 @@ void TemplateTable::getfield_or_static(int byte_no, bool is_static) {
   const Register bc = c_rarg3; // uses same reg as obj, so don't mix them
 
   resolve_cache_and_index(byte_no, noreg, cache, index, sizeof(u2));
-  jvmti_post_field_access(cache, index, is_static, false);
+  jvmti_post_field_access(cache, index, byte_no, is_static, false);
   load_field_cp_cache_entry(obj, cache, index, off, flags, is_static);
 
   if (!is_static) {
@@ -2455,7 +2475,7 @@ void TemplateTable::getstatic(int byte_no) {
 
 // The registers cache and index expected to be set before call.
 // The function may destroy various registers, just not the cache and index registers.
-void TemplateTable::jvmti_post_field_mod(Register cache, Register index, bool is_static) {
+void TemplateTable::jvmti_post_field_mod(Register cache, Register index, int byte_no, bool is_static) {
   transition(vtos, vtos);
 
   ByteSize cp_base_offset = constantPoolCacheOopDesc::base_offset();
@@ -2507,7 +2527,11 @@ void TemplateTable::jvmti_post_field_mod(Register cache, Register index, bool is
                CAST_FROM_FN_PTR(address,
                                 InterpreterRuntime::post_field_modification),
                c_rarg1, c_rarg2, c_rarg3);
-    __ get_cache_and_index_at_bcp(cache, index, 1);
+
+    // DCEVM: Redefinition might have occured => reresolve the cp entry.
+    __ restore_bcp();
+    resolve_cache_and_index(byte_no, noreg, cache, index, sizeof(u2));
+
     __ bind(L1);
   }
 }
@@ -2523,7 +2547,7 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static) {
   const Register bc    = c_rarg3;
 
   resolve_cache_and_index(byte_no, noreg, cache, index, sizeof(u2));
-  jvmti_post_field_mod(cache, index, is_static);
+  jvmti_post_field_mod(cache, index, byte_no, is_static);
   load_field_cp_cache_entry(obj, cache, index, off, flags, is_static);
 
   // [jk] not needed currently
@@ -2837,6 +2861,11 @@ void TemplateTable::fast_accessfield(TosState state) {
                                 InterpreterRuntime::post_field_access),
                c_rarg1, c_rarg2);
     __ pop_ptr(rax); // restore object pointer
+
+    // DCEVM: Redefinition might have occured => reresolve the cp entry.
+    __ restore_bcp();
+    resolve_cache_and_index(1, noreg, rax, rcx, sizeof(u2));
+
     __ bind(L1);
   }
 
@@ -3073,6 +3102,26 @@ void TemplateTable::invokevirtual_helper(Register index,
 
   __ bind(notFinal);
 
+  // DCEVM: Check if we are calling an old method (and have to go slow path)
+  Label notOld;
+  __ movl(rax, flags);
+  __ andl(rax, (1 << ConstantPoolCacheEntry::is_old_method_shift));
+  __ jcc(Assembler::zero, notOld);
+
+  // Need a null check here!
+  __ null_check(recv);
+
+  // Call out to VM to do look up based on correct vTable version (has to iterate back over the class history of the receiver class)
+  // DCEVM: TODO: Check if we can improve performance by inlining.
+  // DCEVM: TODO: Check if this additional branch affects normal execution time.
+  __ call_VM(method, CAST_FROM_FN_PTR(address, InterpreterRuntime::find_correct_method), recv, index);
+
+  // profile this call
+  __ profile_final_call(rax);
+  __ jump_from_interpreted(method, rdx);
+
+  __ bind(notOld);
+
   // get receiver klass
   __ null_check(recv, oopDesc::klass_offset_in_bytes());
   __ load_klass(rax, recv);
@@ -3155,6 +3204,35 @@ void TemplateTable::invokeinterface(int byte_no) {
 
   invokevirtual_helper(rbx, rcx, rdx);
   __ bind(notMethod);
+
+  // DCEVM: Check if we are calling an old method (and have to go slow path)
+  Label notOld;
+  __ andl(rdx, (1 << ConstantPoolCacheEntry::is_old_method_shift));
+  __ jcc(Assembler::zero, notOld);
+
+  // Call out to VM to do look up based on correct vTable version (has to iterate back over the class history of the receiver class)
+  // DCEVM: TODO: Check if we can improve performance by inlining.
+  // DCEVM: TODO: Check if this additional branch affects normal execution time.
+  // DCEVM: TODO: Check the exact semantic (with respect to destoying registers) of call_VM
+  // DCEVM: FIXME: What exactly should we store here?
+  __ push(rcx); // destroyed by Linux arguments passing conventions
+  __ movptr(r14, rcx);
+  __ call_VM(rbx, CAST_FROM_FN_PTR(address, InterpreterRuntime::find_correct_interface_method), r14, rax, rbx);
+  __ pop(rcx);
+
+  // Get receiver klass into rdx - also a null check
+  __ restore_locals(); // restore r14
+  __ load_klass(rdx, rcx);
+  __ verify_oop(rdx);
+
+  // DCEVM: TODO: Check if resolved method could be null.
+
+  // profile this call
+  __ profile_virtual_call(rdx, r13, r14);
+
+  __ jump_from_interpreted(rbx, rdx);
+
+  __ bind(notOld);
 
   // Get receiver klass into rdx - also a null check
   __ restore_locals();  // restore r14

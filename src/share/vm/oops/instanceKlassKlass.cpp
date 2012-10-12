@@ -480,6 +480,28 @@ void instanceKlassKlass::oop_print_on(oop obj, outputStream* st) {
   instanceKlass* ik = instanceKlass::cast(klassOop(obj));
   klassKlass::oop_print_on(obj, st);
 
+  // (tw) Output revision number and revision numbers of older / newer and oldest / newest version of this class.
+
+  st->print(BULLET"revision:          %d", ik->revision_number());                    
+  
+  if (ik->new_version() != NULL) {
+    st->print(" (newer=%d)", ik->new_version()->klass_part()->revision_number());
+  }
+
+  if (ik->newest_version() != ik->new_version() && ik->newest_version() != obj) {
+    st->print(" (newest=%d)", ik->newest_version()->klass_part()->revision_number());
+  }
+
+  if (ik->old_version() != NULL) {
+    st->print(" (old=%d)", ik->old_version()->klass_part()->revision_number());
+  }
+
+  if (ik->oldest_version() != ik->old_version() && ik->oldest_version() != obj) {
+    st->print(" (oldest=%d)", ik->oldest_version()->klass_part()->revision_number());
+  }
+
+  st->cr();
+  
   st->print(BULLET"instance size:     %d", ik->size_helper());                        st->cr();
   st->print(BULLET"klass size:        %d", ik->object_size());                        st->cr();
   st->print(BULLET"access:            "); ik->access_flags().print_on(st);            st->cr();
@@ -663,7 +685,7 @@ void instanceKlassKlass::oop_verify_on(oop obj, outputStream* st) {
       }
       guarantee(sib->as_klassOop()->is_klass(), "should be klass");
       guarantee(sib->as_klassOop()->is_perm(),  "should be in permspace");
-      guarantee(sib->super() == super, "siblings should have same superklass");
+      guarantee(sib->super() == super || super->klass_part()->newest_version() == SystemDictionary::Object_klass(), "siblings should have same superklass");
       sib = sib->next_sibling();
     }
 

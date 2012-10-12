@@ -290,7 +290,10 @@ JvmtiEnv::RetransformClasses(jint class_count, const jclass* classes) {
     class_definitions[index].klass              = jcls;
   }
   VM_RedefineClasses op(class_count, class_definitions, jvmti_class_load_kind_retransform);
-  VMThread::execute(&op);
+  {
+    MutexLocker sd_mutex(RedefineClasses_lock);
+    VMThread::execute(&op);
+  }
   return (op.check_error());
 } /* end RetransformClasses */
 
@@ -299,9 +302,12 @@ JvmtiEnv::RetransformClasses(jint class_count, const jclass* classes) {
 // class_definitions - pre-checked for NULL
 jvmtiError
 JvmtiEnv::RedefineClasses(jint class_count, const jvmtiClassDefinition* class_definitions) {
-//TODO: add locking
+
   VM_RedefineClasses op(class_count, class_definitions, jvmti_class_load_kind_redefine);
-  VMThread::execute(&op);
+  {
+    MutexLocker sd_mutex(RedefineClasses_lock);
+    VMThread::execute(&op);
+  }
   return (op.check_error());
 } /* end RedefineClasses */
 

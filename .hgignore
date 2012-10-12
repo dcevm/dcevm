@@ -7,3 +7,5 @@
 ^src/share/tools/IdealGraphVisualizer/dist/
 ^.hgtip
 .DS_Store
+hotswaptest/out
+hotswaptest/.idea

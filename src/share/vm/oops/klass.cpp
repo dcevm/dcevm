@@ -55,6 +55,26 @@ bool Klass::is_subclass_of(klassOop k) const {
   return false;
 }
 
+void Klass::update_supers_to_newest_version() {
+
+  if (super() != NULL) set_super(super()->klass_part()->newest_version());
+  
+  for (uint i=0; i<primary_super_limit(); i++) {
+    klassOop cur = _primary_supers[i];
+    if (cur != NULL) {
+      _primary_supers[i] = cur->klass_part()->newest_version();
+    }
+  }
+
+  // Scan the array-of-objects 
+  int cnt = secondary_supers()->length();
+  for (int i = 0; i < cnt; i++) {
+    klassOop cur = (klassOop)secondary_supers()->obj_at(i);
+    if (cur != NULL) {
+      secondary_supers()->obj_at_put(i, cur->klass_part()->newest_version());
+    }
+  }
+}
 bool Klass::search_secondary_supers(klassOop k) const {
   // Put some extra logic here out-of-line, before the search proper.
   // This cuts down the size of the inline method.
@@ -161,6 +181,16 @@ klassOop Klass::base_create_klass_oop(KlassHandle& klass, int size,
   kl->set_alloc_size(0);
   TRACE_INIT_ID(kl);
 
+  kl->set_redefinition_flags(Klass::NoRedefinition);
+  kl->set_redefining(false);
+  kl->set_new_version(NULL);
+  kl->set_old_version(NULL);
+  kl->set_redefinition_index(-1);
+  kl->set_revision_number(-1);
+  kl->set_field_redefinition_policy(DynamicCheck);
+  kl->set_static_field_redefinition_policy(AccessDeletedMembers);
+  kl->set_method_redefinition_policy(AccessDeletedMembers);
+
   kl->set_prototype_header(markOopDesc::prototype());
   kl->set_biased_lock_revocation_count(0);
   kl->set_last_biased_lock_bulk_revocation_time(0);
@@ -232,7 +262,7 @@ void Klass::initialize_supers(klassOop k, TRAPS) {
     set_super(NULL);
     oop_store_without_check((oop*) &_primary_supers[0], (oop) this->as_klassOop());
     assert(super_depth() == 0, "Object must already be initialized properly");
-  } else if (k != super() || k == SystemDictionary::Object_klass()) {
+  } else if (k != super() || k->klass_part()->super() == NULL) {
     assert(super() == NULL || super() == SystemDictionary::Object_klass(),
            "initialize this only once to a non-trivial value");
     set_super(k);

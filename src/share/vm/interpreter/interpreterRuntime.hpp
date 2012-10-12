@@ -140,6 +140,9 @@ class InterpreterRuntime: AllStatic {
   static void post_method_entry(JavaThread *thread);
   static void post_method_exit (JavaThread *thread);
   static int  interpreter_contains(address pc);
+  static void forward_method(JavaThread *thread);
+  static methodOop find_correct_method(JavaThread *thread, oopDesc* receiver, int vTableIndex);
+  static methodOop find_correct_interface_method(JavaThread *thread, oopDesc* receiver, oopDesc* interface_klass, int vTableIndex);
 
   // Native signature handlers
   static void prepare_native_call(JavaThread* thread, methodOopDesc* method);

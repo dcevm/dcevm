@@ -286,6 +286,8 @@ address JvmtiBreakpoint::getBcp() {
 void JvmtiBreakpoint::each_method_version_do(method_action meth_act) {
   ((methodOopDesc*)_method->*meth_act)(_bci);
 
+  // DCEVM: TODO: Check how we can implement this differently here!
+
   // add/remove breakpoint to/from versions of the method that
   // are EMCP. Directly or transitively obsolete methods are
   // not saved in the PreviousVersionInfo.

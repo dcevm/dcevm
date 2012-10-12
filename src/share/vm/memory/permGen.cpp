@@ -57,7 +57,12 @@ HeapWord* PermGen::mem_allocate_in_gen(size_t size, Generation* gen) {
 
   for (;;) {
     {
-      MutexLocker ml(Heap_lock);
+      // (tw) Only lock when not at a safepoint (necessary to use the split verifier from the VmThread)
+      Monitor *lock = Heap_lock;
+      if (SafepointSynchronize::is_at_safepoint()) {
+        lock = NULL;
+      }
+      MutexLockerEx ml(lock);
       if ((obj = gen->allocate(size, false)) != NULL) {
         return obj;
       }

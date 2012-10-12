@@ -407,6 +407,12 @@ void frame::interpreter_frame_set_method(methodOop method) {
   *interpreter_frame_method_addr() = method;
 }
 
+// (tw) Sets constant pool cache oop
+void frame::interpreter_frame_set_cache(constantPoolCacheOop cp) {
+  assert(is_interpreted_frame(), "interpreted frame expected");
+  *interpreter_frame_cache_addr() = cp;
+}
+
 void frame::interpreter_frame_set_bcx(intptr_t bcx) {
   assert(is_interpreted_frame(), "Not an interpreted frame");
   if (ProfileInterpreter) {
@@ -422,19 +428,27 @@ void frame::interpreter_frame_set_bcx(intptr_t bcx) {
           // The bcx was just converted from bci to bcp.
           // Convert the mdx in parallel.
           methodDataOop mdo = interpreter_frame_method()->method_data();
-          assert(mdo != NULL, "");
-          int mdi = mdx - 1; // We distinguish valid mdi from zero by adding one.
-          address mdp = mdo->di_to_dp(mdi);
-          interpreter_frame_set_mdx((intptr_t)mdp);
+          if (mdo == NULL) {
+            interpreter_frame_set_mdx(0);
+          } else {
+            assert(mdo != NULL, "");
+            int mdi = mdx - 1; // We distinguish valid mdi from zero by adding one.
+            address mdp = mdo->di_to_dp(mdi);
+            interpreter_frame_set_mdx((intptr_t)mdp);
+          }
         }
       } else {
         if (is_now_bci) {
           // The bcx was just converted from bcp to bci.
           // Convert the mdx in parallel.
           methodDataOop mdo = interpreter_frame_method()->method_data();
-          assert(mdo != NULL, "");
-          int mdi = mdo->dp_to_di((address)mdx);
-          interpreter_frame_set_mdx((intptr_t)mdi + 1); // distinguish valid from 0.
+          if (mdo == NULL) {
+            interpreter_frame_set_mdx(0);
+          } else {
+            assert(mdo != NULL, "");
+            int mdi = mdo->dp_to_di((address)mdx);
+            interpreter_frame_set_mdx((intptr_t)mdi + 1); // distinguish valid from 0.
+          }
         }
       }
     }

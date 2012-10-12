@@ -112,6 +112,10 @@ jobject JNIHandles::make_weak_global(Handle obj) {
 }
 
 jmethodID JNIHandles::make_jmethod_id(methodHandle mh) {
+  if (mh->newest_version() != mh()) {
+    methodHandle mh_new(Thread::current(), mh()->newest_version());
+    return (jmethodID) make_weak_global(mh_new);
+  }
   return (jmethodID) make_weak_global(mh);
 }
 

@@ -138,6 +138,10 @@
   template(tag_annotation_default,                    "AnnotationDefault")                        \
   template(tag_enclosing_method,                      "EnclosingMethod")                          \
   template(tag_bootstrap_methods,                     "BootstrapMethods")                         \
+  template(tag_static_field_redefinition_policy,      "StaticFieldRedefinitionPolicy")            \
+  template(tag_field_redefinition_policy,             "FieldRedefinitionPolicy")                  \
+  template(tag_method_redefinition_policy,            "MethodRedefinitionPolicy")                 \
+  template(tag_code_sections,                         "CodeSections")                             \
                                                                                                   \
   /* exception klasses: at least all exceptions thrown by the VM have entries here */             \
   template(java_lang_ArithmeticException,             "java/lang/ArithmeticException")            \
@@ -376,6 +380,10 @@
   template(array_klass_name,                          "array_klass")                              \
   template(oop_size_name,                             "oop_size")                                 \
   template(static_oop_field_count_name,               "static_oop_field_count")                   \
+                                                                                                  \
+  /* mutator in case of class redefinition */                                                     \
+  template(static_transformer_name,                   "$staticTransformer")                       \
+  template(transformer_name,                          "$transformer")                             \
                                                                                                   \
   /* non-intrinsic name/signature pairs: */                                                       \
   template(register_method_name,                      "register")                                 \

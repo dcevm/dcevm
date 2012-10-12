@@ -408,6 +408,7 @@ class CompileBroker: AllStatic {
 
   static void print_compiler_threads_on(outputStream* st);
 
+  static void cleanup_after_redefinition();
   static int get_total_compile_count() {          return _total_compile_count; }
   static int get_total_bailout_count() {          return _total_bailout_count; }
   static int get_total_invalidated_count() {      return _total_invalidated_count; }

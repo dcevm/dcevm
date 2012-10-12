@@ -1137,7 +1137,20 @@ methodHandle SharedRuntime::resolve_helper(JavaThread *thread,
   if (JvmtiExport::can_hotswap_or_post_breakpoint()) {
     int retry_count = 0;
     while (!HAS_PENDING_EXCEPTION && callee_method->is_old() &&
-           callee_method->method_holder() != SystemDictionary::Object_klass()) {
+           callee_method->method_holder()->klass_part()->newest_version() != SystemDictionary::Object_klass()->klass_part()->newest_version()) {
+
+      // DCEVM: If we are executing an old method, this is OK!
+      {
+        ResourceMark rm(thread);
+        RegisterMap cbl_map(thread, false);
+        frame caller_frame = thread->last_frame().sender(&cbl_map);
+
+        CodeBlob* caller_cb = caller_frame.cb();
+        guarantee(caller_cb != NULL && caller_cb->is_nmethod(), "must be called from nmethod");
+        nmethod* caller_nm = caller_cb->as_nmethod_or_null();
+        if (caller_nm->method()->is_old()) break;
+      }
+
       // If has a pending exception then there is no need to re-try to
       // resolve this method.
       // If the method has been redefined, we need to try again.

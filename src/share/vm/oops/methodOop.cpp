@@ -328,6 +328,70 @@ void methodOopDesc::cleanup_inline_caches() {
 }
 
 
+bool methodOopDesc::is_in_code_section(int bci) {
+  // There is no table => every bci is in the code section table.
+  if (!constMethod()->has_code_section_table()) return true;
+
+  constMethodOop m = constMethod();
+  for (int i = 0; i < m->code_section_entries(); ++i) {
+    u2 new_index = m->code_section_new_index_at(i);
+    u2 length = m->code_section_length_at(i);
+    if (bci >= new_index && bci < new_index + length) {
+      // We are in a specified code section.
+      return true;
+    }
+  }
+
+  return false;
+}
+
+int methodOopDesc::calculate_forward_bci(int bci, methodOop new_method) {
+  int original_bci = -1;
+  if (constMethod()->has_code_section_table()) {
+    assert(is_in_code_section(bci), "can only forward in section");
+    // First calculate back to original bci.
+    constMethodOop m = constMethod();
+    for (int i = 0; i < m->code_section_entries(); ++i) {
+      u2 new_index = m->code_section_new_index_at(i);
+      u2 original_index = m->code_section_original_index_at(i);
+      u2 length = m->code_section_length_at(i);
+      if (bci >= new_index && bci < new_index + length) {
+        // We are in a specified code section.
+        original_bci = bci - new_index + original_index;
+        break;
+      }
+    }
+    assert (original_bci != -1, "must have been in code section");
+  } else {
+    // No code sections specified => we are in an original method.
+    original_bci = bci;
+  }
+
+  // We know the original bci => match to new method.
+  int new_bci = -1;
+  if (new_method->constMethod()->has_code_section_table()) {
+    // Map to new bci.
+    constMethodOop m = new_method->constMethod();
+    for (int i = 0; i < m->code_section_entries(); ++i) {
+      u2 new_index = m->code_section_new_index_at(i);
+      u2 original_index = m->code_section_original_index_at(i);
+      u2 length = m->code_section_length_at(i);
+      if (original_bci >= original_index && original_bci < original_index + length) {
+        new_bci = original_bci - original_index + new_index;
+        break;
+      }
+    }
+    assert (new_bci != -1, "must have found new code section");
+
+  } else {
+    // We are in an original method.
+    new_bci = original_bci;
+  }
+
+  return new_bci;
+}
+
+
 int methodOopDesc::extra_stack_words() {
   // not an inline function, to avoid a header dependency on Interpreter
   return extra_stack_entries() * Interpreter::stackElementSize;
@@ -1061,6 +1125,9 @@ methodHandle methodOopDesc::clone_with_new_data(methodHandle m, u_char* new_code
 
   // Reset correct method/const method, method size, and parameter info
   newm->set_constMethod(newcm);
+  newm->set_forward_method(newm->forward_method());
+  newm->set_new_version(newm->new_version());
+  newm->set_old_version(newm->old_version());
   newm->constMethod()->set_code_size(new_code_length);
   newm->constMethod()->set_constMethod_size(new_const_method_size);
   newm->set_method_size(new_method_size);

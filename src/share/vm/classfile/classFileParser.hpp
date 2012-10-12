@@ -64,6 +64,9 @@ class ClassFileParser VALUE_OBJ_CLASS_SPEC {
   int        _sde_length;
   typeArrayHandle _inner_classes;
   typeArrayHandle _annotations;
+  u1         _field_redefinition_policy;
+  u1         _static_field_redefinition_policy;
+  u1         _method_redefinition_policy;
 
   void set_class_synthetic_flag(bool x)           { _synthetic_flag = x; }
   void set_class_sourcefile(Symbol* x)            { _sourcefile = x; }
@@ -151,6 +154,7 @@ class ClassFileParser VALUE_OBJ_CLASS_SPEC {
                                   Handle class_loader,
                                   Handle protection_domain,
                                   Symbol* class_name,
+                                  KlassHandle old_klass,
                                   TRAPS);
 
   // Field parsing
@@ -237,7 +241,7 @@ class ClassFileParser VALUE_OBJ_CLASS_SPEC {
                      unsigned int nonstatic_oop_map_count,
                      int* nonstatic_oop_offsets,
                      unsigned int* nonstatic_oop_counts);
-  void set_precomputed_flags(instanceKlassHandle k);
+  void set_precomputed_flags(instanceKlassHandle k, KlassHandle old_klass);
   objArrayHandle compute_transitive_interfaces(instanceKlassHandle super,
                                                objArrayHandle local_ifs, TRAPS);
 
@@ -337,7 +341,12 @@ class ClassFileParser VALUE_OBJ_CLASS_SPEC {
 
  public:
   // Constructor
-  ClassFileParser(ClassFileStream* st) { set_stream(st); }
+  ClassFileParser(ClassFileStream* st) {
+      set_stream(st);
+      _field_redefinition_policy = 0xff;
+      _static_field_redefinition_policy = 0xff;
+      _method_redefinition_policy = 0xff;
+  }
 
   // Parse .class file and return new klassOop. The klassOop is not hooked up
   // to the system dictionary or any other structures, so a .class file can
@@ -349,20 +358,32 @@ class ClassFileParser VALUE_OBJ_CLASS_SPEC {
   instanceKlassHandle parseClassFile(Symbol* name,
                                      Handle class_loader,
                                      Handle protection_domain,
+                                     KlassHandle old_klass,
                                      TempNewSymbol& parsed_name,
                                      bool verify,
                                      TRAPS) {
     KlassHandle no_host_klass;
-    return parseClassFile(name, class_loader, protection_domain, no_host_klass, NULL, parsed_name, verify, THREAD);
+    return parseClassFile(name, class_loader, protection_domain, old_klass, no_host_klass, NULL, parsed_name, verify, THREAD);
   }
   instanceKlassHandle parseClassFile(Symbol* name,
                                      Handle class_loader,
                                      Handle protection_domain,
+                                     KlassHandle old_klass,
                                      KlassHandle host_klass,
                                      GrowableArray<Handle>* cp_patches,
                                      TempNewSymbol& parsed_name,
                                      bool verify,
                                      TRAPS);
+
+  static void initialize_static_field(fieldDescriptor* fd, TRAPS);
+
+  // DCEVM: Creates symbol handles for the super class and the interfaces
+  void findSuperSymbols(Symbol* name,
+                        Handle class_loader,
+                        Handle protection_domain,
+                        KlassHandle old_klass,
+                        GrowableArray<Symbol*> &handles,
+                        TRAPS);
 
   // Verifier checks
   static void check_super_class_access(instanceKlassHandle this_klass, TRAPS);

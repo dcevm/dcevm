@@ -129,9 +129,9 @@ objArrayOop arrayKlass::compute_secondary_supers(int num_extra_slots, TRAPS) {
 
 bool arrayKlass::compute_is_subtype_of(klassOop k) {
   // An array is a subtype of Serializable, Clonable, and Object
-  return    k == SystemDictionary::Object_klass()
-         || k == SystemDictionary::Cloneable_klass()
-         || k == SystemDictionary::Serializable_klass();
+  return    k->klass_part()->newest_version() == SystemDictionary::Object_klass()->klass_part()->newest_version()
+         || k->klass_part()->newest_version() == SystemDictionary::Cloneable_klass()->klass_part()->newest_version()
+         || k->klass_part()->newest_version() == SystemDictionary::Serializable_klass()->klass_part()->newest_version();
 }
 
 

@@ -296,6 +296,11 @@ ciObject* ciObjectFactory::get(oop key) {
       // into the table.  We need to recompute our index.
       index = find(keyHandle(), _ci_objects);
     }
+
+    if (is_found_at(index, keyHandle(), _ci_objects)) {
+      // DCEVM: Check if this is an error? Can occur when redefining classes.
+      return _ci_objects->at(index);
+    }
     assert(!is_found_at(index, keyHandle(), _ci_objects), "no double insert");
     insert(index, new_object, _ci_objects);
     return new_object;
@@ -763,4 +768,51 @@ void ciObjectFactory::print() {
              _ci_objects->length(), _unloaded_methods->length(),
              _unloaded_instances->length(),
              _unloaded_klasses->length());
+}
+
+// DCEVM: Resoring the ciObject arrays after class redefinition
+void ciObjectFactory::sort_ci_objects(GrowableArray<ciObject*>* objects) {
+
+  // Resort the _ci_objects array. The order of two class pointers can be changed during class redefinition.
+  oop last = NULL;
+  for (int j = 0; j< objects->length(); j++) {
+    oop o = objects->at(j)->get_oop();
+    if (last >= o) {
+      int cur_last_index = j - 1;
+      oop cur_last = last;
+      while (cur_last >= o) {
+
+        // Swap the two objects to guarantee ordering
+        ciObject *tmp = objects->at(cur_last_index);
+        objects->at_put(cur_last_index, objects->at(cur_last_index + 1));
+        objects->at_put(cur_last_index + 1, tmp);
+
+        // Decrement index to move one step to the left
+        cur_last_index--;
+        if (cur_last_index < 0) {
+          break;
+        }
+        cur_last = objects->at(cur_last_index)->get_oop();
+      }
+    } else {
+      assert(last < o, "out of order");
+      last = o;  
+    }
+  }
+
+#ifdef ASSERT
+  if (CIObjectFactoryVerify) {
+    oop last = NULL;
+    for (int j = 0; j< objects->length(); j++) {
+      oop o = objects->at(j)->get_oop();
+      assert(last < o, "out of order");
+      last = o;
+    }
+  }
+#endif // ASSERT
+}
+
+// DCEVM: Called after class redefinition to clean up possibly invalidated state.
+void ciObjectFactory::cleanup_after_redefinition() {
+  sort_ci_objects(_ci_objects);
 }

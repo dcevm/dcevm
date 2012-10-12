@@ -109,7 +109,8 @@ class Monitor : public CHeapObj<mtInternal> {
        barrier     = safepoint      +   1,
        nonleaf     = barrier        +   1,
        max_nonleaf = nonleaf        + 900,
-       native      = max_nonleaf    +   1
+       native      = max_nonleaf    +   1,
+       redefine_classes = native    +   1
   };
 
   // The WaitSet and EntryList linked lists are composed of ParkEvents.

@@ -1260,6 +1260,7 @@ nmethod* CompileBroker::compile_method(methodHandle method, int osr_bci,
   }
 
   // RedefineClasses() has replaced this method; just return
+  // (tw) This is important for the new version of hotswapping: Old code will only execute properly in the interpreter!
   if (method->is_old()) {
     return NULL;
   }
@@ -1592,6 +1593,8 @@ void CompileBroker::compiler_thread_loop() {
 
       // Never compile a method if breakpoints are present in it
       if (method()->number_of_breakpoints() == 0) {
+        thread->compilation_mutex()->lock();
+        thread->set_should_bailout(false);
         // Compile the method.
         if ((UseCompiler || AlwaysCompileLoopMethods) && CompileBroker::should_compile_new_jobs()) {
 #ifdef COMPILER1
@@ -1615,6 +1618,7 @@ void CompileBroker::compiler_thread_loop() {
           // After compilation is disabled, remove remaining methods from queue
           method->clear_queued_for_compilation();
         }
+        thread->compilation_mutex()->unlock();
       }
     }
   }
@@ -2163,4 +2167,16 @@ void CompileBroker::print_compiler_threads_on(outputStream* st) {
   st->print_cr("Compiler thread printing unimplemented.");
   st->cr();
 #endif
+}
+
+// (tw) Clean up compiler interface after a class redefinition step
+void CompileBroker::cleanup_after_redefinition() {
+  int num_threads = _method_threads->length();
+
+  ciObjectFactory::sort_ci_objects(ciObjectFactory::_shared_ci_objects);
+  for (int i=0; i<num_threads; i++) {
+    if (_method_threads->at(i)->env() != NULL && _method_threads->at(i)->env() != (ciEnv *)badAddress) {
+      _method_threads->at(i)->env()->cleanup_after_redefinition();
+    }
+  }
 }

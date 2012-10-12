@@ -149,6 +149,7 @@ class CompactibleFreeListSpace: public CompactibleSpace {
 
   // Support for compacting cms
   HeapWord* cross_threshold(HeapWord* start, HeapWord* end);
+  HeapWord* forward_compact_top(size_t size, CompactPoint* cp, HeapWord* compact_top);
   HeapWord* forward(oop q, size_t size, CompactPoint* cp, HeapWord* compact_top);
 
   // Initialization helpers.

@@ -97,7 +97,8 @@ void klassVtable::compute_vtable_size_and_num_mirandas(int &vtable_length,
     vtable_length = Universe::base_vtable_size();
   }
 
-  if (super == NULL && !Universe::is_bootstrapping() &&
+  // (tw) TODO: Check if we can relax the condition on a fixed base vtable size
+  /*if (super == NULL && !Universe::is_bootstrapping() &&
       vtable_length != Universe::base_vtable_size()) {
     // Someone is attempting to redefine java.lang.Object incorrectly.  The
     // only way this should happen is from
@@ -107,9 +108,9 @@ void klassVtable::compute_vtable_size_and_num_mirandas(int &vtable_length,
     vtable_length = Universe::base_vtable_size();
   }
   assert(super != NULL || vtable_length == Universe::base_vtable_size(),
-         "bad vtable size for class Object");
+         "bad vtable size for class Object");*/
   assert(vtable_length % vtableEntry::size() == 0, "bad vtable length");
-  assert(vtable_length >= Universe::base_vtable_size(), "vtable too small");
+  //assert(vtable_length >= Universe::base_vtable_size(), "vtable too small");
 }
 
 int klassVtable::index_of(methodOop m, int len) const {
@@ -655,20 +656,6 @@ bool klassVtable::check_no_old_or_obsolete_entries() {
     }
   }
   return true;
-}
-
-void klassVtable::dump_vtable() {
-  tty->print_cr("vtable dump --");
-  for (int i = 0; i < length(); i++) {
-    methodOop m = unchecked_method_at(i);
-    if (m != NULL) {
-      tty->print("      (%5d)  ", i);
-      m->access_flags().print_on(tty);
-      tty->print(" --  ");
-      m->print_name(tty);
-      tty->cr();
-    }
-  }
 }
 
 // CDS/RedefineClasses support - clear vtables so they can be reinitialized
@@ -1241,6 +1228,7 @@ void klassVtable::verify(outputStream* st, bool forced) {
 
 void klassVtable::verify_against(outputStream* st, klassVtable* vt, int index) {
   vtableEntry* vte = &vt->table()[index];
+  if (vte->method() == NULL || table()[index].method() == NULL) return;
   if (vte->method()->name()      != table()[index].method()->name() ||
       vte->method()->signature() != table()[index].method()->signature()) {
     fatal("mismatched name/signature of vtable entries");
@@ -1260,6 +1248,8 @@ void klassVtable::print() {
 
 void vtableEntry::verify(klassVtable* vt, outputStream* st) {
   NOT_PRODUCT(FlagSetting fs(IgnoreLockingAssertions, true));
+  // (tw) TODO: Check: Does not hold?
+  if (method() != NULL) {
   assert(method() != NULL, "must have set method");
   method()->verify();
   // we sub_type, because it could be a miranda method
@@ -1267,7 +1257,13 @@ void vtableEntry::verify(klassVtable* vt, outputStream* st) {
 #ifndef PRODUCT
     print();
 #endif
-    fatal(err_msg("vtableEntry " PTR_FORMAT ": method is from subclass", this));
+      klassOop first_klass = vt->klass()();
+      klassOop second_klass = method()->method_holder();
+      // (tw) the following fatal does not work for old versions of classes
+      if (first_klass->klass_part()->is_newest_version()) {
+        //fatal1("vtableEntry %#lx: method is from subclass", this);
+      }
+    }
   }
 }
 
@@ -1275,7 +1271,7 @@ void vtableEntry::verify(klassVtable* vt, outputStream* st) {
 
 void vtableEntry::print() {
   ResourceMark rm;
-  tty->print("vtableEntry %s: ", method()->name()->as_C_string());
+  tty->print("vtableEntry %s: ", (method() == NULL) ? "null" : method()->name()->as_C_string());
   if (Verbose) {
     tty->print("m %#lx ", (address)method());
   }
@@ -1340,6 +1336,33 @@ void klassVtable::print_statistics() {
   tty->print_cr("%6d bytes filler overhead", VtableStats::filler);
   tty->print_cr("%6d bytes for vtable entries (%d for arrays)", VtableStats::entries, VtableStats::array_entries);
   tty->print_cr("%6d bytes total", total);
+}
+
+bool klassVtable::check_no_old_entries() {
+  // Check that there really is no entry
+  for (int i = 0; i < length(); i++) {
+    methodOop m = unchecked_method_at(i);
+    if (m != NULL) {
+        if (m->is_old() || !m->method_holder()->klass_part()->is_newest_version()) {
+            return false;
+        }
+    }
+  }
+  return true;
+}
+
+void klassVtable::dump_vtable() {
+  tty->print_cr("vtable dump --");
+  for (int i = 0; i < length(); i++) {
+    methodOop m = unchecked_method_at(i);
+    if (m != NULL) {
+      tty->print("      (%5d)  ", i);
+      m->access_flags().print_on(tty);
+      tty->print(" --  ");
+      m->print_name(tty);
+      tty->cr();
+    }
+  }
 }
 
 int  klassItable::_total_classes;   // Total no. of classes with itables

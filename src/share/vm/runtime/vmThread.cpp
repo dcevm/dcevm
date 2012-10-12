@@ -691,6 +691,10 @@ void VMThread::execute(VM_Operation* op) {
 void VMThread::oops_do(OopClosure* f, CodeBlobClosure* cf) {
   Thread::oops_do(f, cf);
   _vm_queue->oops_do(f);
+  // (DCEVM) need to update oops in VM_RedefineClasses!
+  if (_cur_vm_operation != NULL) {
+    _cur_vm_operation->oops_do(f);
+  }
 }
 
 //------------------------------------------------------------------------------------------------------------------

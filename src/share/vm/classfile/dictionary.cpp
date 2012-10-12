@@ -326,6 +326,21 @@ void Dictionary::classes_do(void f(klassOop)) {
   }
 }
 
+
+// DCEVM: Just the classes from defining class loaders
+void Dictionary::classes_do(ObjectClosure *closure) {
+  for (int index = 0; index < table_size(); index++) {
+    for (DictionaryEntry* probe = bucket(index);
+      probe != NULL;
+      probe = probe->next()) {
+        klassOop k = probe->klass();
+        if (probe->loader() == instanceKlass::cast(k)->class_loader()) {
+          closure->do_object(k);
+        }
+    }
+  }
+}
+
 // Added for initialize_itable_for_klass to handle exceptions
 //   Just the classes from defining class loaders
 void Dictionary::classes_do(void f(klassOop, TRAPS), TRAPS) {
@@ -433,6 +448,33 @@ void Dictionary::add_klass(Symbol* class_name, Handle class_loader,
   add_entry(index, entry);
 }
 
+// DCEVM: Updates the klass entry to point to the new klassOop. Necessary only for class redefinition.
+bool Dictionary::update_klass(int index, unsigned int hash, Symbol* name, Handle loader, KlassHandle k, KlassHandle old_class) {
+
+  // There are several entries for the same class in the dictionary: One extra entry for each parent classloader of the classloader of the class.
+  bool found = false;
+  for (int index = 0; index < table_size(); index++) {
+    for (DictionaryEntry* entry = bucket(index); entry != NULL; entry = entry->next()) {
+      if (entry->klass() == old_class()) {
+        entry->set_literal(k());
+        found = true;
+      }
+    }
+  }
+
+  return found;
+}
+
+// DCEVM: Undo previous updates to the system dictionary
+void Dictionary::rollback_redefinition() {
+  for (int index = 0; index < table_size(); index++) {
+    for (DictionaryEntry* entry = bucket(index); entry != NULL; entry = entry->next()) {
+      if (entry->klass()->klass_part()->is_redefining()) {
+        entry->set_literal(entry->klass()->klass_part()->old_version());
+      }
+    }
+  }
+}
 
 // This routine does not lock the system dictionary.
 //
@@ -459,12 +501,22 @@ DictionaryEntry* Dictionary::get_entry(int index, unsigned int hash,
   return NULL;
 }
 
+// DCEVM: return old version if we are not in the new universe?
+klassOop Dictionary::intercept_for_version(klassOop k) {
+  if (k == NULL) return k;
+
+  if (k->klass_part()->is_redefining() && !Thread::current()->pretend_new_universe()) {
+    return k->klass_part()->old_version();
+  }
+
+  return k;
+}
 
 klassOop Dictionary::find(int index, unsigned int hash, Symbol* name,
                           Handle loader, Handle protection_domain, TRAPS) {
   DictionaryEntry* entry = get_entry(index, hash, name, loader);
   if (entry != NULL && entry->is_valid_protection_domain(protection_domain)) {
-    return entry->klass();
+    return intercept_for_version(entry->klass());
   } else {
     return NULL;
   }
@@ -477,7 +529,7 @@ klassOop Dictionary::find_class(int index, unsigned int hash,
   assert (index == index_for(name, loader), "incorrect index?");
 
   DictionaryEntry* entry = get_entry(index, hash, name, loader);
-  return (entry != NULL) ? entry->klass() : (klassOop)NULL;
+  return intercept_for_version((entry != NULL) ? entry->klass() : (klassOop)NULL);
 }
 
 
@@ -489,7 +541,7 @@ klassOop Dictionary::find_shared_class(int index, unsigned int hash,
   assert (index == index_for(name, Handle()), "incorrect index?");
 
   DictionaryEntry* entry = get_entry(index, hash, name, Handle());
-  return (entry != NULL) ? entry->klass() : (klassOop)NULL;
+  return intercept_for_version((entry != NULL) ? entry->klass() : (klassOop)NULL);
 }
 
 

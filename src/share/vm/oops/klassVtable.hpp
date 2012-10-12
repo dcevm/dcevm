@@ -100,6 +100,7 @@ class klassVtable : public ResourceObj {
                              int methods_length, bool * trace_name_printed);
   bool check_no_old_or_obsolete_entries();
   void dump_vtable();
+  bool check_no_old_entries();
 
   // Garbage collection
   void oop_follow_contents();

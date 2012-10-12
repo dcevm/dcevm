@@ -253,6 +253,46 @@ methodOop interpretedVFrame::method() const {
   return fr().interpreter_frame_method();
 }
 
+// (tw) Sets interpreter frame method.
+void interpretedVFrame::set_method(methodOop new_method, int new_bci) {
+  methodOop old_method = fr().interpreter_frame_method();
+  int old_stack_size = fr().interpreter_frame_expression_stack_size();
+  if (old_method == new_method) return;
+  u_char *old_bcp = bcp();
+  int old_bci = bci();
+  fr().interpreter_frame_set_method(new_method);
+  fr().interpreter_frame_set_cache(new_method->constants()->cache());
+  u_char *new_bcp = new_method->code_base() + new_bci;
+  assert(new_method->bcp_from(new_bci) == new_bcp, "");
+
+  set_bcp(new_bcp);
+
+  Bytecodes::Code code = Bytecodes::java_code_at(old_method, old_bcp);
+  assert(Bytecodes::java_code_at(new_method, new_bcp) == code, "must have same bytecode at this position");
+
+  switch (code) {
+    case Bytecodes::_invokevirtual  :
+    case Bytecodes::_invokespecial  :
+    case Bytecodes::_invokestatic   :
+    case Bytecodes::_invokeinterface: {
+      int old_index = Bytes::get_native_u2(old_bcp+1);
+      int new_index = Bytes::get_native_u2(new_bcp+1);
+      new_method->constants()->cache()->entry_at(new_index)->copy_from(old_method->constants()->cache()->entry_at(old_index));
+      break;
+    }
+
+    case Bytecodes::_invokedynamic: {
+      int old_index = Bytes::get_native_u4(old_bcp+1);
+      int new_index = Bytes::get_native_u4(new_bcp+1);
+      new_method->constants()->cache()->secondary_entry_at(new_index)->copy_from(old_method->constants()->cache()->secondary_entry_at(old_index));
+      break;
+    }
+  }
+
+  int new_stack_size = fr().interpreter_frame_expression_stack_size();
+  assert(new_method->validate_bci_from_bcx((intptr_t)new_bcp) == new_bci, "");
+}
+
 StackValueCollection* interpretedVFrame::locals() const {
   int length = method()->max_locals();
 

@@ -145,6 +145,33 @@ class GenericGrowableArray : public ResourceObj {
     assert(on_stack(), "fast ResourceObj path only");
     return (void*)resource_allocate_bytes(thread, elementSize * _max);
   }
+
+};
+
+template<class E, class F> class Pair : public StackObj
+{
+private:
+  E _left;
+  F _right;
+
+public:
+
+  Pair() {
+
+  }
+
+  Pair(E left, F right) {
+    this->_left = left;
+    this->_right = right;
+  }
+
+  E left() {
+    return _left;
+  }
+
+  F right() {
+    return _right;
+  }
 };
 
 template<class E> class GrowableArray : public GenericGrowableArray {

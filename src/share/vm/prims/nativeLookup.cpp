@@ -35,6 +35,7 @@
 #include "oops/symbol.hpp"
 #include "prims/jvm_misc.hpp"
 #include "prims/nativeLookup.hpp"
+#include "prims/jvmtiRedefineClasses.hpp"
 #include "runtime/arguments.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/javaCalls.hpp"
@@ -52,7 +53,6 @@
 #ifdef TARGET_OS_FAMILY_bsd
 # include "os_bsd.inline.hpp"
 #endif
-
 
 static void mangle_name_on(outputStream* st, Symbol* name, int begin, int end) {
   char* bytes = (char*)name->bytes() + begin;
@@ -138,6 +138,40 @@ static JNINativeMethod lookup_special_native_methods[] = {
   { CC"Java_sun_hotspot_WhiteBox_registerNatives",                 NULL, FN_PTR(JVM_RegisterWhiteBoxMethods)     },
 };
 
+// Helper function to call redefineClasses from Java Code
+JVM_ENTRY(int, JVM_RedefineClassesHelper(JNIEnv *env, jclass cb, jclass target, jbyteArray bytes))
+  ResourceMark rm(THREAD);
+
+  JavaThread* current_thread = JavaThread::current();
+  jbyte* bytecodes = NULL;
+  const int class_count = 1;
+  jvmtiClassDefinition* class_definitions = NEW_RESOURCE_ARRAY(jvmtiClassDefinition, class_count);
+  
+  {
+     ThreadToNativeFromVM ttnfv(thread);
+     jboolean is_copy = JNI_FALSE;
+     bytecodes = env->GetByteArrayElements(bytes, &is_copy);
+     class_definitions[0].klass = target;
+     class_definitions[0].class_byte_count = env->GetArrayLength(bytes);
+     class_definitions[0].class_bytes = (unsigned char*)bytecodes;
+  }
+
+  VM_RedefineClasses op(class_count, class_definitions, jvmti_class_load_kind_retransform);
+  VMThread::execute(&op);
+  int result = op.check_error();
+
+  {
+    ThreadToNativeFromVM ttnfv(thread);
+    if (env->ExceptionOccurred()) {
+      return -1;
+    }
+    env->ReleaseByteArrayElements(bytes, bytecodes, 0);
+  }
+
+ return result;
+JVM_END
+
+
 static address lookup_special_native(char* jni_name) {
   int i = !JDK_Version::is_gte_jdk14x_version() ? 0 : 2;  // see comment in lookup_special_native_methods
   int count = sizeof(lookup_special_native_methods) / sizeof(JNINativeMethod);
@@ -176,6 +210,9 @@ address NativeLookup::lookup_style(methodHandle method, char* pure_name, const c
       in_base_library = true;
       return entry;
     }
+  }
+  if(strstr(jni_name, "Java_at_ssw_hotswap_ClassRedefinition_redefineClasses") != NULL) {
+		return CAST_FROM_FN_PTR(address, JVM_RedefineClassesHelper);
   }
 
   // Otherwise call static method findNative in ClassLoader

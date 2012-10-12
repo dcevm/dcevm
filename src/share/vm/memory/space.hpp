@@ -445,6 +445,9 @@ public:
   // indicates when the next such action should be taken.
   virtual void prepare_for_compaction(CompactPoint* cp);
   // MarkSweep support phase3
+  DEBUG_ONLY(int space_index(oop obj));
+  bool must_rescue(oop old_obj, oop new_obj);
+  oop rescue(oop old_obj);
   virtual void adjust_pointers();
   // MarkSweep support phase4
   virtual void compact();
@@ -474,6 +477,10 @@ public:
   // accordingly".
   virtual HeapWord* forward(oop q, size_t size, CompactPoint* cp,
                     HeapWord* compact_top);
+
+  // (tw)
+  virtual HeapWord* forward_compact_top(size_t size, CompactPoint* cp,
+    HeapWord* compact_top);
 
   // Return a size with adjusments as required of the space.
   virtual size_t adjust_object_size_v(size_t size) const { return size; }

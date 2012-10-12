@@ -162,6 +162,13 @@ CompactibleFreeListSpace::CompactibleFreeListSpace(BlockOffsetSharedArray* bs,
   }
 }
 
+
+HeapWord* CompactibleFreeListSpace::forward_compact_top(size_t size,
+                                    CompactPoint* cp, HeapWord* compact_top) {
+  ShouldNotReachHere();
+  return NULL;
+}
+
 // Like CompactibleSpace forward() but always calls cross_threshold() to
 // update the block offset table.  Removed initialize_threshold call because
 // CFLS does not use a block offset array for contiguous spaces.

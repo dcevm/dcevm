@@ -38,6 +38,7 @@
 class ciObjectFactory : public ResourceObj {
   friend class VMStructs;
   friend class ciEnv;
+  friend class CompileBroker;
 
 private:
   static volatile bool _initialized;
@@ -137,6 +138,11 @@ public:
 
   void print_contents();
   void print();
+
+private:
+
+  static void sort_ci_objects(GrowableArray<ciObject*>* objects);
+  void cleanup_after_redefinition();
 };
 
 #endif // SHARE_VM_CI_CIOBJECTFACTORY_HPP

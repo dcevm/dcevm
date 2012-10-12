@@ -60,7 +60,7 @@ JavaCallWrapper::JavaCallWrapper(methodHandle callee_method, Handle receiver, Ja
   bool clear_pending_exception = true;
 
   guarantee(thread->is_Java_thread(), "crucial check - the VM thread cannot and must not escape to Java code");
-  assert(!thread->owns_locks(), "must release all locks when leaving VM");
+  assert(!thread->owns_locks_but_redefine_classes_lock(), "must release all locks when leaving VM");
   guarantee(!thread->is_Compiler_thread(), "cannot make java calls from the compiler");
   _result   = result;
 

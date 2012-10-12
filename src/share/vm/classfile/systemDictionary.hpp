@@ -268,7 +268,7 @@ public:
   // Resolve from stream (called by jni_DefineClass and JVM_DefineClass)
   static klassOop resolve_from_stream(Symbol* class_name, Handle class_loader,
                                       Handle protection_domain,
-                                      ClassFileStream* st, bool verify, TRAPS);
+                                      ClassFileStream* st, bool verify, KlassHandle old_class, TRAPS);
 
   // Lookup an already loaded class. If not found NULL is returned.
   static klassOop find(Symbol* class_name, Handle class_loader, Handle protection_domain, TRAPS);
@@ -309,6 +309,8 @@ public:
   // Iterate over all klasses in dictionary
   //   Just the classes from defining class loaders
   static void classes_do(void f(klassOop));
+  static void classes_do(ObjectClosure *closure);
+  static void preloaded_classes_do(OopClosure *closure);
   // Added for initialize_itable_for_klass to handle exceptions
   static void classes_do(void f(klassOop, TRAPS), TRAPS);
   //   All classes, and their class loaders
@@ -414,6 +416,8 @@ public:
     int limit = (int)end_id + 1;
     initialize_wk_klasses_until((WKID) limit, start_id, THREAD);
   }
+
+  static void rollback_redefinition();
 
 public:
   #define WK_KLASS_DECLARE(name, symbol, option) \
@@ -596,7 +600,7 @@ private:
   // after waiting, but before reentering SystemDictionary_lock
   // to preserve lock order semantics.
   static void double_lock_wait(Handle lockObject, TRAPS);
-  static void define_instance_class(instanceKlassHandle k, TRAPS);
+  static void define_instance_class(instanceKlassHandle k, KlassHandle old_class, TRAPS);
   static instanceKlassHandle find_or_define_instance_class(Symbol* class_name,
                                                 Handle class_loader,
                                                 instanceKlassHandle k, TRAPS);
@@ -615,12 +619,17 @@ private:
   // Setup link to hierarchy
   static void add_to_hierarchy(instanceKlassHandle k, TRAPS);
 
+public:
+
+  // Remove link to hierarchy
+  static void remove_from_hierarchy(instanceKlassHandle k);
+
+private:
   // event based tracing
   static void post_class_load_event(TracingTime start_time, instanceKlassHandle k,
                                     Handle initiating_loader);
   static void post_class_unload_events(BoolObjectClosure* is_alive);
 
-private:
   // We pass in the hashtable index so we can calculate it outside of
   // the SystemDictionary_lock.
 

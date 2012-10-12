@@ -114,6 +114,11 @@ class methodOopDesc : public oopDesc {
   AccessFlags       _access_flags;               // Access flags
   int               _vtable_index;               // vtable index of this method (see VtableIndexFlag)
                                                  // note: can have vtables with >2**16 elements (because of inheritance)
+  // (tw) Newer version of method available?
+  methodOop         _forward_method;
+  methodOop         _new_version;
+  methodOop         _old_version;
+
 #ifdef CC_INTERP
   int               _result_index;               // C++ interpreter needs for converting results to/from stack
 #endif
@@ -174,6 +179,32 @@ class methodOopDesc : public oopDesc {
   Symbol* name() const                           { return constants()->symbol_at(name_index()); }
   int name_index() const                         { return constMethod()->name_index();         }
   void set_name_index(int index)                 { constMethod()->set_name_index(index);       }
+
+  methodOop forward_method() const {return _forward_method; }
+  void set_forward_method(methodOop m) { _forward_method = m; }
+  bool has_forward_method() const { return forward_method() != NULL; }
+  methodOop new_version() const {return _new_version; }
+  void set_new_version(methodOop m) { _new_version = m; }
+  methodOop newest_version() { if(_new_version == NULL) return this; else return new_version()->newest_version(); }
+
+  methodOop old_version() const {return _old_version; };
+  void set_old_version(methodOop m) {
+    if (m == NULL) {
+      _old_version = NULL;
+      return;
+    }
+
+    assert(_old_version == NULL, "may only be set once");
+    assert(this->code_size() == m->code_size(), "must have same code length");
+    _old_version = m;
+  }
+
+  methodOop oldest_version() const { 
+    if(_old_version == NULL) return (methodOop)this;
+    else {
+      return old_version()->oldest_version();
+    }
+  }
 
   // signature
   Symbol* signature() const                      { return constants()->symbol_at(signature_index()); }
@@ -670,6 +701,10 @@ class methodOopDesc : public oopDesc {
   // Inline cache support
   void cleanup_inline_caches();
 
+  // (tw) Method forwarding support.
+  bool is_in_code_section(int bci);
+  int calculate_forward_bci(int bci, methodOop new_method);
+
   // Find if klass for method is loaded
   bool is_klass_loaded_by_klass_index(int klass_index) const;
   bool is_klass_loaded(int refinfo_index, bool must_be_resolved = false) const;
@@ -734,6 +769,9 @@ class methodOopDesc : public oopDesc {
 
   // Garbage collection support
   oop*  adr_constMethod() const                  { return (oop*)&_constMethod;     }
+  oop*  adr_forward_method() const               { return (oop*)&_forward_method;  }
+  oop*  adr_new_version() const                  { return (oop*)&_new_version;     }
+  oop*  adr_old_version() const                  { return (oop*)&_old_version;     }
   oop*  adr_method_data() const                  { return (oop*)&_method_data;     }
 };
 

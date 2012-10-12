@@ -1792,6 +1792,15 @@ bool Arguments::check_gc_consistency() {
     status = false;
   }
 
+  // (tw) Must use serial GC
+  if (!UseSerialGC && i >= 1) {
+    jio_fprintf(defaultStream::error_stream(),
+      "Must use the serial GC in the Dynamic Code Evolution VM\n");
+    status = false;
+  } else {
+    UseSerialGC = true;
+  }
+
   return status;
 }
 

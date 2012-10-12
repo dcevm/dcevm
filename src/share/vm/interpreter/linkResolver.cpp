@@ -153,8 +153,8 @@ void CallInfo::set_common(KlassHandle resolved_klass, KlassHandle selected_klass
 // Klass resolution
 
 void LinkResolver::check_klass_accessability(KlassHandle ref_klass, KlassHandle sel_klass, TRAPS) {
-  if (!Reflection::verify_class_access(ref_klass->as_klassOop(),
-                                       sel_klass->as_klassOop(),
+  if (!Reflection::verify_class_access(ref_klass->as_klassOop()->klass_part()->newest_version(),
+                                       sel_klass->as_klassOop()->klass_part()->newest_version(),
                                        true)) {
     ResourceMark rm(THREAD);
     Exceptions::fthrow(
@@ -338,7 +338,7 @@ void LinkResolver::check_method_accessability(KlassHandle ref_klass,
   // We'll check for the method name first, as that's most likely
   // to be false (so we'll short-circuit out of these tests).
   if (sel_method->name() == vmSymbols::clone_name() &&
-      sel_klass() == SystemDictionary::Object_klass() &&
+      sel_klass()->klass_part()->newest_version() == SystemDictionary::Object_klass()->klass_part()->newest_version() &&
       resolved_klass->oop_is_array()) {
     // We need to change "protected" to "public".
     assert(flags.is_protected(), "clone not protected?");
@@ -404,6 +404,156 @@ void LinkResolver::resolve_method_statically(methodHandle& resolved_method, Klas
   }
 }
 
+
+void LinkResolver::lookup_method(methodHandle& resolved_method, KlassHandle resolved_klass,
+                   Symbol* method_name, Symbol* method_signature, bool is_interface, KlassHandle current_klass, TRAPS) {
+
+   // Interface method lookup?
+   if (is_interface) {
+
+     // lookup method in this interface or its super, java.lang.Object
+     lookup_instance_method_in_klasses(resolved_method, resolved_klass, method_name, method_signature, CHECK);
+
+     if (resolved_method.is_null()) {
+       // lookup method in all the super-interfaces
+       lookup_method_in_interfaces(resolved_method, resolved_klass, method_name, method_signature, CHECK);
+     }
+
+   // Other methods
+   } else {
+    Handle nested_exception;
+
+    // 2. lookup method in resolved klass and its super klasses
+    lookup_method_in_klasses(resolved_method, resolved_klass, method_name, method_signature, CHECK);
+
+    if (resolved_method.is_null()) { // not found in the class hierarchy
+      // 3. lookup method in all the interfaces implemented by the resolved klass
+      lookup_method_in_interfaces(resolved_method, resolved_klass, method_name, method_signature, CHECK);
+
+      if (resolved_method.is_null()) {
+        // JSR 292:  see if this is an implicitly generated method MethodHandle.linkToVirtual(*...), etc
+        lookup_polymorphic_method(resolved_method, resolved_klass, method_name, method_signature,
+                                  current_klass, (Handle*)NULL, (Handle*)NULL, THREAD);
+        if (HAS_PENDING_EXCEPTION) {
+          nested_exception = Handle(THREAD, PENDING_EXCEPTION);
+          CLEAR_PENDING_EXCEPTION;
+        }
+      }
+    }
+  }
+}
+
+void LinkResolver::lookup_correct_field(fieldDescriptor &fd, KlassHandle &sel_klass, KlassHandle resolved_klass, KlassHandle current_klass, Symbol* field_name, Symbol* field_sig, bool is_static) {
+
+  // First attempt unversioned
+  sel_klass = KlassHandle(Thread::current(), instanceKlass::cast(resolved_klass())->find_field(field_name, field_sig, &fd));
+
+
+  if (!current_klass.is_null() && !current_klass->is_newest_version()) {
+
+    // Look for the policy defined in the new version of the class (_not_ in the newest, but only in the newer relative to current klass).
+    int redefinition_policy = current_klass->new_version()->klass_part()->field_redefinition_policy();
+    if (is_static) {
+      redefinition_policy = current_klass->new_version()->klass_part()->static_field_redefinition_policy();
+    }
+
+    assert(redefinition_policy != Klass::StaticCheck, "if the policy is static check, then we can never reach here");
+
+    if (redefinition_policy != Klass::DynamicCheck) {
+
+      if (redefinition_policy == Klass::AccessOldMembers) {
+        // Forget looked up fields
+        sel_klass = KlassHandle(Thread::current(), (oop)NULL);
+      }
+
+      assert(redefinition_policy == Klass::AccessOldMembers || redefinition_policy == Klass::AccessDeletedMembers, "");
+
+      if (sel_klass.is_null() || fd.is_static() != is_static /* access old static field field is changed from static to non-static */) {
+
+        // Select correct version for resolved klass.
+        find_correct_resolved_klass(resolved_klass, current_klass);
+
+        sel_klass = KlassHandle(Thread::current(), instanceKlass::cast(resolved_klass())->find_field(field_name, field_sig, &fd));
+
+        // FIXME: idubrov
+        //if (sel_klass.is_null()) {
+        //  TRACE_RC2("Trying to resolve field (%s) in old universe failed => exception is the correct behaviour", field_name->as_C_string());
+        //} else {
+        //  assert(sel_klass->new_version() != NULL, "must be old class!");
+        //  TRACE_RC2("Resolved a field in the old universe (%s)!", field_name->as_C_string());
+        //}
+      }
+    }
+  }
+}
+
+void LinkResolver::lookup_correct_method(methodHandle& resolved_method, KlassHandle resolved_klass, KlassHandle current_klass,
+                                 Symbol* method_name, Symbol* method_signature, bool is_interface, TRAPS) {
+
+   // First attempt unversioned
+   lookup_method(resolved_method, resolved_klass, method_name, method_signature, is_interface, current_klass, CHECK);
+
+   // (tw) Are we in an old method that wants to see a different view on the world?
+   if (!current_klass.is_null() && !current_klass->is_newest_version()) {
+
+     // Look for the policy defined in the new version of the class (_not_ in the newest, but only in the newer relative to current klass).
+     int method_redefinition_policy = current_klass->new_version()->klass_part()->method_redefinition_policy();
+     assert(method_redefinition_policy != Klass::StaticCheck, "if the policy is static check, then we can never reach here");
+
+     if (method_redefinition_policy != Klass::DynamicCheck) {
+
+       // We do not throw the exception
+       if (method_redefinition_policy == Klass::AccessOldMembers) {
+         // Forget any new member lookup
+         resolved_method = methodHandle(THREAD, NULL);
+       }
+
+       assert(method_redefinition_policy == Klass::AccessOldMembers || method_redefinition_policy == Klass::AccessDeletedMembers, "");
+
+       if (resolved_method.is_null()) {
+
+         // Select correct version for resolved klass.
+         find_correct_resolved_klass(resolved_klass, current_klass);
+
+         // Now do the lookup in a second attempt with a different resolved klass.
+         lookup_method(resolved_method, resolved_klass, method_name, method_signature, is_interface, current_klass, CHECK);
+
+         // FIXME: idubrov
+         //IF_TRACE_RC2 {
+         //  ResourceMark rm(THREAD);
+         //  if (resolved_method.is_null()) {
+         //    TRACE_RC2("Trying to resolve method (%s) in old universe failed => exception is the correct behaviour", method_name->as_C_string());
+         //  } else {
+         //    assert(resolved_method->is_old(), "must be old method!");
+         //    TRACE_RC2("Resolved a method in the old universe (%s)!", resolved_method->name()->as_C_string());
+         //  }
+         //}
+       }
+     }
+   }
+
+   if (resolved_method.is_null()) {
+     // no method found
+     ResourceMark rm(THREAD);
+     THROW_MSG(vmSymbols::java_lang_NoSuchMethodError(),
+       methodOopDesc::name_and_sig_as_C_string(Klass::cast(resolved_klass()),
+       method_name,
+       method_signature));
+   }
+}
+
+void LinkResolver::find_correct_resolved_klass(KlassHandle &resolved_klass, KlassHandle &current_klass) {
+  int current_klass_revision = current_klass->revision_number();
+  int resolved_klass_revision = resolved_klass->revision_number();
+  // FIXME: idubrov
+  //TRACE_RC2("The two different revision numbers for interfaces: current=%d / resolved_callee=%d", current_klass_revision, resolved_klass_revision);
+
+  while (resolved_klass->revision_number() > current_klass_revision) {
+    assert(resolved_klass->old_version(), "must have old version");
+	resolved_klass = KlassHandle(Thread::current(), resolved_klass->old_version());
+  }
+}
+
 void LinkResolver::resolve_method(methodHandle& resolved_method, KlassHandle resolved_klass,
                                   Symbol* method_name, Symbol* method_signature,
                                   KlassHandle current_klass, bool check_access, TRAPS) {
@@ -416,35 +566,8 @@ void LinkResolver::resolve_method(methodHandle& resolved_method, KlassHandle res
     THROW_MSG(vmSymbols::java_lang_IncompatibleClassChangeError(), buf);
   }
 
-  Handle nested_exception;
-
-  // 2. lookup method in resolved klass and its super klasses
-  lookup_method_in_klasses(resolved_method, resolved_klass, method_name, method_signature, CHECK);
-
-  if (resolved_method.is_null()) { // not found in the class hierarchy
-    // 3. lookup method in all the interfaces implemented by the resolved klass
-    lookup_method_in_interfaces(resolved_method, resolved_klass, method_name, method_signature, CHECK);
-
-    if (resolved_method.is_null()) {
-      // JSR 292:  see if this is an implicitly generated method MethodHandle.linkToVirtual(*...), etc
-      lookup_polymorphic_method(resolved_method, resolved_klass, method_name, method_signature,
-                                current_klass, (Handle*)NULL, (Handle*)NULL, THREAD);
-      if (HAS_PENDING_EXCEPTION) {
-        nested_exception = Handle(THREAD, PENDING_EXCEPTION);
-        CLEAR_PENDING_EXCEPTION;
-      }
-    }
-
-    if (resolved_method.is_null()) {
-      // 4. method lookup failed
-      ResourceMark rm(THREAD);
-      THROW_MSG_CAUSE(vmSymbols::java_lang_NoSuchMethodError(),
-                      methodOopDesc::name_and_sig_as_C_string(Klass::cast(resolved_klass()),
-                                                              method_name,
-                                                              method_signature),
-                      nested_exception);
-    }
-  }
+  // 2. and 3. and 4. lookup method in resolved klass and its super klasses
+  lookup_correct_method(resolved_method, resolved_klass, current_klass, method_name, method_signature, false, CHECK);
 
   // 5. check if method is concrete
   if (resolved_method->is_abstract() && !resolved_klass->is_abstract()) {
@@ -512,20 +635,7 @@ void LinkResolver::resolve_interface_method(methodHandle& resolved_method,
   }
 
   // lookup method in this interface or its super, java.lang.Object
-  lookup_instance_method_in_klasses(resolved_method, resolved_klass, method_name, method_signature, CHECK);
-
-  if (resolved_method.is_null()) {
-    // lookup method in all the super-interfaces
-    lookup_method_in_interfaces(resolved_method, resolved_klass, method_name, method_signature, CHECK);
-    if (resolved_method.is_null()) {
-      // no method found
-      ResourceMark rm(THREAD);
-      THROW_MSG(vmSymbols::java_lang_NoSuchMethodError(),
-                methodOopDesc::name_and_sig_as_C_string(Klass::cast(resolved_klass()),
-                                                        method_name,
-                                                        method_signature));
-    }
-  }
+  lookup_correct_method(resolved_method, resolved_klass, current_klass, method_name, method_signature, true, CHECK);
 
   if (check_access) {
     HandleMark hm(THREAD);
@@ -612,9 +722,14 @@ void LinkResolver::resolve_field(FieldAccessInfo& result, constantPoolHandle poo
     THROW_MSG(vmSymbols::java_lang_NoSuchFieldError(), field->as_C_string());
   }
 
+  KlassHandle ref_klass(THREAD, pool->pool_holder()->klass_part());
+
   // Resolve instance field
   fieldDescriptor fd; // find_field initializes fd if found
-  KlassHandle sel_klass(THREAD, instanceKlass::cast(resolved_klass())->find_field(field, sig, &fd));
+
+  KlassHandle sel_klass;
+  lookup_correct_field(fd, sel_klass, resolved_klass, ref_klass, field, sig, is_static);
+
   // check if field exists; i.e., if a klass containing the field def has been selected
   if (sel_klass.is_null()){
     ResourceMark rm(THREAD);
@@ -622,7 +737,6 @@ void LinkResolver::resolve_field(FieldAccessInfo& result, constantPoolHandle poo
   }
 
   // check access
-  KlassHandle ref_klass(THREAD, pool->pool_holder());
   check_field_accessability(ref_klass, resolved_klass, sel_klass, fd, CHECK);
 
   // check for errors
@@ -634,7 +748,7 @@ void LinkResolver::resolve_field(FieldAccessInfo& result, constantPoolHandle poo
   }
 
   // Final fields can only be accessed from its own class.
-  if (is_put && fd.access_flags().is_final() && sel_klass() != pool->pool_holder()) {
+  if (is_put && fd.access_flags().is_final() && sel_klass() != pool->pool_holder()->klass_part()->active_version() && sel_klass() != pool->pool_holder()) {
     THROW(vmSymbols::java_lang_IllegalAccessError());
   }
 
@@ -839,7 +953,7 @@ void LinkResolver::resolve_virtual_call(CallInfo& result, Handle recv, KlassHand
                                         bool check_access, bool check_null_and_abstract, TRAPS) {
   methodHandle resolved_method;
   linktime_resolve_virtual_method(resolved_method, resolved_klass, method_name, method_signature, current_klass, check_access, CHECK);
-  runtime_resolve_virtual_method(result, resolved_method, resolved_klass, recv, receiver_klass, check_null_and_abstract, CHECK);
+  runtime_resolve_virtual_method(result, resolved_method, resolved_klass, recv, receiver_klass, current_klass, check_null_and_abstract, CHECK);
 }
 
 // throws linktime exceptions
@@ -869,6 +983,7 @@ void LinkResolver::runtime_resolve_virtual_method(CallInfo& result,
                                                   KlassHandle resolved_klass,
                                                   Handle recv,
                                                   KlassHandle recv_klass,
+                                                  KlassHandle current_klass,
                                                   bool check_null_and_abstract,
                                                   TRAPS) {
 
@@ -917,7 +1032,40 @@ void LinkResolver::runtime_resolve_virtual_method(CallInfo& result,
       // recv_klass might be an arrayKlassOop but all vtables start at
       // the same place. The cast is to avoid virtual call and assertion.
       instanceKlass* inst = (instanceKlass*)recv_klass()->klass_part();
+
+      // (tw) The type of the virtual method call and the type of the receiver do not need to 
+      // have anything in common, as the receiver type could've been hotswapped.
+      // Does not always work (method could be resolved with correct dynamic type and later
+      // be called at the same place with a wrong dynamic type).
+      // (tw) TODO: Need to handle the static type vs dynamic type issue more generally.
+
+      // The vTable must be based on the view of the world of the resolved method
+      klassOop method_holder = resolved_method->method_holder();
+
+      if (method_holder->klass_part()->new_version() != NULL) {
+        // We are executing in old code
+        // FIXME: idubrov
+        //TRACE_RC2("Calling a method in old code");
+        while (method_holder->klass_part()->revision_number() < inst->revision_number()) {
+          inst = (instanceKlass *)(inst->old_version()->klass_part());
+        }
+      }
+
+      if (inst->is_subtype_of(method_holder)) {
       selected_method = methodHandle(THREAD, inst->method_at_vtable(vtable_index));
+      } else {
+
+        tty->print_cr("Failure:");
+        inst->as_klassOop()->print();
+        inst->super()->print();
+        juint    off = inst->super_check_offset();
+        klassOop sup = *(klassOop*)( (address)inst->as_klassOop() + off );
+        sup->print();
+        method_holder->print();
+
+        bool b = inst->is_subtype_of(method_holder);
+        THROW_MSG(vmSymbols::java_lang_NoSuchMethodError(), "(tw) A virtual method was called, but the type of the receiver is not related with the type of the class of the called method!");
+      }
     }
   }
 

@@ -65,6 +65,7 @@ bool MethodComparator::methods_EMCP(methodOop old_method, methodOop new_method) 
     if (! args_same(c_old, c_new))
       return false;
   }
+
   return true;
 }
 

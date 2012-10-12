@@ -106,7 +106,7 @@ public:
 
   klassOop klass() { return literal(); }
   klassOop* klass_addr() { return literal_addr(); }
-  void set_klass(klassOop k) { set_literal(k); }
+  void set_klass(klassOop k) { set_literal(k); assert(k == NULL || !k->klass_part()->is_redefining(), "just checking"); }
 
   LoaderConstraintEntry* next() {
     return (LoaderConstraintEntry*)HashtableEntry<klassOop, mtClass>::next();

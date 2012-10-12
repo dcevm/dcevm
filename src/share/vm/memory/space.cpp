@@ -378,6 +378,31 @@ void CompactibleSpace::clear(bool mangle_space) {
   _compaction_top = bottom();
 }
 
+// (tw) Calculates the compact_top that will be used for placing the next object with the giving size on the heap.
+HeapWord* CompactibleSpace::forward_compact_top(size_t size,
+CompactPoint* cp, HeapWord* compact_top) {
+  // First check if we should switch compaction space
+  assert(this == cp->space, "'this' should be current compaction space.");
+  size_t compaction_max_size = pointer_delta(end(), compact_top);
+  while (size > compaction_max_size) {
+    // switch to next compaction space
+    cp->space->set_compaction_top(compact_top);
+    cp->space = cp->space->next_compaction_space();
+    if (cp->space == NULL) {
+      cp->gen = GenCollectedHeap::heap()->prev_gen(cp->gen);
+      assert(cp->gen != NULL, "compaction must succeed");
+      cp->space = cp->gen->first_compaction_space();
+      assert(cp->space != NULL, "generation must have a first compaction space");
+    }
+    compact_top = cp->space->bottom();
+    cp->space->set_compaction_top(compact_top);
+    cp->threshold = cp->space->initialize_threshold();
+    compaction_max_size = pointer_delta(cp->space->end(), compact_top);
+  }
+
+  return compact_top;
+}
+
 HeapWord* CompactibleSpace::forward(oop q, size_t size,
                                     CompactPoint* cp, HeapWord* compact_top) {
   // q is alive
@@ -401,7 +426,7 @@ HeapWord* CompactibleSpace::forward(oop q, size_t size,
   }
 
   // store the forwarding pointer into the mark word
-  if ((HeapWord*)q != compact_top) {
+  if ((HeapWord*)q != compact_top || (size_t)q->size() != size) {
     q->forward_to(oop(compact_top));
     assert(q->is_gc_marked(), "encoding the pointer should preserve the mark");
   } else {
@@ -449,7 +474,208 @@ void CompactibleSpace::prepare_for_compaction(CompactPoint* cp) {
 
 // Faster object search.
 void ContiguousSpace::prepare_for_compaction(CompactPoint* cp) {
-  SCAN_AND_FORWARD(cp, top, block_is_always_obj, obj_size);
+  if (!Universe::is_redefining_gc_run()) {
+    SCAN_AND_FORWARD(cp, top, block_is_always_obj, obj_size);
+    return;
+  }
+
+  /* Compute the new addresses for the live objects and store it in the mark 
+   * Used by universe::mark_sweep_phase2()                                   
+   */                                                                        
+  HeapWord* compact_top; /* This is where we are currently compacting to. */ 
+                                                                             
+  /* We're sure to be here before any objects are compacted into this        
+   * space, so this is a good time to initialize this:                       
+   */                                                                        
+  set_compaction_top(bottom());                                              
+                                                                             
+  if (cp->space == NULL) {                                                   
+    assert(cp->gen != NULL, "need a generation");                            
+    assert(cp->threshold == NULL, "just checking");                          
+    assert(cp->gen->first_compaction_space() == this, "just checking");      
+    cp->space = cp->gen->first_compaction_space();                           
+    compact_top = cp->space->bottom();                                       
+    cp->space->set_compaction_top(compact_top);                              
+    cp->threshold = cp->space->initialize_threshold();                       
+  } else {                                                                  
+    compact_top = cp->space->compaction_top();                               
+  }                                                                          
+                                                                             
+  /* We allow some amount of garbage towards the bottom of the space, so     
+   * we don't start compacting before there is a significant gain to be made.
+   * Occasionally, we want to ensure a full compaction, which is determined  
+   * by the MarkSweepAlwaysCompactCount parameter.                           
+   */                                                                        
+  int invocations = SharedHeap::heap()->perm_gen()->stat_record()->invocations;
+  bool skip_dead = (MarkSweepAlwaysCompactCount < 1)
+    ||((invocations % MarkSweepAlwaysCompactCount) != 0);
+
+  size_t allowed_deadspace = 0;                                              
+  if (skip_dead) {                                                           
+    int ratio = (int)allowed_dead_ratio();                                        
+    allowed_deadspace = (capacity() * ratio / 100) / HeapWordSize;           
+  }                                                                          
+                                                                             
+  HeapWord* q = bottom();                                                    
+  HeapWord* t = end();                                                
+                                                                             
+  HeapWord*  end_of_live= q;    /* One byte beyond the last byte of the last 
+                                   live object. */                           
+  HeapWord*  first_dead = end();/* The first dead object. */                 
+  LiveRange* liveRange  = NULL; /* The current live range, recorded in the   
+                                   first header of preceding free area. */   
+  _first_dead = first_dead;                                                  
+                                                                            
+  const intx interval = PrefetchScanIntervalInBytes;                         
+                                                                             
+  while (q < t) {                                                            
+    assert(!block_is_obj(q) ||                                               
+           oop(q)->mark()->is_marked() || oop(q)->mark()->is_unlocked() ||   
+           oop(q)->mark()->has_bias_pattern(),                               
+           "these are the only valid states during a mark sweep");           
+    if (block_is_obj(q) && oop(q)->is_gc_marked()) {                         
+      /* prefetch beyond q */                                                
+      Prefetch::write(q, interval);                                          
+      /* size_t size = oop(q)->size();  changing this for cms for perm gen */
+      size_t size = block_size(q);     
+
+      // DCEVM: begin
+      //////////////////////////////////////////////////////////////////////////
+      size_t forward_size = size;
+      
+      // Compute the forward sizes and leave out objects whose position could
+      // possibly overlap other objects.
+
+      // DCEVM: There is a new version of the class of q => different size
+      if (oop(q)->blueprint()->new_version() != NULL && oop(q)->blueprint()->new_version()->klass_part()->update_information() != NULL) {
+      
+        size_t new_size = oop(q)->size_given_klass(oop(q)->blueprint()->new_version()->klass_part());
+        assert(size != new_size || oop(q)->is_perm(), "instances without changed size have to be updated prior to GC run");
+        forward_size = new_size;
+      }
+
+      compact_top = cp->space->forward_compact_top(forward_size, cp, compact_top);
+
+      bool rescueing = false;
+      if (rescueing = must_rescue(oop(q), oop(compact_top))) {
+        if (MarkSweep::_rescued_oops == NULL) {
+          MarkSweep::_rescued_oops = new GrowableArray<oop>(128);
+        }
+        // FIXME: idubrov
+        //TRACE_RC5("rescue obj %d klass=%s", MarkSweep::_rescued_oops->length(), oop(q)->klass()->klass_part()->name()->as_C_string());
+        MarkSweep::_rescued_oops->append(oop(q));
+      } else {
+        compact_top = cp->space->forward(oop(q), forward_size, cp, compact_top);
+      }
+      
+      if ((size != forward_size || rescueing) && q < first_dead) {
+        // (tw) This object moves => first_dead must be set to here!
+        first_dead = q;
+      }
+      //////////////////////////////////////////////////////////////////////////
+      q += size;                                                          
+      end_of_live = q;
+    } else {                                                                 
+      /* run over all the contiguous dead objects */                         
+      HeapWord* end = q;                                                     
+      do {                                                                   
+        /* prefetch beyond end */                                            
+        Prefetch::write(end, interval);                                      
+        end += block_size(end);                                              
+      } while (end < t && (!block_is_obj(end) || !oop(end)->is_gc_marked()));
+                                                                             
+      /* see if we might want to pretend this object is alive so that        
+       * we don't have to compact quite as often.                            
+       */                                                                    
+      if (allowed_deadspace > 0 && q == compact_top) {                       
+        size_t sz = pointer_delta(end, q);                                   
+        if (insert_deadspace(allowed_deadspace, q, sz)) {                    
+          compact_top = cp->space->forward(oop(q), sz, cp, compact_top);     
+          q = end;                                                           
+          end_of_live = end;                                                 
+          continue;                                                          
+        }                                                                    
+      }                                                                      
+                                                                             
+      /* otherwise, it really is a free region. */                           
+                                                                             
+      /* for the previous LiveRange, record the end of the live objects. */  
+      if (liveRange) {                                                       
+        liveRange->set_end(q);                                               
+      }                                                                      
+                                                                             
+      /* record the current LiveRange object.                                
+       * liveRange->start() is overlaid on the mark word.                    
+       */                                                                    
+      liveRange = (LiveRange*)q;                                             
+      liveRange->set_start(end);                                             
+      liveRange->set_end(end);                                               
+                                                                             
+      /* see if this is the first dead region. */                            
+      if (q < first_dead) {                                                  
+        first_dead = q;                                                      
+      }                                                                      
+                                                                             
+      /* move on to the next object */                                       
+      q = end;                                                               
+    }                                                                        
+  }
+
+  //////////////////////////////////////////////////////////////////////////
+  // Compute the forwarding addresses for the objects that need to be
+  // rescued.
+  // TODO: empty the _rescued_oops after ALL spaces are compacted!
+  if (MarkSweep::_rescued_oops != NULL) {
+    // FIXME: idubrov
+    //TRACE_RC2("Calculating new forward sizes for %d objects!", MarkSweep::_rescued_oops->length());
+
+    for (int i=0; i<MarkSweep::_rescued_oops->length(); i++) {
+      oop q = MarkSweep::_rescued_oops->at(i);
+
+      /* size_t size = oop(q)->size();  changing this for cms for perm gen */
+      size_t size = block_size((HeapWord*)q);     
+
+      size_t forward_size = size;
+
+      // (tw) There is a new version of the class of q => different size
+      if (oop(q)->blueprint()->new_version() != NULL) {
+
+        size_t new_size = oop(q)->size_given_klass(oop(q)->blueprint()->new_version()->klass_part());
+        assert(size != new_size || oop(q)->is_perm(), "instances without changed size have to be updated prior to GC run");
+        forward_size = new_size;
+      }
+      
+      compact_top = cp->space->forward(oop(q), forward_size, cp, compact_top);
+      assert(compact_top <= t, "must not write over end of space!");
+    }
+    MarkSweep::_rescued_oops->clear();
+    MarkSweep::_rescued_oops = NULL;
+  }
+  //////////////////////////////////////////////////////////////////////////
+                      
+  assert(q == t, "just checking");                                           
+  if (liveRange != NULL) {                                                   
+    liveRange->set_end(q);                                                   
+  }                                                                         
+  _end_of_live = end_of_live;                                                
+  if (end_of_live < first_dead) {                                            
+    first_dead = end_of_live;                                                
+  }                                                                          
+  _first_dead = first_dead;    
+
+// FIXME: idubrov
+//  if (_first_dead > top()) {
+//    _first_dead = top();
+//  }
+//
+//  if (_end_of_live > top()) {
+//    _end_of_live = top();
+//  }
+  assert(_first_dead <= top(), "Must be smaller equal");
+  assert(_end_of_live <= top(), "Must be smaller equal");
+                                                                             
+  /* save the compaction_top of the compaction space. */                     
+  cp->space->set_compaction_top(compact_top);      
 }
 
 void Space::adjust_pointers() {
@@ -490,17 +716,313 @@ void Space::adjust_pointers() {
   assert(q == t, "just checking");
 }
 
+
+#ifdef ASSERT
+
+int CompactibleSpace::space_index(oop obj) {
+  GenCollectedHeap* heap = GenCollectedHeap::heap();
+
+  if (heap->is_in_permanent(obj)) {
+    return -1;
+  }
+
+  int index = 0;
+  for (int i = heap->n_gens() - 1; i >= 0; i--) {
+    Generation* gen = heap->get_gen(i);
+    CompactibleSpace* space = gen->first_compaction_space();
+    while (space != NULL) {
+      if (space->is_in_reserved(obj)) {
+        return index;
+      }
+      space = space->next_compaction_space();
+      index++;
+    }
+  }
+
+  tty->print_cr("could not compute space_index for %08xh", obj);
+  index = 0;
+  for (int i = heap->n_gens() - 1; i >= 0; i--) {
+    Generation* gen = heap->get_gen(i);
+    tty->print_cr("  generation %s: %08xh - %08xh", gen->name(), gen->reserved().start(), gen->reserved().end());
+
+    CompactibleSpace* space = gen->first_compaction_space();
+    while (space != NULL) {
+      tty->print_cr("    %2d space %08xh - %08xh", index, space->bottom(), space->end());
+      space = space->next_compaction_space();
+      index++;
+    }
+  }
+
+  ShouldNotReachHere();
+  return 0;
+}
+#endif
+
+bool CompactibleSpace::must_rescue(oop old_obj, oop new_obj) {
+
+  assert(is_in_reserved(old_obj), "old_obj must be in this space");
+
+  if (old_obj->is_perm()) {
+    // This object is in perm gen; check for invariant obj->klass() <= obj
+    if (oop(old_obj)->blueprint()->new_version() != NULL) {
+      return true;
+    }
+  }
+
+  int size = old_obj->size();
+  int original_size = size;
+  if (oop(old_obj)->blueprint()->is_redefining()) {
+    assert(oop(old_obj)->blueprint()->old_version() != NULL, "must not be null");
+    original_size = oop(old_obj)->size_given_klass(oop(old_obj)->blueprint()->old_version()->klass_part());
+  } else if (oop(old_obj)->blueprint()->new_version() != NULL) {
+    size = oop(old_obj)->size_given_klass(oop(old_obj)->blueprint()->new_version()->klass_part());
+  }
+
+  bool normalComparison = (old_obj + original_size < new_obj + size);
+
+  if (is_in_reserved(new_obj)) {
+    // Old and new address are in same space, so just compare the address.
+    // Must rescue if object moves towards the top of the space.
+    assert(space_index(old_obj) == space_index(new_obj), "old_obj and new_obj must be in same space");
+    return normalComparison;
+
+  } else {
+
+    assert(space_index(old_obj) != space_index(new_obj), "old_obj and new_obj must be in different spaces");
+
+    Generation* tenured_gen = GenCollectedHeap::heap()->get_gen(1);
+    if (tenured_gen->is_in_reserved(new_obj)) {
+      // Must never rescue when moving from the new into the old generation.
+      assert(GenCollectedHeap::heap()->get_gen(0)->is_in_reserved(old_obj), "old_obj must be in DefNewGeneration");
+      assert(space_index(old_obj) > space_index(new_obj), "must be");
+      return false;
+
+    } else if (tenured_gen->is_in_reserved(old_obj)) {
+      // Must always rescue when moving from the old into the new generation.
+      assert(GenCollectedHeap::heap()->get_gen(0)->is_in_reserved(new_obj), "new_obj must be in DefNewGeneration");
+      assert(space_index(old_obj) < space_index(new_obj), "must be");
+      return true;
+
+    } else {
+      // In the new generation, eden is located before the from space, so a
+      // simple pointer comparison is sufficient.
+      assert(GenCollectedHeap::heap()->get_gen(0)->is_in_reserved(old_obj), "old_obj must be in DefNewGeneration");
+      assert(GenCollectedHeap::heap()->get_gen(0)->is_in_reserved(new_obj), "new_obj must be in DefNewGeneration");
+      assert((normalComparison) == (space_index(old_obj) < space_index(new_obj)), "slow and fast computation must yield same result");
+      return normalComparison;
+    }
+  }
+}
+
+oop CompactibleSpace::rescue(oop old_obj) {
+  assert(must_rescue(old_obj, old_obj->forwardee()), "do not call otherwise");
+
+  int size = old_obj->size();
+  oop rescued_obj = (oop)resource_allocate_bytes(size * HeapWordSize);
+  Copy::aligned_disjoint_words((HeapWord*)old_obj, (HeapWord*)rescued_obj, size);
+
+  if (MarkSweep::_rescued_oops == NULL) {
+    MarkSweep::_rescued_oops = new GrowableArray<oop>(128);
+  }
+
+  MarkSweep::_rescued_oops->append(rescued_obj);
+  return rescued_obj;
+}
+
 void CompactibleSpace::adjust_pointers() {
   // Check first is there is any work to do.
   if (used() == 0) {
     return;   // Nothing to do.
   }
+  /* adjust all the interior pointers to point at the new locations of objects        
+  * Used by MarkSweep::mark_sweep_phase3() */                                        
 
-  SCAN_AND_ADJUST_POINTERS(adjust_obj_size);
+  HeapWord* q = bottom();                                                        
+  HeapWord* t = _end_of_live;  /* Established by "prepare_for_compaction". */        
+
+  assert(_first_dead <= _end_of_live, "Stands to reason, no?");                        
+
+  debug_only(HeapWord* prev_q = NULL);   
+  debug_only(HeapWord* prev_prev_q = NULL); 
+  debug_only(HeapWord* prev_prev_prev_q = NULL);   
+  if (q < t && _first_dead > q &&                                                
+    !oop(q)->is_gc_marked()) {                                                
+      /* we have a chunk of the space which hasn't moved and we've                
+      * reinitialized the mark word during the previous pass, so we can't        
+      * use is_gc_marked for the traversal. */                                        
+      HeapWord* end = _first_dead;                                                
+      
+        while (q < end) {                                                                
+          /* I originally tried to conjoin "block_start(q) == q" to the                
+          * assertion below, but that doesn't work, because you can't                
+          * accurately traverse previous objects to get to the current one                
+          * after their pointers (including pointers into permGen) have been        
+          * updated, until the actual compaction is done.  dld, 4/00 */                
+          assert(block_is_obj(q),                                                        
+            "should be at block boundaries, and should be looking at objs");        
+
+          VALIDATE_MARK_SWEEP_ONLY(MarkSweep::track_interior_pointers(oop(q)));     
+
+          /* point all the oops to the new location */     
+          size_t size = oop(q)->adjust_pointers();        
+          size = adjust_obj_size(size);        
+
+          VALIDATE_MARK_SWEEP_ONLY(MarkSweep::check_interior_pointers());           
+          VALIDATE_MARK_SWEEP_ONLY(MarkSweep::validate_live_oop(oop(q), size));     
+
+          debug_only(prev_prev_prev_q = prev_prev_q);  
+          debug_only(prev_prev_q = prev_q);  
+          debug_only(prev_q = q);  
+          q += size;                                                                
+        }                                                                                
+
+        // (tw) first_dead can be live object!
+        q = _first_dead;
+
+//        if (_first_dead == t) {                                                        
+//          q = t;                                                                        
+//        } else {                                                                        
+//          /* $$$ This is funky.  Using this to read the previously written                
+//          * LiveRange.  See also use below. */                                        
+//          q = (HeapWord*)oop(_first_dead)->mark()->decode_pointer();                
+//        }                                                                               
+  }                                                                                
+
+  const intx interval = PrefetchScanIntervalInBytes;                            
+
+  debug_only(prev_q = NULL);  
+  debug_only(prev_prev_q = NULL); 
+  debug_only(prev_prev_prev_q = NULL);                                                 
+  while (q < t) {                                                                
+    /* prefetch beyond q */                                                        
+    Prefetch::write(q, interval);                                               
+    if (oop(q)->is_gc_marked()) {                                                
+      /* q is alive */                                                                
+      VALIDATE_MARK_SWEEP_ONLY(MarkSweep::track_interior_pointers(oop(q)));     
+      /* point all the oops to the new location */                                
+      size_t size = oop(q)->adjust_pointers();      
+      size = adjust_obj_size(size);                                                
+      VALIDATE_MARK_SWEEP_ONLY(MarkSweep::check_interior_pointers());                
+      VALIDATE_MARK_SWEEP_ONLY(MarkSweep::validate_live_oop(oop(q), size));     
+      debug_only(prev_prev_prev_q = prev_prev_q);  
+      debug_only(prev_prev_q = prev_q);  
+      debug_only(prev_q = q);                                                        
+      q += size;                                                                
+    } else {                                                                        
+      /* q is not a live object, so its mark should point at the next                
+      * live object */                              
+      debug_only(prev_prev_prev_q = prev_prev_q);  
+      debug_only(prev_prev_q = prev_q);                                    
+      debug_only(prev_q = q);                                                        
+      q = (HeapWord*) oop(q)->mark()->decode_pointer();                                
+      assert(q > prev_q, "we should be moving forward through memory");                
+    }                                                                                
+  }                                                                                
+
+  assert(q == t, "just checking");     
 }
 
 void CompactibleSpace::compact() {
-  SCAN_AND_COMPACT(obj_size);
+
+  if(!Universe::is_redefining_gc_run()) {
+    SCAN_AND_COMPACT(obj_size);
+    return;
+  } 
+
+  /* Copy all live objects to their new location
+   * Used by MarkSweep::mark_sweep_phase4() */
+  
+  HeapWord*       q = bottom();
+  HeapWord* const t = _end_of_live; 
+  debug_only(HeapWord* prev_q = NULL);    
+  
+  if (q < t && _first_dead > q &&                                                
+      !oop(q)->is_gc_marked()) {
+    debug_only(
+    /* we have a chunk of the space which hasn't moved and we've reinitialized  
+     * the mark word during the previous pass, so we can't use is_gc_marked for 
+     * the traversal. */                                                        
+    HeapWord* const end = _first_dead;                                                
+
+    while (q < end) {
+      size_t size = obj_size(q); // FIXME: idubrov oop(q)->size();
+      assert(!oop(q)->is_gc_marked(),                                           
+             "should be unmarked (special dense prefix handling)");             
+      VALIDATE_MARK_SWEEP_ONLY(MarkSweep::live_oop_moved_to(q, size, q));     
+      debug_only(prev_q = q);                                                        
+      q += size;                                                                
+    }  
+    )  /* debug_only */
+    // (tw) first_dead can be live object!
+    q = _first_dead;
+
+    //if (_first_dead == t) {                                                        
+    //  q = t;                                                                        
+    //} else {                                                                        
+    ///* $$$ Funky */                                                                 
+    //q = (HeapWord*) oop(_first_dead)->mark()->decode_pointer();                
+    //}                                                                                
+  }                                                                                
+  
+  const intx scan_interval = PrefetchScanIntervalInBytes;                        
+  const intx copy_interval = PrefetchCopyIntervalInBytes;                        
+  while (q < t) {                                                                
+    if (!oop(q)->is_gc_marked()) {                                                
+      /* mark is pointer to next marked oop */     
+      debug_only(prev_q = q);                                                        
+      q = (HeapWord*) oop(q)->mark()->decode_pointer();                                
+      assert(q > prev_q, "we should be moving forward through memory");                
+    } else {                                                                        
+      /* prefetch beyond q */                                                        
+      Prefetch::read(q, scan_interval);
+   
+      /* size and destination */                                                
+      size_t size = obj_size(q);                                                
+      HeapWord* compaction_top = (HeapWord*)oop(q)->forwardee(); 
+
+      if (must_rescue(oop(q), oop(q)->forwardee())) {
+        oop dest_obj = rescue(oop(q));
+        debug_only(Copy::fill_to_words(q, size, 0));
+      } else {
+
+        /* prefetch beyond compaction_top */                                        
+        Prefetch::write(compaction_top, copy_interval);                           
+        
+        /* copy object and reinit its mark */                                        
+        VALIDATE_MARK_SWEEP_ONLY(MarkSweep::live_oop_moved_to(q, size,            
+                                                              compaction_top));   
+        assert(q != compaction_top || oop(q)->blueprint()->new_version() != NULL, "everything in this pass should be moving");        
+        
+        if (oop(q)->blueprint()->new_version() != NULL) {
+          MarkSweep::update_fields(oop(q), oop(compaction_top));
+        } else {
+          Copy::aligned_conjoint_words(q, compaction_top, size);
+        }
+        oop(compaction_top)->init_mark();                                                
+        assert(oop(compaction_top)->klass() != NULL, "should have a class");
+      }
+
+      debug_only(prev_q = q);               
+      q += size;                                                                
+    }                                                                                
+  }                        
+  
+  /* Let's remember if we were empty before we did the compaction. */
+  bool was_empty = used_region().is_empty();
+  /* Reset space after compaction is complete */
+  reset_after_compaction();
+  /* We do this clear, below, since it has overloaded meanings for some */
+  /* space subtypes.  For example, OffsetTableContigSpace's that were   */
+  /* compacted into will have had their offset table thresholds updated */
+  /* continuously, but those that weren't need to have their thresholds */
+  /* re-initialized.  Also mangles unused area for debugging.           */
+  if (used_region().is_empty()) {
+    if (!was_empty) clear(SpaceDecorator::Mangle);
+  } else {
+    if (ZapUnusedHeapArea) mangle_unused_area();
+  }
+
+  //SCAN_AND_COMPACT(obj_size);
 }
 
 void Space::print_short() const { print_short_on(tty); }

@@ -697,37 +697,34 @@ jvmtiError VM_RedefineClasses::check_redefinition_allowed(instanceKlassHandle sc
 
   // Check if the number, names, types and order of fields declared in these classes
   // are the same.
-  typeArrayOop k_old_fields = the_class->fields();
-  typeArrayOop k_new_fields = scratch_class->fields();
-  int n_fields = k_old_fields->length();
-  if (n_fields != k_new_fields->length()) {
-    return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_SCHEMA_CHANGED;
-  }
-
-  for (i = 0; i < n_fields; i++) {
-    FieldInfo* old_field = FieldInfo::from_field_array(k_old_fields, i);
-    FieldInfo* new_field = FieldInfo::from_field_array(k_new_fields, i);
-
+  JavaFieldStream old_fs(the_class);
+  JavaFieldStream new_fs(scratch_class);
+  for (; !old_fs.done() && !new_fs.done(); old_fs.next(), new_fs.next()) {
     // access
-    old_flags = old_field->access_flags();
-    new_flags = new_field->access_flags();
+    old_flags = old_fs.access_flags().as_short();
+    new_flags = new_fs.access_flags().as_short();
     if ((old_flags ^ new_flags) & JVM_RECOGNIZED_FIELD_MODIFIERS) {
       return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_SCHEMA_CHANGED;
     }
     // offset
-    if (old_field->offset() != new_field->offset()) {
-        return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_SCHEMA_CHANGED;
+    if (old_fs.offset() != new_fs.offset()) {
+      return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_SCHEMA_CHANGED;
     }
     // name and signature
-    Symbol* name_sym1 = old_field->name(the_class->constants());
-    Symbol* sig_sym1 = old_field->signature(the_class->constants());
-    Symbol* name_sym2 = new_field->name(scratch_class->constants());
-    Symbol* sig_sym2 = new_field->name(scratch_class->constants());
+    Symbol* name_sym1 = the_class->constants()->symbol_at(old_fs.name_index());
+    Symbol* sig_sym1 = the_class->constants()->symbol_at(old_fs.signature_index());
+    Symbol* name_sym2 = scratch_class->constants()->symbol_at(new_fs.name_index());
+    Symbol* sig_sym2 = scratch_class->constants()->symbol_at(new_fs.signature_index());
     if (name_sym1 != name_sym2 || sig_sym1 != sig_sym2) {
       return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_SCHEMA_CHANGED;
     }
   }
 
+  // If both streams aren't done then we have a differing number of
+  // fields.
+  if (!old_fs.done() || !new_fs.done()) {
+    return JVMTI_ERROR_UNSUPPORTED_REDEFINITION_SCHEMA_CHANGED;
+  }
 
   // Do a parallel walk through the old and new methods. Detect
   // cases where they match (exist in both), have been added in
@@ -976,35 +973,31 @@ int VM_RedefineClasses::calculate_redefinition_flags(instanceKlassHandle new_cla
 
   // Check if the number, names, types and order of fields declared in these classes
   // are the same.
-  typeArrayOop k_old_fields = the_class->fields();
-  typeArrayOop k_new_fields = new_class->fields();
-  int n_fields = k_old_fields->length();
-  if (n_fields != k_new_fields->length()) {
-    result = result | Klass::ModifyInstances;
-  } else {
-    for (i = 0; i < n_fields; i ++) {
-      FieldInfo* old_field = FieldInfo::from_field_array(k_old_fields, i);
-      FieldInfo* new_field = FieldInfo::from_field_array(k_new_fields, i);
-
-      // access
-      old_flags = old_field->access_flags();
-      new_flags = new_field->access_flags();
-      if ((old_flags ^ new_flags) & JVM_RECOGNIZED_FIELD_MODIFIERS) {
-        // (tw) Can this have any effects?
-      }
-      // offset
-      if (old_field->offset() != new_field->offset()) {
-          result = result | Klass::ModifyInstances;
-      }
-      // name and signature
-      Symbol* name_sym1 = old_field->name(the_class->constants());
-      Symbol* sig_sym1 = old_field->signature(the_class->constants());
-      Symbol* name_sym2 = new_field->name(new_class->constants());
-      Symbol* sig_sym2 = new_field->signature(new_class->constants());
-      if (name_sym1 != name_sym2 || sig_sym1 != sig_sym2) {
-        result = result | Klass::ModifyInstances;
-      }
+  JavaFieldStream old_fs(the_class);
+  JavaFieldStream new_fs(new_class);
+  for (; !old_fs.done() && !new_fs.done(); old_fs.next(), new_fs.next()) {
+    // access
+    old_flags = old_fs.access_flags().as_short();
+    new_flags = new_fs.access_flags().as_short();
+    if ((old_flags ^ new_flags) & JVM_RECOGNIZED_FIELD_MODIFIERS) {
+      // (tw) Can this have any effects?
     }
+    // offset
+    if (old_fs.offset() != new_fs.offset()) {
+        result = result | Klass::ModifyInstances;
+    }
+    // name and signature
+    Symbol* name_sym1 = the_class->constants()->symbol_at(old_fs.name_index());
+    Symbol* sig_sym1 = the_class->constants()->symbol_at(old_fs.signature_index());
+    Symbol* name_sym2 = new_class->constants()->symbol_at(new_fs.name_index());
+    Symbol* sig_sym2 = new_class->constants()->symbol_at(new_fs.signature_index());
+    if (name_sym1 != name_sym2 || sig_sym1 != sig_sym2) {
+      result = result | Klass::ModifyInstances;
+    }
+  }
+
+  if (!old_fs.done() || !new_fs.done()) {
+    result = result | Klass::ModifyInstances;
   }
 
   // Do a parallel walk through the old and new methods. Detect
@@ -3077,8 +3070,8 @@ void VM_RedefineClasses::transfer_special_access_flags(fieldDescriptor *from, fi
 
 void VM_RedefineClasses::update_klass_field_access_flag(fieldDescriptor *fd) {
   instanceKlass* ik = instanceKlass::cast(fd->field_holder());
-  typeArrayOop fields = ik->fields();
-  fields->ushort_at_put(fd->index(), (jushort)fd->access_flags().as_short());
+  FieldInfo* fi = FieldInfo::from_field_array(ik->fields(), fd->index());
+  fi->set_access_flags(fd->access_flags().as_short());
 }
 
 

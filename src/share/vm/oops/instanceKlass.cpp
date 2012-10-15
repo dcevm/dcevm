@@ -276,7 +276,7 @@ void instanceKlass::initialize_redefined_class() {
     
       if (found && result.is_static()) {
         int old_offset = result.offset();
-        assert(result.field_type() == fd->field_type(), "");
+        assert(result.field_type() == fd->field_type(), "Old and new field type does not match");
 
         oop new_location = this_oop();
         oop old_location = this_oop->old_version();

@@ -2278,7 +2278,9 @@ void VM_RedefineClasses::doit() {
             // and signature of a static field match.
             klass->initialize_redefined_class();
           }
-          // idubrov: FIXME: 
+          // idubrov: FIXME: we probably don't need that since oop's will be visited in a regular way...
+          // idubrov: need to check if there is a test to verify that fields referencing class being updated
+          // idubrov: will get new version of that class
           //klass->iterate_static_fields(_closure);
         }
       }

@@ -278,10 +278,10 @@ void instanceKlass::initialize_redefined_class() {
         int old_offset = result.offset();
         assert(result.field_type() == fd->field_type(), "Old and new field type does not match");
 
-        oop new_location = this_oop();
-        oop old_location = this_oop->old_version();
+        oop new_location = this_oop()->java_mirror();
+        oop old_location = this_oop->old_version()->java_mirror();
         int offset = fd->offset();
-        RC_TRACE(0x00000400, ("Copying static field value for field %s old_offset=%d new_offset=%d",
+        RC_TRACE(0x00000400, ("Copying static field value for field '%s' old_offset=%d new_offset=%d",
           fd->name()->as_C_string(), old_offset, offset));
 
         oop cur_oop;

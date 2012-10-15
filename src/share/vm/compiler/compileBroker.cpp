@@ -1181,6 +1181,10 @@ nmethod* CompileBroker::compile_method(methodHandle method, int osr_bci,
                                        int comp_level,
                                        methodHandle hot_method, int hot_count,
                                        const char* comment, Thread* THREAD) {
+  if (((CompilerThread *)Thread::current())->should_bailout()) {
+    return NULL; // FIXME: DCEVM: should we do something else?
+  }
+
   // make sure arguments make sense
   assert(method->method_holder()->klass_part()->oop_is_instance(), "not an instance method");
   assert(osr_bci == InvocationEntryBci || (0 <= osr_bci && osr_bci < method->code_size()), "bci out of range");

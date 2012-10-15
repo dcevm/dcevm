@@ -2125,6 +2125,7 @@ template <class T> void VM_RedefineClasses::do_oop_work(T* p) {
     oop obj = oopDesc::decode_heap_oop_not_null(heap_oop);
     if (obj->is_instanceKlass()) {
       klassOop klass = (klassOop)obj;
+      // DCEVM: note: can overwrite owner of old_klass constants pool with new_klass, so we need to fix it back later
       if (klass->klass_part()->new_version() != NULL && klass->klass_part()->new_version()->klass_part()->is_redefining()) {
         obj = klass->klass_part()->new_version();
         oopDesc::encode_store_heap_oop_not_null(p, obj);
@@ -2268,6 +2269,10 @@ void VM_RedefineClasses::doit() {
         } else {
           instanceKlass *klass = instanceKlass::cast((klassOop)obj);
           if (klass->is_redefining()) {
+            // DCEVM: We need to restorte constants pool owner which was updated by do_oop_work
+            instanceKlass* old_klass = instanceKlass::cast(klass->old_version());
+            old_klass->constants()->set_pool_holder(klass->old_version());
+ 
             // Initialize the new class! Special static initialization that does not execute the
             // static constructor but copies static field values from the old class if name
             // and signature of a static field match.
@@ -2293,7 +2298,6 @@ void VM_RedefineClasses::doit() {
     for (int i=0; i<_new_classes->length(); i++) {
       swap_marks(_new_classes->at(i)(), _new_classes->at(i)->old_version());
       swap_marks(_new_classes->at(i)->java_mirror(), _new_classes->at(i)->old_version()->klass_part()->java_mirror());
-      ((instanceKlass*)_new_classes->at(i)->old_version()->klass_part())->constants()->set_pool_holder(_new_classes->at(i)->old_version());
     }
 
     _updated_oops = objectClosure.updated_oops();

@@ -137,6 +137,9 @@ class VM_RedefineClasses: public VM_GC_Operation {
   void calculate_instance_update_information(klassOop new_version);
   void check_methods_and_mark_as_obsolete(BitMap *emcp_methods, int * emcp_method_count_p);
 
+  static void calculate_type_check_information(klassOop k);
+  static void clear_type_check_information(klassOop k);
+
  public:
   VM_RedefineClasses(jint class_count, const jvmtiClassDefinition *class_defs, JvmtiClassLoadKind class_load_kind);
   virtual ~VM_RedefineClasses();

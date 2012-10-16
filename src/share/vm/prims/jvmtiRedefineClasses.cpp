@@ -1358,75 +1358,66 @@ Symbol* VM_RedefineClasses::signature_to_class_name(Symbol* signature) {
   return SymbolTable::new_symbol(signature->as_C_string() + 1, signature->utf8_length() - 2, Thread::current());
 }
 
-void VM_RedefineClasses::calculate_type_check_information() {
-  class MarkAffectedClassesClosure : public ObjectClosure {
+void VM_RedefineClasses::calculate_type_check_information(klassOop klass) {
+  if (klass->klass_part()->is_redefining()) {
+    klass = klass->klass_part()->old_version();
+  }
 
-    virtual void do_object(oop obj) {
-      klassOop klass = (klassOop)obj;
+  // We found an instance klass!
+  instanceKlass *cur_instance_klass = instanceKlass::cast(klass);
+  GrowableArray< Pair<int, klassOop> > type_check_information;
 
-      if (klass->klass_part()->is_redefining()) {
-        klass = klass->klass_part()->old_version();
-      }
+  class MyFieldClosure : public FieldClosure {
 
-      // We found an instance klass!
-      instanceKlass *cur_instance_klass = instanceKlass::cast(klass);
-      GrowableArray< Pair<int, klassOop> > type_check_information;
+  public:
 
-      class MyFieldClosure : public FieldClosure {
+    GrowableArray< Pair<int, klassOop> > *_arr;
 
-      public:
+    MyFieldClosure(GrowableArray< Pair<int, klassOop> > *arr) {
+      _arr = arr;
+    }
 
-        GrowableArray< Pair<int, klassOop> > *_arr;
-
-        MyFieldClosure(GrowableArray< Pair<int, klassOop> > *arr) {
-          _arr = arr;
-        }
-
-        virtual void do_field(fieldDescriptor* fd) {
-          if (fd->field_type() == T_OBJECT) {
-            Symbol* signature = fd->signature();
-            if (FieldType::is_obj(signature)) {
-              Symbol* name = signature_to_class_name(signature);
-              klassOop field_klass;
-              if (is_field_dangerous(name, fd, field_klass)) {
-                RC_TRACE(0x00000002, ("Found dangerous field %s in klass %s of type %s",
-                  fd->name()->as_C_string(),
-                  fd->field_holder()->klass_part()->name()->as_C_string(),
-                  name->as_C_string()));
-                _arr->append(Pair<int, klassOop>(fd->offset(), field_klass->klass_part()->newest_version()));
-              }
-            }
-
-            // Array fields can never be a problem!
+    virtual void do_field(fieldDescriptor* fd) {
+      if (fd->field_type() == T_OBJECT) {
+        Symbol* signature = fd->signature();
+        if (FieldType::is_obj(signature)) {
+          Symbol* name = signature_to_class_name(signature);
+          klassOop field_klass;
+          if (is_field_dangerous(name, fd, field_klass)) {
+            RC_TRACE(0x00000002, ("Found dangerous field %s in klass %s of type %s",
+              fd->name()->as_C_string(),
+              fd->field_holder()->klass_part()->name()->as_C_string(),
+              name->as_C_string()));
+            _arr->append(Pair<int, klassOop>(fd->offset(), field_klass->klass_part()->newest_version()));
           }
         }
 
-        bool is_field_dangerous(Symbol* klass_name, fieldDescriptor *fd, klassOop &field_klass) {
-          field_klass = SystemDictionary::find(klass_name, fd->field_holder()->klass_part()->class_loader(), fd->field_holder()->klass_part()->protection_domain(), Thread::current());
-          if(field_klass != NULL) {
-            if (field_klass->klass_part()->is_redefining()) {
-              field_klass = field_klass->klass_part()->old_version();
-            }
-            if (field_klass->klass_part()->has_subtype_changed()) {
-              return true;
-            }
-          }
-          return false;
-        }
-      };
-
-      MyFieldClosure fieldClosure(&type_check_information);
-      cur_instance_klass->do_nonstatic_fields(&fieldClosure);
-
-      if (type_check_information.length() > 0) {
-        type_check_information.append(Pair<int, klassOop>(-1, NULL));
-        cur_instance_klass->store_type_check_information(type_check_information);
+        // Array fields can never be a problem!
       }
+    }
+
+    bool is_field_dangerous(Symbol* klass_name, fieldDescriptor *fd, klassOop &field_klass) {
+      field_klass = SystemDictionary::find(klass_name, fd->field_holder()->klass_part()->class_loader(),
+              fd->field_holder()->klass_part()->protection_domain(), Thread::current());
+      if(field_klass != NULL) {
+        if (field_klass->klass_part()->is_redefining()) {
+          field_klass = field_klass->klass_part()->old_version();
+        }
+        if (field_klass->klass_part()->has_subtype_changed()) {
+          return true;
+        }
+      }
+      return false;
     }
   };
 
-  MarkAffectedClassesClosure markAffectedClassesClosure;
-  SystemDictionary::classes_do(&markAffectedClassesClosure);
+  MyFieldClosure fieldClosure(&type_check_information);
+  cur_instance_klass->do_nonstatic_fields(&fieldClosure);
+
+  if (type_check_information.length() > 0) {
+    type_check_information.append(Pair<int, klassOop>(-1, NULL));
+    cur_instance_klass->store_type_check_information(type_check_information);
+  }
 }
 
 bool VM_RedefineClasses::check_field_value_types() {
@@ -1534,23 +1525,14 @@ bool VM_RedefineClasses::check_field_value_types() {
   return myObjectClosure.result();
 }
 
-void VM_RedefineClasses::clear_type_check_information() {
-  class ClearTypeCheckInformationClosure : public ObjectClosure {
-    virtual void do_object(oop obj) {
-      klassOop klass = (klassOop)obj;
+void VM_RedefineClasses::clear_type_check_information(klassOop k) {
+  if (k->klass_part()->is_redefining()) {
+    k = k->klass_part()->old_version();
+  }
 
-      if (klass->klass_part()->is_redefining()) {
-        klass = klass->klass_part()->old_version();
-      }
-
-      // We found an instance klass!
-      instanceKlass *cur_instance_klass = instanceKlass::cast(klass);
-      cur_instance_klass->clear_type_check_information();
-    }
-  };
-
-  ClearTypeCheckInformationClosure clearTypeCheckInformationClosure;
-  SystemDictionary::classes_do(&clearTypeCheckInformationClosure);
+  // We found an instance klass!
+  instanceKlass *cur_instance_klass = instanceKlass::cast(k);
+  cur_instance_klass->clear_type_check_information();
 }
 
 void VM_RedefineClasses::update_active_methods() {
@@ -2074,9 +2056,9 @@ bool VM_RedefineClasses::check_type_consistency() {
 
   Universe::set_verify_in_progress(true);
 
-  calculate_type_check_information();
+  SystemDictionary::classes_do(calculate_type_check_information);
   bool result = check_field_value_types();
-  clear_type_check_information();
+  SystemDictionary::classes_do(clear_type_check_information);
   if (!result) {
     RC_TRACE(0x00000001, ("Aborting redefinition because of wrong field or array element value!"));
     Universe::set_verify_in_progress(false);

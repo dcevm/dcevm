@@ -368,10 +368,10 @@ jvmtiError VM_RedefineClasses::load_new_class_versions(TRAPS) {
 
     if (!THREAD->is_Compiler_thread()) {
 
-      RC_TRACE(0x00000002, ("name=%s loader=%d protection_domain=%d",
+      RC_TRACE(0x00000002, ("name=%s loader="INTPTR_FORMAT" protection_domain="INTPTR_FORMAT" ",
         the_class->name()->as_C_string(),
-        (int)(the_class->class_loader()),
-        (int)(the_class->protection_domain())));
+        (address)(the_class->class_loader()),
+        (address)(the_class->protection_domain())));
       // If we are on the compiler thread, we must not try to resolve a class.
       klassOop systemLookup = SystemDictionary::resolve_or_null(the_class->name(), the_class->class_loader(), the_class->protection_domain(), THREAD);
       

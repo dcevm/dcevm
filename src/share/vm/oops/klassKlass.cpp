@@ -157,6 +157,8 @@ int klassKlass::oop_oop_iterate_m(oop obj, OopClosure* blk, MemRegion mr) {
   // The following are "weak links" in the perm gen and are
   // treated specially in a later phase of a perm gen collection.
   assert(oop(k)->is_perm(), "should be in perm");
+  assert(oop(k->adr_old_version())->is_perm(), "should be in perm");
+  assert(oop(k->adr_new_version())->is_perm(), "should be in perm");
   assert(oop(k->adr_subklass())->is_perm(), "should be in perm");
   assert(oop(k->adr_next_sibling())->is_perm(), "should be in perm");
   if (blk->should_remember_klasses()

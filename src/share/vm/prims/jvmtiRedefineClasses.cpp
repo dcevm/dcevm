@@ -30,6 +30,7 @@
 #include "interpreter/rewriter.hpp"
 #include "memory/gcLocker.hpp"
 #include "memory/universe.inline.hpp"
+#include "memory/cardTableRS.hpp"
 #include "oops/klassVtable.hpp"
 #include "oops/fieldStreams.hpp"
 #include "prims/jvmtiImpl.hpp"
@@ -2136,10 +2137,24 @@ template <class T> void VM_RedefineClasses::do_oop_work(T* p) {
       if (klass_oop != NULL) {
         if (klass_oop->klass_part()->new_version() != NULL && klass_oop->klass_part()->new_version()->klass_part()->is_redefining()) {
           obj = klass_oop->klass_part()->new_version()->klass_part()->java_mirror();
-          oopDesc::encode_store_heap_oop_not_null(p, obj);
         } else if (klass_oop->klass_part()->is_redefining()) {
           obj = klass_oop->klass_part()->java_mirror();
-          oopDesc::encode_store_heap_oop_not_null(p, obj);
+        }
+        oopDesc::encode_store_heap_oop_not_null(p, obj);
+
+
+        // FIXME: DCEVM: better implementation?
+        // Starting from JDK 7 java_mirror can be kept in the regular heap. Therefore, it is possible
+        // that new java_mirror is in the young generation whereas p is in tenured generation. In that
+        // case we need to run write barrier to make sure card table is properly updated. This will
+        // allow JVM to detect reference in tenured generation properly during young generation GC.
+        if (Universe::heap()->is_in_reserved(p)) {
+          if (!GenCollectedHeap::heap()->is_in_young(obj)) {
+            GenRemSet* rs = GenCollectedHeap::heap()->rem_set();
+            assert(rs->rs_kind() == GenRemSet::CardTable, "Wrong rem set kind.");
+            CardTableRS* _rs = (CardTableRS*)rs;
+            _rs->inline_write_ref_field_gc(p, obj);
+          }
         }
       }
     }

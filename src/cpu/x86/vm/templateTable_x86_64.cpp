@@ -211,7 +211,10 @@ Address TemplateTable::at_bcp(int offset) {
 void TemplateTable::patch_bytecode(Bytecodes::Code bc, Register bc_reg,
                                    Register temp_reg, bool load_bc_into_bc_reg/*=true*/,
                                    int byte_no) {
-  if (!RewriteBytecodes)  return;
+  // (DCEVM) Does not work well with fast_?putfield and fast_?getfield
+  // When constant pool cache is zeroed, fast accessors will eventually
+  // try to access field with offset zero, overwriting objects's mark word    
+  if (true || !RewriteBytecodes)  return;
   Label L_patch_done;
 
   switch (bc) {

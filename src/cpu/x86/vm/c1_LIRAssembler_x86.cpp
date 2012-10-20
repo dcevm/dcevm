@@ -2446,6 +2446,12 @@ void LIR_Assembler::intrinsic_op(LIR_Code code, LIR_Opr value, LIR_Opr unused, L
         // Should consider not saving rbx, if not necessary
         __ trigfunc('t', op->as_Op2()->fpu_stack_size());
         break;
+      case lir_exp :
+        __ exp_with_fallback(op->as_Op2()->fpu_stack_size());
+        break;
+      case lir_pow :
+        __ pow_with_fallback(op->as_Op2()->fpu_stack_size());
+        break;
       default      : ShouldNotReachHere();
     }
   } else {
@@ -3502,6 +3508,7 @@ void LIR_Assembler::emit_lock(LIR_OpLock* op) {
 void LIR_Assembler::emit_profile_call(LIR_OpProfileCall* op) {
   ciMethod* method = op->profiled_method();
   int bci          = op->profiled_bci();
+  ciMethod* callee = op->profiled_callee();
 
   // Update counter for all call types
   ciMethodData* md = method->method_data_or_null();
@@ -3513,9 +3520,11 @@ void LIR_Assembler::emit_profile_call(LIR_OpProfileCall* op) {
   __ movoop(mdo, md->constant_encoding());
   Address counter_addr(mdo, md->byte_offset_of_slot(data, CounterData::count_offset()));
   Bytecodes::Code bc = method->java_code_at_bci(bci);
+  const bool callee_is_static = callee->is_loaded() && callee->is_static();
   // Perform additional virtual call profiling for invokevirtual and
   // invokeinterface bytecodes
   if ((bc == Bytecodes::_invokevirtual || bc == Bytecodes::_invokeinterface) &&
+      !callee_is_static &&  // required for optimized MH invokes
       C1ProfileVirtualCalls) {
     assert(op->recv()->is_single_cpu(), "recv must be allocated");
     Register recv = op->recv()->as_register();

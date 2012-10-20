@@ -32,6 +32,7 @@
 #include "runtime/java.hpp"
 #include "runtime/reflectionUtils.hpp"
 #include "utilities/hashtable.hpp"
+#include "utilities/hashtable.inline.hpp"
 
 // The system dictionary stores all loaded classes and maps:
 //
@@ -72,7 +73,7 @@
 class Dictionary;
 class PlaceholderTable;
 class LoaderConstraintTable;
-class HashtableBucket;
+template <MEMFLAGS F> class HashtableBucket;
 class ResolutionErrorTable;
 class SymbolPropertyTable;
 
@@ -147,15 +148,10 @@ class SymbolPropertyTable;
   template(MethodHandle_klass,             java_lang_invoke_MethodHandle,             Pre_JSR292) \
   template(MemberName_klass,               java_lang_invoke_MemberName,               Pre_JSR292) \
   template(MethodHandleNatives_klass,      java_lang_invoke_MethodHandleNatives,      Pre_JSR292) \
-  template(AdapterMethodHandle_klass,      java_lang_invoke_AdapterMethodHandle,      Pre_JSR292) \
-  template(BoundMethodHandle_klass,        java_lang_invoke_BoundMethodHandle,        Pre_JSR292) \
-  template(DirectMethodHandle_klass,       java_lang_invoke_DirectMethodHandle,       Pre_JSR292) \
+  template(LambdaForm_klass,               java_lang_invoke_LambdaForm,               Opt)        \
   template(MethodType_klass,               java_lang_invoke_MethodType,               Pre_JSR292) \
-  template(MethodTypeForm_klass,           java_lang_invoke_MethodTypeForm,           Pre_JSR292) \
   template(BootstrapMethodError_klass,     java_lang_BootstrapMethodError,            Pre_JSR292) \
-  template(WrongMethodTypeException_klass, java_lang_invoke_WrongMethodTypeException, Pre_JSR292) \
   template(CallSite_klass,                 java_lang_invoke_CallSite,                 Pre_JSR292) \
-  template(CountingMethodHandle_klass,     java_lang_invoke_CountingMethodHandle,     Opt)        \
   template(ConstantCallSite_klass,         java_lang_invoke_ConstantCallSite,         Pre_JSR292) \
   template(MutableCallSite_klass,          java_lang_invoke_MutableCallSite,          Pre_JSR292) \
   template(VolatileCallSite_klass,         java_lang_invoke_VolatileCallSite,         Pre_JSR292) \
@@ -169,9 +165,6 @@ class SymbolPropertyTable;
   /* Universe::is_gte_jdk14x_version() is not set up by this point. */        \
   /* It's okay if this turns out to be NULL in non-1.4 JDKs. */               \
   template(nio_Buffer_klass,             java_nio_Buffer,                Opt) \
-                                                                              \
-  /* If this class isn't present, it won't be referenced. */                  \
-  template(AtomicLongCSImpl_klass,       sun_misc_AtomicLongCSImpl,   Opt)    \
                                                                               \
   template(DownloadManager_klass,        sun_jkernel_DownloadManager, Opt_Kernel) \
                                                                               \
@@ -366,7 +359,7 @@ public:
   static void copy_buckets(char** top, char* end);
   static void copy_table(char** top, char* end);
   static void reverse();
-  static void set_shared_dictionary(HashtableBucket* t, int length,
+  static void set_shared_dictionary(HashtableBucket<mtClass>* t, int length,
                                     int number_of_entries);
   // Printing
   static void print()                   PRODUCT_RETURN;
@@ -487,17 +480,24 @@ public:
                                        Handle loader2, bool is_method, TRAPS);
 
   // JSR 292
-  // find the java.lang.invoke.MethodHandles::invoke method for a given signature
-  static methodOop find_method_handle_invoke(Symbol* name,
-                                             Symbol* signature,
-                                             KlassHandle accessing_klass,
-                                             TRAPS);
-  // ask Java to compute a java.lang.invoke.MethodType object for a given signature
+  // find a java.lang.invoke.MethodHandle.invoke* method for a given signature
+  // (asks Java to compute it if necessary, except in a compiler thread)
+  static methodHandle find_method_handle_invoker(Symbol* name,
+                                                 Symbol* signature,
+                                                 KlassHandle accessing_klass,
+                                                 Handle *appendix_result,
+                                                 TRAPS);
+  // for a given signature, find the internal MethodHandle method (linkTo* or invokeBasic)
+  // (does not ask Java, since this is a low-level intrinsic defined by the JVM)
+  static methodHandle find_method_handle_intrinsic(vmIntrinsics::ID iid,
+                                                   Symbol* signature,
+                                                   TRAPS);
+  // find a java.lang.invoke.MethodType object for a given signature
+  // (asks Java to compute it if necessary, except in a compiler thread)
   static Handle    find_method_handle_type(Symbol* signature,
                                            KlassHandle accessing_klass,
-                                           bool for_invokeGeneric,
-                                           bool& return_bcp_flag,
                                            TRAPS);
+
   // ask Java to compute a java.lang.invoke.MethodHandle object for a given CP entry
   static Handle    link_method_handle_constant(KlassHandle caller,
                                                int ref_kind, //e.g., JVM_REF_invokeVirtual
@@ -505,23 +505,14 @@ public:
                                                Symbol* name,
                                                Symbol* signature,
                                                TRAPS);
-  // ask Java to create a dynamic call site, while linking an invokedynamic op
-  static Handle    make_dynamic_call_site(Handle bootstrap_method,
-                                          // Callee information:
-                                          Symbol* name,
-                                          methodHandle signature_invoker,
-                                          Handle info,
-                                          // Caller information:
-                                          methodHandle caller_method,
-                                          int caller_bci,
-                                          TRAPS);
 
-  // coordinate with Java about bootstrap methods
-  static Handle    find_bootstrap_method(methodHandle caller_method,
-                                         int caller_bci,  // N.B. must be an invokedynamic
-                                         int cache_index, // must be corresponding main_entry
-                                         Handle &argument_info_result, // static BSM arguments, if any
-                                         TRAPS);
+  // ask Java to create a dynamic call site, while linking an invokedynamic op
+  static methodHandle find_dynamic_call_site_invoker(KlassHandle caller,
+                                                     Handle bootstrap_method,
+                                                     Symbol* name,
+                                                     Symbol* type,
+                                                     Handle *appendix_result,
+                                                     TRAPS);
 
   // Utility for printing loader "name" as part of tracing constraints
   static const char* loader_name(oop loader) {

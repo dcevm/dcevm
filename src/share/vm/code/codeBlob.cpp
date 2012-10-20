@@ -144,7 +144,7 @@ void CodeBlob::set_oop_maps(OopMapSet* p) {
   // chunk of memory, its your job to free it.
   if (p != NULL) {
     // We need to allocate a chunk big enough to hold the OopMapSet and all of its OopMaps
-    _oop_maps = (OopMapSet* )NEW_C_HEAP_ARRAY(unsigned char, p->heap_size());
+    _oop_maps = (OopMapSet* )NEW_C_HEAP_ARRAY(unsigned char, p->heap_size(), mtCode);
     p->copy_to((address)_oop_maps);
   } else {
     _oop_maps = NULL;
@@ -180,7 +180,7 @@ void CodeBlob::trace_new_stub(CodeBlob* stub, const char* name1, const char* nam
 
 void CodeBlob::flush() {
   if (_oop_maps) {
-    FREE_C_HEAP_ARRAY(unsigned char, _oop_maps);
+    FREE_C_HEAP_ARRAY(unsigned char, _oop_maps, mtCode);
     _oop_maps = NULL;
   }
   _comments.free();
@@ -355,43 +355,6 @@ void* SingletonBlob::operator new(size_t s, unsigned size) {
   void* p = CodeCache::allocate(size);
   if (!p) fatal("Initial size of CodeCache is too small");
   return p;
-}
-
-
-//----------------------------------------------------------------------------------------------------
-// Implementation of RicochetBlob
-
-RicochetBlob::RicochetBlob(
-  CodeBuffer* cb,
-  int         size,
-  int         bounce_offset,
-  int         exception_offset,
-  int         frame_size
-)
-: SingletonBlob("RicochetBlob", cb, sizeof(RicochetBlob), size, frame_size, (OopMapSet*) NULL)
-{
-  _bounce_offset = bounce_offset;
-  _exception_offset = exception_offset;
-}
-
-
-RicochetBlob* RicochetBlob::create(
-  CodeBuffer* cb,
-  int         bounce_offset,
-  int         exception_offset,
-  int         frame_size)
-{
-  RicochetBlob* blob = NULL;
-  ThreadInVMfromUnknown __tiv;  // get to VM state in case we block on CodeCache_lock
-  {
-    MutexLockerEx mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
-    unsigned int size = allocation_size(cb, sizeof(RicochetBlob));
-    blob = new (size) RicochetBlob(cb, size, bounce_offset, exception_offset, frame_size);
-  }
-
-  trace_new_stub(blob, "RicochetBlob");
-
-  return blob;
 }
 
 

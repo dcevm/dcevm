@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2011, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2012, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -160,6 +160,7 @@ class LibraryCallKit : public GraphKit {
   bool inline_trans(vmIntrinsics::ID id);
   bool inline_abs(vmIntrinsics::ID id);
   bool inline_sqrt(vmIntrinsics::ID id);
+  void finish_pow_exp(Node* result, Node* x, Node* y, const TypeFunc* call_type, address funcAddr, const char* funcName);
   bool inline_pow(vmIntrinsics::ID id);
   bool inline_exp(vmIntrinsics::ID id);
   bool inline_min_max(vmIntrinsics::ID id);
@@ -170,13 +171,17 @@ class LibraryCallKit : public GraphKit {
   // Helper for inline_unsafe_access.
   // Generates the guards that check whether the result of
   // Unsafe.getObject should be recorded in an SATB log buffer.
-  void insert_g1_pre_barrier(Node* base_oop, Node* offset, Node* pre_val);
+  void insert_pre_barrier(Node* base_oop, Node* offset, Node* pre_val, int nargs, bool need_mem_bar);
   bool inline_unsafe_access(bool is_native_ptr, bool is_store, BasicType type, bool is_volatile);
   bool inline_unsafe_prefetch(bool is_native_ptr, bool is_store, bool is_static);
   bool inline_unsafe_allocate();
   bool inline_unsafe_copyMemory();
   bool inline_native_currentThread();
-  bool inline_native_time_funcs(bool isNano);
+#ifdef TRACE_HAVE_INTRINSICS
+  bool inline_native_classID();
+  bool inline_native_threadID();
+#endif
+  bool inline_native_time_funcs(address method, const char* funcName);
   bool inline_native_isInterrupted();
   bool inline_native_Class_query(vmIntrinsics::ID id);
   bool inline_native_subtype_check();
@@ -188,8 +193,6 @@ class LibraryCallKit : public GraphKit {
   void copy_to_clone(Node* obj, Node* alloc_obj, Node* obj_size, bool is_array, bool card_mark);
   bool inline_native_clone(bool is_virtual);
   bool inline_native_Reflection_getCallerClass();
-  bool inline_native_AtomicLong_get();
-  bool inline_native_AtomicLong_attemptUpdate();
   bool is_method_invoke_or_aux_frame(JVMState* jvms);
   // Helper function for inlining native object hash method
   bool inline_native_hashcode(bool is_virtual, bool is_static);
@@ -288,6 +291,8 @@ CallGenerator* Compile::make_vm_intrinsic(ciMethod* m, bool is_virtual) {
     case vmIntrinsics::_equals:
     case vmIntrinsics::_equalsC:
       break;  // InlineNatives does not control String.compareTo
+    case vmIntrinsics::_Reference_get:
+      break;  // InlineNatives does not control Reference.get
     default:
       return NULL;
     }
@@ -327,11 +332,6 @@ CallGenerator* Compile::make_vm_intrinsic(ciMethod* m, bool is_virtual) {
     // We do not intrinsify this.  The optimizer does fine with it.
     return NULL;
 
-  case vmIntrinsics::_get_AtomicLong:
-  case vmIntrinsics::_attemptUpdate:
-    if (!InlineAtomicLong)  return NULL;
-    break;
-
   case vmIntrinsics::_getCallerClass:
     if (!UseNewReflection)  return NULL;
     if (!InlineReflectionGetCallerClass)  return NULL;
@@ -339,16 +339,34 @@ CallGenerator* Compile::make_vm_intrinsic(ciMethod* m, bool is_virtual) {
     break;
 
   case vmIntrinsics::_bitCount_i:
+    if (!Matcher::match_rule_supported(Op_PopCountI)) return NULL;
+    break;
+
   case vmIntrinsics::_bitCount_l:
-    if (!UsePopCountInstruction)  return NULL;
+    if (!Matcher::match_rule_supported(Op_PopCountL)) return NULL;
+    break;
+
+  case vmIntrinsics::_numberOfLeadingZeros_i:
+    if (!Matcher::match_rule_supported(Op_CountLeadingZerosI)) return NULL;
+    break;
+
+  case vmIntrinsics::_numberOfLeadingZeros_l:
+    if (!Matcher::match_rule_supported(Op_CountLeadingZerosL)) return NULL;
+    break;
+
+  case vmIntrinsics::_numberOfTrailingZeros_i:
+    if (!Matcher::match_rule_supported(Op_CountTrailingZerosI)) return NULL;
+    break;
+
+  case vmIntrinsics::_numberOfTrailingZeros_l:
+    if (!Matcher::match_rule_supported(Op_CountTrailingZerosL)) return NULL;
     break;
 
   case vmIntrinsics::_Reference_get:
-    // It is only when G1 is enabled that we absolutely
-    // need to use the intrinsic version of Reference.get()
-    // so that the value in the referent field, if necessary,
-    // can be registered by the pre-barrier code.
-    if (!UseG1GC) return NULL;
+    // Use the intrinsic version of Reference.get() so that the value in
+    // the referent field can be registered by the G1 pre-barrier code.
+    // Also add memory barrier to prevent commoning reads from this field
+    // across safepoint since GC can change it value.
     break;
 
  default:
@@ -417,14 +435,12 @@ JVMState* LibraryIntrinsic::generate(JVMState* jvms) {
     return kit.transfer_exceptions_into_jvms();
   }
 
-  if (PrintIntrinsics) {
+  // The intrinsic bailed out
+  if (PrintIntrinsics || PrintInlining NOT_PRODUCT( || PrintOptoInlining) ) {
     if (jvms->has_method()) {
       // Not a root compile.
-      tty->print("Did not inline intrinsic %s%s at bci:%d in",
-                 vmIntrinsics::name_at(intrinsic_id()),
-                 (is_virtual() ? " (virtual)" : ""), kit.bci());
-      kit.caller()->print_short_name(tty);
-      tty->print_cr(" (%d bytes)", kit.caller()->code_size());
+      const char* msg = is_virtual() ? "failed to inline (intrinsic, virtual)" : "failed to inline (intrinsic)";
+      CompileTask::print_inlining(kit.callee(), jvms->depth() - 1, kit.bci(), msg);
     } else {
       // Root compile
       tty->print("Did not generate intrinsic %s%s at bci:%d in",
@@ -622,10 +638,18 @@ bool LibraryCallKit::try_to_inline() {
   case vmIntrinsics::_isInterrupted:
     return inline_native_isInterrupted();
 
+#ifdef TRACE_HAVE_INTRINSICS
+  case vmIntrinsics::_classID:
+    return inline_native_classID();
+  case vmIntrinsics::_threadID:
+    return inline_native_threadID();
+  case vmIntrinsics::_counterTime:
+    return inline_native_time_funcs(CAST_FROM_FN_PTR(address, TRACE_TIME_METHOD), "counterTime");
+#endif
   case vmIntrinsics::_currentTimeMillis:
-    return inline_native_time_funcs(false);
+    return inline_native_time_funcs(CAST_FROM_FN_PTR(address, os::javaTimeMillis), "currentTimeMillis");
   case vmIntrinsics::_nanoTime:
-    return inline_native_time_funcs(true);
+    return inline_native_time_funcs(CAST_FROM_FN_PTR(address, os::javaTimeNanos), "nanoTime");
   case vmIntrinsics::_allocateInstance:
     return inline_unsafe_allocate();
   case vmIntrinsics::_copyMemory:
@@ -681,11 +705,6 @@ bool LibraryCallKit::try_to_inline() {
   case vmIntrinsics::_reverseBytes_s:
   case vmIntrinsics::_reverseBytes_c:
     return inline_reverseBytes((vmIntrinsics::ID) intrinsic_id());
-
-  case vmIntrinsics::_get_AtomicLong:
-    return inline_native_AtomicLong_get();
-  case vmIntrinsics::_attemptUpdate:
-    return inline_native_AtomicLong_attemptUpdate();
 
   case vmIntrinsics::_getCallerClass:
     return inline_native_Reflection_getCallerClass();
@@ -1518,42 +1537,78 @@ bool LibraryCallKit::inline_abs(vmIntrinsics::ID id) {
   return true;
 }
 
+void LibraryCallKit::finish_pow_exp(Node* result, Node* x, Node* y, const TypeFunc* call_type, address funcAddr, const char* funcName) {
+  //-------------------
+  //result=(result.isNaN())? funcAddr():result;
+  // Check: If isNaN() by checking result!=result? then either trap
+  // or go to runtime
+  Node* cmpisnan = _gvn.transform(new (C, 3) CmpDNode(result,result));
+  // Build the boolean node
+  Node* bolisnum = _gvn.transform( new (C, 2) BoolNode(cmpisnan, BoolTest::eq) );
+
+  if (!too_many_traps(Deoptimization::Reason_intrinsic)) {
+    {
+      BuildCutout unless(this, bolisnum, PROB_STATIC_FREQUENT);
+      // End the current control-flow path
+      push_pair(x);
+      if (y != NULL) {
+        push_pair(y);
+      }
+      // The pow or exp intrinsic returned a NaN, which requires a call
+      // to the runtime.  Recompile with the runtime call.
+      uncommon_trap(Deoptimization::Reason_intrinsic,
+                    Deoptimization::Action_make_not_entrant);
+    }
+    push_pair(result);
+  } else {
+    // If this inlining ever returned NaN in the past, we compile a call
+    // to the runtime to properly handle corner cases
+
+    IfNode* iff = create_and_xform_if(control(), bolisnum, PROB_STATIC_FREQUENT, COUNT_UNKNOWN);
+    Node* if_slow = _gvn.transform( new (C, 1) IfFalseNode(iff) );
+    Node* if_fast = _gvn.transform( new (C, 1) IfTrueNode(iff) );
+
+    if (!if_slow->is_top()) {
+      RegionNode* result_region = new(C, 3) RegionNode(3);
+      PhiNode*    result_val = new (C, 3) PhiNode(result_region, Type::DOUBLE);
+
+      result_region->init_req(1, if_fast);
+      result_val->init_req(1, result);
+
+      set_control(if_slow);
+
+      const TypePtr* no_memory_effects = NULL;
+      Node* rt = make_runtime_call(RC_LEAF, call_type, funcAddr, funcName,
+                                   no_memory_effects,
+                                   x, top(), y, y ? top() : NULL);
+      Node* value = _gvn.transform(new (C, 1) ProjNode(rt, TypeFunc::Parms+0));
+#ifdef ASSERT
+      Node* value_top = _gvn.transform(new (C, 1) ProjNode(rt, TypeFunc::Parms+1));
+      assert(value_top == top(), "second value must be top");
+#endif
+
+      result_region->init_req(2, control());
+      result_val->init_req(2, value);
+      push_result(result_region, result_val);
+    } else {
+      push_pair(result);
+    }
+  }
+}
+
 //------------------------------inline_exp-------------------------------------
 // Inline exp instructions, if possible.  The Intel hardware only misses
 // really odd corner cases (+/- Infinity).  Just uncommon-trap them.
 bool LibraryCallKit::inline_exp(vmIntrinsics::ID id) {
   assert(id == vmIntrinsics::_dexp, "Not exp");
 
-  // If this inlining ever returned NaN in the past, we do not intrinsify it
-  // every again.  NaN results requires StrictMath.exp handling.
-  if (too_many_traps(Deoptimization::Reason_intrinsic))  return false;
-
-  // Do not intrinsify on older platforms which lack cmove.
-  if (ConditionalMoveLimit == 0)  return false;
-
   _sp += arg_size();        // restore stack pointer
   Node *x = pop_math_arg();
   Node *result = _gvn.transform(new (C, 2) ExpDNode(0,x));
 
-  //-------------------
-  //result=(result.isNaN())? StrictMath::exp():result;
-  // Check: If isNaN() by checking result!=result? then go to Strict Math
-  Node* cmpisnan = _gvn.transform(new (C, 3) CmpDNode(result,result));
-  // Build the boolean node
-  Node* bolisnum = _gvn.transform( new (C, 2) BoolNode(cmpisnan, BoolTest::eq) );
-
-  { BuildCutout unless(this, bolisnum, PROB_STATIC_FREQUENT);
-    // End the current control-flow path
-    push_pair(x);
-    // Math.exp intrinsic returned a NaN, which requires StrictMath.exp
-    // to handle.  Recompile without intrinsifying Math.exp
-    uncommon_trap(Deoptimization::Reason_intrinsic,
-                  Deoptimization::Action_make_not_entrant);
-  }
+  finish_pow_exp(result, x, NULL, OptoRuntime::Math_D_D_Type(), CAST_FROM_FN_PTR(address, SharedRuntime::dexp), "EXP");
 
   C->set_has_split_ifs(true); // Has chance for split-if optimization
-
-  push_pair(result);
 
   return true;
 }
@@ -1563,17 +1618,12 @@ bool LibraryCallKit::inline_exp(vmIntrinsics::ID id) {
 bool LibraryCallKit::inline_pow(vmIntrinsics::ID id) {
   assert(id == vmIntrinsics::_dpow, "Not pow");
 
-  // If this inlining ever returned NaN in the past, we do not intrinsify it
-  // every again.  NaN results requires StrictMath.pow handling.
-  if (too_many_traps(Deoptimization::Reason_intrinsic))  return false;
-
-  // Do not intrinsify on older platforms which lack cmove.
-  if (ConditionalMoveLimit == 0)  return false;
-
   // Pseudocode for pow
   // if (x <= 0.0) {
-  //   if ((double)((int)y)==y) { // if y is int
-  //     result = ((1&(int)y)==0)?-DPow(abs(x), y):DPow(abs(x), y)
+  //   long longy = (long)y;
+  //   if ((double)longy == y) { // if y is long
+  //     if (y + 1 == y) longy = 0; // huge number: even
+  //     result = ((1&longy) == 0)?-DPow(abs(x), y):DPow(abs(x), y);
   //   } else {
   //     result = NaN;
   //   }
@@ -1581,7 +1631,7 @@ bool LibraryCallKit::inline_pow(vmIntrinsics::ID id) {
   //   result = DPow(x,y);
   // }
   // if (result != result)?  {
-  //   uncommon_trap();
+  //   result = uncommon_trap() or runtime_call();
   // }
   // return result;
 
@@ -1589,15 +1639,14 @@ bool LibraryCallKit::inline_pow(vmIntrinsics::ID id) {
   Node* y = pop_math_arg();
   Node* x = pop_math_arg();
 
-  Node *fast_result = _gvn.transform( new (C, 3) PowDNode(0, x, y) );
+  Node* result = NULL;
 
-  // Short form: if not top-level (i.e., Math.pow but inlining Math.pow
-  // inside of something) then skip the fancy tests and just check for
-  // NaN result.
-  Node *result = NULL;
-  if( jvms()->depth() >= 1 ) {
-    result = fast_result;
+  if (!too_many_traps(Deoptimization::Reason_intrinsic)) {
+    // Short form: skip the fancy tests and just check for NaN result.
+    result = _gvn.transform( new (C, 3) PowDNode(0, x, y) );
   } else {
+    // If this inlining ever returned NaN in the past, include all
+    // checks + call to the runtime.
 
     // Set the merge point for If node with condition of (x <= 0.0)
     // There are four possible paths to region node and phi node
@@ -1613,55 +1662,95 @@ bool LibraryCallKit::inline_pow(vmIntrinsics::ID id) {
     Node *bol1 = _gvn.transform( new (C, 2) BoolNode( cmp, BoolTest::le ) );
     // Branch either way
     IfNode *if1 = create_and_xform_if(control(),bol1, PROB_STATIC_INFREQUENT, COUNT_UNKNOWN);
-    Node *opt_test = _gvn.transform(if1);
-    //assert( opt_test->is_If(), "Expect an IfNode");
-    IfNode *opt_if1 = (IfNode*)opt_test;
     // Fast path taken; set region slot 3
-    Node *fast_taken = _gvn.transform( new (C, 1) IfFalseNode(opt_if1) );
+    Node *fast_taken = _gvn.transform( new (C, 1) IfFalseNode(if1) );
     r->init_req(3,fast_taken); // Capture fast-control
 
     // Fast path not-taken, i.e. slow path
-    Node *complex_path = _gvn.transform( new (C, 1) IfTrueNode(opt_if1) );
+    Node *complex_path = _gvn.transform( new (C, 1) IfTrueNode(if1) );
 
     // Set fast path result
-    Node *fast_result = _gvn.transform( new (C, 3) PowDNode(0, y, x) );
+    Node *fast_result = _gvn.transform( new (C, 3) PowDNode(0, x, y) );
     phi->init_req(3, fast_result);
 
     // Complex path
-    // Build the second if node (if y is int)
-    // Node for (int)y
-    Node *inty = _gvn.transform( new (C, 2) ConvD2INode(y));
-    // Node for (double)((int) y)
-    Node *doubleinty= _gvn.transform( new (C, 2) ConvI2DNode(inty));
-    // Check (double)((int) y) : y
-    Node *cmpinty= _gvn.transform(new (C, 3) CmpDNode(doubleinty, y));
-    // Check if (y isn't int) then go to slow path
+    // Build the second if node (if y is long)
+    // Node for (long)y
+    Node *longy = _gvn.transform( new (C, 2) ConvD2LNode(y));
+    // Node for (double)((long) y)
+    Node *doublelongy= _gvn.transform( new (C, 2) ConvL2DNode(longy));
+    // Check (double)((long) y) : y
+    Node *cmplongy= _gvn.transform(new (C, 3) CmpDNode(doublelongy, y));
+    // Check if (y isn't long) then go to slow path
 
-    Node *bol2 = _gvn.transform( new (C, 2) BoolNode( cmpinty, BoolTest::ne ) );
+    Node *bol2 = _gvn.transform( new (C, 2) BoolNode( cmplongy, BoolTest::ne ) );
     // Branch either way
     IfNode *if2 = create_and_xform_if(complex_path,bol2, PROB_STATIC_INFREQUENT, COUNT_UNKNOWN);
-    Node *slow_path = opt_iff(r,if2); // Set region path 2
+    Node* ylong_path = _gvn.transform( new (C, 1) IfFalseNode(if2));
 
-    // Calculate DPow(abs(x), y)*(1 & (int)y)
+    Node *slow_path = _gvn.transform( new (C, 1) IfTrueNode(if2) );
+
+    // Calculate DPow(abs(x), y)*(1 & (long)y)
     // Node for constant 1
-    Node *conone = intcon(1);
-    // 1& (int)y
-    Node *signnode= _gvn.transform( new (C, 3) AndINode(conone, inty) );
+    Node *conone = longcon(1);
+    // 1& (long)y
+    Node *signnode= _gvn.transform( new (C, 3) AndLNode(conone, longy) );
+
+    // A huge number is always even. Detect a huge number by checking
+    // if y + 1 == y and set integer to be tested for parity to 0.
+    // Required for corner case:
+    // (long)9.223372036854776E18 = max_jlong
+    // (double)(long)9.223372036854776E18 = 9.223372036854776E18
+    // max_jlong is odd but 9.223372036854776E18 is even
+    Node* yplus1 = _gvn.transform( new (C, 3) AddDNode(y, makecon(TypeD::make(1))));
+    Node *cmpyplus1= _gvn.transform(new (C, 3) CmpDNode(yplus1, y));
+    Node *bolyplus1 = _gvn.transform( new (C, 2) BoolNode( cmpyplus1, BoolTest::eq ) );
+    Node* correctedsign = NULL;
+    if (ConditionalMoveLimit != 0) {
+      correctedsign = _gvn.transform( CMoveNode::make(C, NULL, bolyplus1, signnode, longcon(0), TypeLong::LONG));
+    } else {
+      IfNode *ifyplus1 = create_and_xform_if(ylong_path,bolyplus1, PROB_FAIR, COUNT_UNKNOWN);
+      RegionNode *r = new (C, 3) RegionNode(3);
+      Node *phi = new (C, 3) PhiNode(r, TypeLong::LONG);
+      r->init_req(1, _gvn.transform( new (C, 1) IfFalseNode(ifyplus1)));
+      r->init_req(2, _gvn.transform( new (C, 1) IfTrueNode(ifyplus1)));
+      phi->init_req(1, signnode);
+      phi->init_req(2, longcon(0));
+      correctedsign = _gvn.transform(phi);
+      ylong_path = _gvn.transform(r);
+      record_for_igvn(r);
+    }
+
     // zero node
-    Node *conzero = intcon(0);
-    // Check (1&(int)y)==0?
-    Node *cmpeq1 = _gvn.transform(new (C, 3) CmpINode(signnode, conzero));
-    // Check if (1&(int)y)!=0?, if so the result is negative
+    Node *conzero = longcon(0);
+    // Check (1&(long)y)==0?
+    Node *cmpeq1 = _gvn.transform(new (C, 3) CmpLNode(correctedsign, conzero));
+    // Check if (1&(long)y)!=0?, if so the result is negative
     Node *bol3 = _gvn.transform( new (C, 2) BoolNode( cmpeq1, BoolTest::ne ) );
     // abs(x)
     Node *absx=_gvn.transform( new (C, 2) AbsDNode(x));
     // abs(x)^y
-    Node *absxpowy = _gvn.transform( new (C, 3) PowDNode(0, y, absx) );
+    Node *absxpowy = _gvn.transform( new (C, 3) PowDNode(0, absx, y) );
     // -abs(x)^y
     Node *negabsxpowy = _gvn.transform(new (C, 2) NegDNode (absxpowy));
-    // (1&(int)y)==1?-DPow(abs(x), y):DPow(abs(x), y)
-    Node *signresult = _gvn.transform( CMoveNode::make(C, NULL, bol3, absxpowy, negabsxpowy, Type::DOUBLE));
+    // (1&(long)y)==1?-DPow(abs(x), y):DPow(abs(x), y)
+    Node *signresult = NULL;
+    if (ConditionalMoveLimit != 0) {
+      signresult = _gvn.transform( CMoveNode::make(C, NULL, bol3, absxpowy, negabsxpowy, Type::DOUBLE));
+    } else {
+      IfNode *ifyeven = create_and_xform_if(ylong_path,bol3, PROB_FAIR, COUNT_UNKNOWN);
+      RegionNode *r = new (C, 3) RegionNode(3);
+      Node *phi = new (C, 3) PhiNode(r, Type::DOUBLE);
+      r->init_req(1, _gvn.transform( new (C, 1) IfFalseNode(ifyeven)));
+      r->init_req(2, _gvn.transform( new (C, 1) IfTrueNode(ifyeven)));
+      phi->init_req(1, absxpowy);
+      phi->init_req(2, negabsxpowy);
+      signresult = _gvn.transform(phi);
+      ylong_path = _gvn.transform(r);
+      record_for_igvn(r);
+    }
     // Set complex path fast result
+    r->init_req(2, ylong_path);
     phi->init_req(2, signresult);
 
     static const jlong nan_bits = CONST64(0x7ff8000000000000);
@@ -1675,26 +1764,9 @@ bool LibraryCallKit::inline_pow(vmIntrinsics::ID id) {
     result=_gvn.transform(phi);
   }
 
-  //-------------------
-  //result=(result.isNaN())? uncommon_trap():result;
-  // Check: If isNaN() by checking result!=result? then go to Strict Math
-  Node* cmpisnan = _gvn.transform(new (C, 3) CmpDNode(result,result));
-  // Build the boolean node
-  Node* bolisnum = _gvn.transform( new (C, 2) BoolNode(cmpisnan, BoolTest::eq) );
-
-  { BuildCutout unless(this, bolisnum, PROB_STATIC_FREQUENT);
-    // End the current control-flow path
-    push_pair(x);
-    push_pair(y);
-    // Math.pow intrinsic returned a NaN, which requires StrictMath.pow
-    // to handle.  Recompile without intrinsifying Math.pow.
-    uncommon_trap(Deoptimization::Reason_intrinsic,
-                  Deoptimization::Action_make_not_entrant);
-  }
+  finish_pow_exp(result, x, y, OptoRuntime::Math_DD_D_Type(), CAST_FROM_FN_PTR(address, SharedRuntime::dpow), "POW");
 
   C->set_has_split_ifs(true); // Has chance for split-if optimization
-
-  push_pair(result);
 
   return true;
 }
@@ -1773,15 +1845,11 @@ bool LibraryCallKit::inline_math_native(vmIntrinsics::ID id) {
   case vmIntrinsics::_dsqrt: return Matcher::has_match_rule(Op_SqrtD) ? inline_sqrt(id) : false;
   case vmIntrinsics::_dabs:  return Matcher::has_match_rule(Op_AbsD)  ? inline_abs(id)  : false;
 
-    // These intrinsics don't work on X86.  The ad implementation doesn't
-    // handle NaN's properly.  Instead of returning infinity, the ad
-    // implementation returns a NaN on overflow. See bug: 6304089
-    // Once the ad implementations are fixed, change the code below
-    // to match the intrinsics above
-
   case vmIntrinsics::_dexp:  return
+    Matcher::has_match_rule(Op_ExpD) ? inline_exp(id) :
     runtime_math(OptoRuntime::Math_D_D_Type(), CAST_FROM_FN_PTR(address, SharedRuntime::dexp), "EXP");
   case vmIntrinsics::_dpow:  return
+    Matcher::has_match_rule(Op_PowD) ? inline_pow(id) :
     runtime_math(OptoRuntime::Math_DD_D_Type(), CAST_FROM_FN_PTR(address, SharedRuntime::dpow), "POW");
 
    // These intrinsics are not yet correctly implemented
@@ -2104,7 +2172,7 @@ bool LibraryCallKit::inline_reverseBytes(vmIntrinsics::ID id) {
   if (id == vmIntrinsics::_reverseBytes_l && !Matcher::has_match_rule(Op_ReverseBytesL))  return false;
   if (id == vmIntrinsics::_reverseBytes_c && !Matcher::has_match_rule(Op_ReverseBytesUS)) return false;
   if (id == vmIntrinsics::_reverseBytes_s && !Matcher::has_match_rule(Op_ReverseBytesS))  return false;
-  _sp += arg_size();        // restore stack pointer
+  _sp += arg_size();  // restore stack pointer
   switch (id) {
   case vmIntrinsics::_reverseBytes_i:
     push(_gvn.transform(new (C, 2) ReverseBytesINode(0, pop())));
@@ -2128,14 +2196,17 @@ bool LibraryCallKit::inline_reverseBytes(vmIntrinsics::ID id) {
 
 const static BasicType T_ADDRESS_HOLDER = T_LONG;
 
-// Helper that guards and inserts a G1 pre-barrier.
-void LibraryCallKit::insert_g1_pre_barrier(Node* base_oop, Node* offset, Node* pre_val) {
-  assert(UseG1GC, "should not call this otherwise");
-
+// Helper that guards and inserts a pre-barrier.
+void LibraryCallKit::insert_pre_barrier(Node* base_oop, Node* offset,
+                                        Node* pre_val, int nargs, bool need_mem_bar) {
   // We could be accessing the referent field of a reference object. If so, when G1
   // is enabled, we need to log the value in the referent field in an SATB buffer.
   // This routine performs some compile time filters and generates suitable
   // runtime filters that guard the pre-barrier code.
+  // Also add memory barrier for non volatile load from the referent field
+  // to prevent commoning of loads across safepoint.
+  if (!UseG1GC && !need_mem_bar)
+    return;
 
   // Some compile time checks.
 
@@ -2157,11 +2228,12 @@ void LibraryCallKit::insert_g1_pre_barrier(Node* base_oop, Node* offset, Node* p
 
     const TypeInstPtr* itype = btype->isa_instptr();
     if (itype != NULL) {
-      // Can the klass of base_oop be statically determined
-      // to be _not_ a sub-class of Reference?
+      // Can the klass of base_oop be statically determined to be
+      // _not_ a sub-class of Reference and _not_ Object?
       ciKlass* klass = itype->klass();
-      if (klass->is_subtype_of(env()->Reference_klass()) &&
-          !env()->Reference_klass()->is_subtype_of(klass)) {
+      if ( klass->is_loaded() &&
+          !klass->is_subtype_of(env()->Reference_klass()) &&
+          !env()->Object_klass()->is_subtype_of(klass)) {
         return;
       }
     }
@@ -2171,10 +2243,8 @@ void LibraryCallKit::insert_g1_pre_barrier(Node* base_oop, Node* offset, Node* p
   // we need to generate the following runtime filters
   //
   // if (offset == java_lang_ref_Reference::_reference_offset) {
-  //   if (base != null) {
-  //     if (instance_of(base, java.lang.ref.Reference)) {
-  //       pre_barrier(_, pre_val, ...);
-  //     }
+  //   if (instance_of(base, java.lang.ref.Reference)) {
+  //     pre_barrier(_, pre_val, ...);
   //   }
   // }
 
@@ -2187,19 +2257,19 @@ void LibraryCallKit::insert_g1_pre_barrier(Node* base_oop, Node* offset, Node* p
   Node* referent_off = __ ConX(java_lang_ref_Reference::referent_offset);
 
   __ if_then(offset, BoolTest::eq, referent_off, unlikely); {
-    __ if_then(base_oop, BoolTest::ne, null(), likely); {
-
       // Update graphKit memory and control from IdealKit.
       sync_kit(ideal);
 
       Node* ref_klass_con = makecon(TypeKlassPtr::make(env()->Reference_klass()));
+      _sp += nargs;  // gen_instanceof might do an uncommon trap
       Node* is_instof = gen_instanceof(base_oop, ref_klass_con);
+      _sp -= nargs;
 
       // Update IdealKit memory and control from graphKit.
       __ sync_kit(this);
 
       Node* one = __ ConI(1);
-
+      // is_instof == 0 if base_oop == NULL
       __ if_then(is_instof, BoolTest::eq, one, unlikely); {
 
         // Update graphKit from IdeakKit.
@@ -2211,12 +2281,15 @@ void LibraryCallKit::insert_g1_pre_barrier(Node* base_oop, Node* offset, Node* p
                     NULL /* obj */, NULL /* adr */, max_juint /* alias_idx */, NULL /* val */, NULL /* val_type */,
                     pre_val /* pre_val */,
                     T_OBJECT);
-
+        if (need_mem_bar) {
+          // Add memory barrier to prevent commoning reads from this field
+          // across safepoint since GC can change its value.
+          insert_mem_bar(Op_MemBarCPUOrder);
+        }
         // Update IdealKit from graphKit.
         __ sync_kit(this);
 
       } __ end_if(); // _ref_type != ref_none
-    } __ end_if(); // base  != NULL
   } __ end_if(); // offset == referent_offset
 
   // Final sync IdealKit and GraphKit.
@@ -2277,6 +2350,7 @@ bool LibraryCallKit::inline_unsafe_access(bool is_native_ptr, bool is_store, Bas
 
   // Argument words:  "this" plus (oop/offset) or (lo/hi) args plus maybe 1 or 2 value words
   int nargs = 1 + (is_native_ptr ? 2 : 3) + (is_store ? type_words : 0);
+  assert(callee()->arg_size() == nargs, "must be");
 
   debug_only(int saved_sp = _sp);
   _sp += nargs;
@@ -2350,7 +2424,9 @@ bool LibraryCallKit::inline_unsafe_access(bool is_native_ptr, bool is_store, Bas
   // object (either by using Unsafe directly or through reflection)
   // then, if G1 is enabled, we need to record the referent in an
   // SATB log buffer using the pre-barrier mechanism.
-  bool need_read_barrier = UseG1GC && !is_native_ptr && !is_store &&
+  // Also we need to add memory barrier to prevent commoning reads
+  // from this field across safepoint since GC can change its value.
+  bool need_read_barrier = !is_native_ptr && !is_store &&
                            offset != top() && heap_base_oop != top();
 
   if (!is_store && type == T_OBJECT) {
@@ -2440,7 +2516,7 @@ bool LibraryCallKit::inline_unsafe_access(bool is_native_ptr, bool is_store, Bas
       break;
     case T_OBJECT:
       if (need_read_barrier) {
-        insert_g1_pre_barrier(heap_base_oop, offset, p);
+        insert_pre_barrier(heap_base_oop, offset, p, nargs, !(is_volatile || need_mem_bar));
       }
       push(p);
       break;
@@ -2842,14 +2918,63 @@ bool LibraryCallKit::inline_unsafe_allocate() {
   return true;
 }
 
+#ifdef TRACE_HAVE_INTRINSICS
+/*
+ * oop -> myklass
+ * myklass->trace_id |= USED
+ * return myklass->trace_id & ~0x3
+ */
+bool LibraryCallKit::inline_native_classID() {
+  int nargs = 1 + 1;
+  null_check_receiver(callee());  // check then ignore argument(0)
+  _sp += nargs;
+  Node* cls = do_null_check(argument(1), T_OBJECT);
+  _sp -= nargs;
+  Node* kls = load_klass_from_mirror(cls, false, nargs, NULL, 0);
+  _sp += nargs;
+  kls = do_null_check(kls, T_OBJECT);
+  _sp -= nargs;
+  ByteSize offset = TRACE_ID_OFFSET;
+  Node* insp = basic_plus_adr(kls, in_bytes(offset));
+  Node* tvalue = make_load(NULL, insp, TypeLong::LONG, T_LONG);
+  Node* bits = longcon(~0x03l); // ignore bit 0 & 1
+  Node* andl = _gvn.transform(new (C, 3) AndLNode(tvalue, bits));
+  Node* clsused = longcon(0x01l); // set the class bit
+  Node* orl = _gvn.transform(new (C, 3) OrLNode(tvalue, clsused));
+
+  const TypePtr *adr_type = _gvn.type(insp)->isa_ptr();
+  store_to_memory(control(), insp, orl, T_LONG, adr_type);
+  push_pair(andl);
+  return true;
+}
+
+bool LibraryCallKit::inline_native_threadID() {
+  Node* tls_ptr = NULL;
+  Node* cur_thr = generate_current_thread(tls_ptr);
+  Node* p = basic_plus_adr(top()/*!oop*/, tls_ptr, in_bytes(JavaThread::osthread_offset()));
+  Node* osthread = make_load(NULL, p, TypeRawPtr::NOTNULL, T_ADDRESS);
+  p = basic_plus_adr(top()/*!oop*/, osthread, in_bytes(OSThread::thread_id_offset()));
+
+  Node* threadid = NULL;
+  size_t thread_id_size = OSThread::thread_id_size();
+  if (thread_id_size == (size_t) BytesPerLong) {
+    threadid = ConvL2I(make_load(control(), p, TypeLong::LONG, T_LONG));
+    push(threadid);
+  } else if (thread_id_size == (size_t) BytesPerInt) {
+    threadid = make_load(control(), p, TypeInt::INT, T_INT);
+    push(threadid);
+  } else {
+    ShouldNotReachHere();
+  }
+  return true;
+}
+#endif
+
 //------------------------inline_native_time_funcs--------------
 // inline code for System.currentTimeMillis() and System.nanoTime()
 // these have the same type and signature
-bool LibraryCallKit::inline_native_time_funcs(bool isNano) {
-  address funcAddr = isNano ? CAST_FROM_FN_PTR(address, os::javaTimeNanos) :
-                              CAST_FROM_FN_PTR(address, os::javaTimeMillis);
-  const char * funcName = isNano ? "nanoTime" : "currentTimeMillis";
-  const TypeFunc *tf = OptoRuntime::current_time_millis_Type();
+bool LibraryCallKit::inline_native_time_funcs(address funcAddr, const char* funcName) {
+  const TypeFunc *tf = OptoRuntime::void_long_Type();
   const TypePtr* no_memory_effects = NULL;
   Node* time = make_runtime_call(RC_LEAF, tf, funcAddr, funcName, no_memory_effects);
   Node* value = _gvn.transform(new (C, 1) ProjNode(time, TypeFunc::Parms+0));
@@ -3931,119 +4056,13 @@ bool LibraryCallKit::is_method_invoke_or_aux_frame(JVMState* jvms) {
       }
     }
   }
-  else if (method->is_method_handle_adapter()) {
+  else if (method->is_method_handle_intrinsic() ||
+           method->is_compiled_lambda_form()) {
     // This is an internal adapter frame from the MethodHandleCompiler -- skip it
     return true;
   }
 
   return false;
-}
-
-static int value_field_offset = -1;  // offset of the "value" field of AtomicLongCSImpl.  This is needed by
-                                     // inline_native_AtomicLong_attemptUpdate() but it has no way of
-                                     // computing it since there is no lookup field by name function in the
-                                     // CI interface.  This is computed and set by inline_native_AtomicLong_get().
-                                     // Using a static variable here is safe even if we have multiple compilation
-                                     // threads because the offset is constant.  At worst the same offset will be
-                                     // computed and  stored multiple
-
-bool LibraryCallKit::inline_native_AtomicLong_get() {
-  // Restore the stack and pop off the argument
-  _sp+=1;
-  Node *obj = pop();
-
-  // get the offset of the "value" field. Since the CI interfaces
-  // does not provide a way to look up a field by name, we scan the bytecodes
-  // to get the field index.  We expect the first 2 instructions of the method
-  // to be:
-  //    0 aload_0
-  //    1 getfield "value"
-  ciMethod* method = callee();
-  if (value_field_offset == -1)
-  {
-    ciField* value_field;
-    ciBytecodeStream iter(method);
-    Bytecodes::Code bc = iter.next();
-
-    if ((bc != Bytecodes::_aload_0) &&
-              ((bc != Bytecodes::_aload) || (iter.get_index() != 0)))
-      return false;
-    bc = iter.next();
-    if (bc != Bytecodes::_getfield)
-      return false;
-    bool ignore;
-    value_field = iter.get_field(ignore);
-    value_field_offset = value_field->offset_in_bytes();
-  }
-
-  // Null check without removing any arguments.
-  _sp++;
-  obj = do_null_check(obj, T_OBJECT);
-  _sp--;
-  // Check for locking null object
-  if (stopped()) return true;
-
-  Node *adr = basic_plus_adr(obj, obj, value_field_offset);
-  const TypePtr *adr_type = _gvn.type(adr)->is_ptr();
-  int alias_idx = C->get_alias_index(adr_type);
-
-  Node *result = _gvn.transform(new (C, 3) LoadLLockedNode(control(), memory(alias_idx), adr));
-
-  push_pair(result);
-
-  return true;
-}
-
-bool LibraryCallKit::inline_native_AtomicLong_attemptUpdate() {
-  // Restore the stack and pop off the arguments
-  _sp+=5;
-  Node *newVal = pop_pair();
-  Node *oldVal = pop_pair();
-  Node *obj = pop();
-
-  // we need the offset of the "value" field which was computed when
-  // inlining the get() method.  Give up if we don't have it.
-  if (value_field_offset == -1)
-    return false;
-
-  // Null check without removing any arguments.
-  _sp+=5;
-  obj = do_null_check(obj, T_OBJECT);
-  _sp-=5;
-  // Check for locking null object
-  if (stopped()) return true;
-
-  Node *adr = basic_plus_adr(obj, obj, value_field_offset);
-  const TypePtr *adr_type = _gvn.type(adr)->is_ptr();
-  int alias_idx = C->get_alias_index(adr_type);
-
-  Node *cas = _gvn.transform(new (C, 5) StoreLConditionalNode(control(), memory(alias_idx), adr, newVal, oldVal));
-  Node *store_proj = _gvn.transform( new (C, 1) SCMemProjNode(cas));
-  set_memory(store_proj, alias_idx);
-  Node *bol = _gvn.transform( new (C, 2) BoolNode( cas, BoolTest::eq ) );
-
-  Node *result;
-  // CMove node is not used to be able fold a possible check code
-  // after attemptUpdate() call. This code could be transformed
-  // into CMove node by loop optimizations.
-  {
-    RegionNode *r = new (C, 3) RegionNode(3);
-    result = new (C, 3) PhiNode(r, TypeInt::BOOL);
-
-    Node *iff = create_and_xform_if(control(), bol, PROB_FAIR, COUNT_UNKNOWN);
-    Node *iftrue = opt_iff(r, iff);
-    r->init_req(1, iftrue);
-    result->init_req(1, intcon(1));
-    result->init_req(2, intcon(0));
-
-    set_control(_gvn.transform(r));
-    record_for_igvn(r);
-
-    C->set_has_split_ifs(true); // Has chance for split-if optimization
-  }
-
-  push(_gvn.transform(result));
-  return true;
 }
 
 bool LibraryCallKit::inline_fp_conversions(vmIntrinsics::ID id) {
@@ -5473,7 +5492,10 @@ bool LibraryCallKit::inline_reference_get() {
               result /* pre_val */,
               T_OBJECT);
 
+  // Add memory barrier to prevent commoning reads from this field
+  // across safepoint since GC can change its value.
+  insert_mem_bar(Op_MemBarCPUOrder);
+
   push(result);
   return true;
 }
-

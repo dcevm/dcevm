@@ -533,7 +533,17 @@ StringConcat* PhaseStringOpts::build_candidate(CallStaticJavaNode* call) {
         if (arg->is_Proj() && arg->in(0)->is_CallStaticJava()) {
           CallStaticJavaNode* csj = arg->in(0)->as_CallStaticJava();
           if (csj->method() != NULL &&
-              csj->method()->intrinsic_id() == vmIntrinsics::_Integer_toString) {
+              csj->method()->intrinsic_id() == vmIntrinsics::_Integer_toString &&
+              arg->outcnt() == 1) {
+            // _control is the list of StringBuilder calls nodes which
+            // will be replaced by new String code after this optimization.
+            // Integer::toString() call is not part of StringBuilder calls
+            // chain. It could be eliminated only if its result is used
+            // only by this SB calls chain.
+            // Another limitation: it should be used only once because
+            // it is unknown that it is used only by this SB calls chain
+            // until all related SB calls nodes are collected.
+            assert(arg->unique_out() == cnode, "sanity");
             sc->add_control(csj);
             sc->push_int(csj->in(TypeFunc::Parms));
             continue;
@@ -929,8 +939,8 @@ bool StringConcat::validate_control_flow() {
 }
 
 Node* PhaseStringOpts::fetch_static_field(GraphKit& kit, ciField* field) {
-  const TypeKlassPtr* klass_type = TypeKlassPtr::make(field->holder());
-  Node* klass_node = __ makecon(klass_type);
+  const TypeInstPtr* mirror_type = TypeInstPtr::make(field->holder()->java_mirror());
+  Node* klass_node = __ makecon(mirror_type);
   BasicType bt = field->layout_type();
   ciType* field_klass = field->type();
 
@@ -945,6 +955,7 @@ Node* PhaseStringOpts::fetch_static_field(GraphKit& kit, ciField* field) {
       // and may yield a vacuous result if the field is of interface type.
       type = TypeOopPtr::make_from_constant(con, true)->isa_oopptr();
       assert(type != NULL, "field singleton type must be consistent");
+      return __ makecon(type);
     } else {
       type = TypeOopPtr::make_from_klass(field_klass->as_klass());
     }
@@ -954,7 +965,7 @@ Node* PhaseStringOpts::fetch_static_field(GraphKit& kit, ciField* field) {
 
   return kit.make_load(NULL, kit.basic_plus_adr(klass_node, field->offset_in_bytes()),
                        type, T_OBJECT,
-                       C->get_alias_index(klass_type->add_offset(field->offset_in_bytes())));
+                       C->get_alias_index(mirror_type->add_offset(field->offset_in_bytes())));
 }
 
 Node* PhaseStringOpts::int_stringSize(GraphKit& kit, Node* arg) {

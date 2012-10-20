@@ -55,9 +55,6 @@ enum {
   JVM_ACC_IS_OBSOLETE             = 0x00020000,     // RedefineClasses() has made method obsolete
   JVM_ACC_IS_PREFIXED_NATIVE      = 0x00040000,     // JVMTI has prefixed this native method
 
-  JVM_MH_INVOKE_BITS           // = 0x10001100      // MethodHandle.invoke quasi-native
-                                  = (JVM_ACC_NATIVE | JVM_ACC_SYNTHETIC | JVM_ACC_MONITOR_MATCH),
-
   // klassOop flags
   JVM_ACC_HAS_MIRANDA_METHODS     = 0x10000000,     // True if this class has miranda methods in it's vtable
   JVM_ACC_HAS_VANILLA_CONSTRUCTOR = 0x20000000,     // True if klass has a vanilla default constructor
@@ -80,10 +77,12 @@ enum {
   JVM_ACC_FIELD_ACCESS_WATCHED       = 0x00002000,  // field access is watched by JVMTI
   JVM_ACC_FIELD_MODIFICATION_WATCHED = 0x00008000,  // field modification is watched by JVMTI
   JVM_ACC_FIELD_INTERNAL             = 0x00000400,  // internal field, same as JVM_ACC_ABSTRACT
+  JVM_ACC_FIELD_HAS_GENERIC_SIGNATURE = 0x00000800, // field has generic signature
 
   JVM_ACC_FIELD_INTERNAL_FLAGS       = JVM_ACC_FIELD_ACCESS_WATCHED |
                                        JVM_ACC_FIELD_MODIFICATION_WATCHED |
-                                       JVM_ACC_FIELD_INTERNAL,
+                                       JVM_ACC_FIELD_INTERNAL |
+                                       JVM_ACC_FIELD_HAS_GENERIC_SIGNATURE,
 
                                                     // flags accepted by set_field_flags()
   JVM_ACC_FIELD_FLAGS                = JVM_RECOGNIZED_FIELD_MODIFIERS | JVM_ACC_FIELD_INTERNAL_FLAGS
@@ -131,15 +130,6 @@ class AccessFlags VALUE_OBJ_CLASS_SPEC {
   bool is_obsolete             () const { return (_flags & JVM_ACC_IS_OBSOLETE            ) != 0; }
   bool is_prefixed_native      () const { return (_flags & JVM_ACC_IS_PREFIXED_NATIVE     ) != 0; }
 
-  // JSR 292:  A method of the form MethodHandle.invoke(A...)R method is
-  // neither bytecoded nor a JNI native, but rather a fast call through
-  // a lightweight method handle object.  Because it is not bytecoded,
-  // it has the native bit set, but the monitor-match bit is also set
-  // to distinguish it from a JNI native (which never has the match bit set).
-  // The synthetic bit is also present, because such a method is never
-  // explicitly defined in Java code.
-  bool is_method_handle_invoke () const { return (_flags & JVM_MH_INVOKE_BITS) == JVM_MH_INVOKE_BITS; }
-
   // klassOop flags
   bool has_miranda_methods     () const { return (_flags & JVM_ACC_HAS_MIRANDA_METHODS    ) != 0; }
   bool has_vanilla_constructor () const { return (_flags & JVM_ACC_HAS_VANILLA_CONSTRUCTOR) != 0; }
@@ -156,6 +146,8 @@ class AccessFlags VALUE_OBJ_CLASS_SPEC {
   bool is_field_modification_watched() const
                                         { return (_flags & JVM_ACC_FIELD_MODIFICATION_WATCHED) != 0; }
   bool is_internal() const              { return (_flags & JVM_ACC_FIELD_INTERNAL) != 0; }
+  bool field_has_generic_signature() const
+                                        { return (_flags & JVM_ACC_FIELD_HAS_GENERIC_SIGNATURE) != 0; }
 
   // get .class file flags
   jint get_flags               () const { return (_flags & JVM_ACC_WRITTEN_FLAGS); }
@@ -224,6 +216,10 @@ class AccessFlags VALUE_OBJ_CLASS_SPEC {
                                          } else {
                                            atomic_clear_bits(JVM_ACC_FIELD_MODIFICATION_WATCHED);
                                          }
+                                       }
+  void set_field_has_generic_signature()
+                                       {
+                                         atomic_set_bits(JVM_ACC_FIELD_HAS_GENERIC_SIGNATURE);
                                        }
 
   // Conversion

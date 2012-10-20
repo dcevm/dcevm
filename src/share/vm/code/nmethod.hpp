@@ -31,7 +31,7 @@
 // This class is used internally by nmethods, to cache
 // exception/pc/handler information.
 
-class ExceptionCache : public CHeapObj {
+class ExceptionCache : public CHeapObj<mtCode> {
   friend class VMStructs;
  private:
   enum { cache_size = 16 };
@@ -553,7 +553,7 @@ public:
   static void oops_do_marking_prologue();
   static void oops_do_marking_epilogue();
   static bool oops_do_marking_is_active() { return _oops_do_mark_nmethods != NULL; }
-  DEBUG_ONLY(bool test_oops_do_mark() { return _oops_do_mark_link != NULL; })
+  bool test_oops_do_mark() { return _oops_do_mark_link != NULL; }
 
   // ScopeDesc for an instruction
   ScopeDesc* scope_desc_at(address pc);

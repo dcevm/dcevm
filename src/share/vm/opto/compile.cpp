@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2011, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2012, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -1707,7 +1707,6 @@ void Compile::Optimize() {
       if (major_progress()) print_method("PhaseIdealLoop before EA", 2);
       if (failing())  return;
     }
-    TracePhase t2("escapeAnalysis", &_t_escapeAnalysis, true);
     ConnectionGraph::do_analysis(this, &igvn);
 
     if (failing())  return;
@@ -1719,6 +1718,7 @@ void Compile::Optimize() {
     if (failing())  return;
 
     if (congraph() != NULL && macro_count() > 0) {
+      NOT_PRODUCT( TracePhase t2("macroEliminate", &_t_macroEliminate, TimeCompiler); )
       PhaseMacroExpand mexp(igvn);
       mexp.eliminate_macro_nodes();
       igvn.set_delay_transform(false);
@@ -1875,10 +1875,10 @@ void Compile::Code_Gen() {
 
     cfg.Estimate_Block_Frequency();
     cfg.GlobalCodeMotion(m,unique(),proj_list);
+    if (failing())  return;
 
     print_method("Global code motion", 2);
 
-    if (failing())  return;
     NOT_PRODUCT( verify_graph_edges(); )
 
     debug_only( cfg.verify(); )
@@ -2297,7 +2297,6 @@ static void final_graph_reshaping_impl( Node *n, Final_Reshape_Counts &frc ) {
   case Op_LoadL:
   case Op_LoadL_unaligned:
   case Op_LoadPLocked:
-  case Op_LoadLLocked:
   case Op_LoadP:
   case Op_LoadN:
   case Op_LoadRange:
@@ -2592,38 +2591,12 @@ static void final_graph_reshaping_impl( Node *n, Final_Reshape_Counts &frc ) {
     }
     break;
 
-  case Op_Load16B:
-  case Op_Load8B:
-  case Op_Load4B:
-  case Op_Load8S:
-  case Op_Load4S:
-  case Op_Load2S:
-  case Op_Load8C:
-  case Op_Load4C:
-  case Op_Load2C:
-  case Op_Load4I:
-  case Op_Load2I:
-  case Op_Load2L:
-  case Op_Load4F:
-  case Op_Load2F:
-  case Op_Load2D:
-  case Op_Store16B:
-  case Op_Store8B:
-  case Op_Store4B:
-  case Op_Store8C:
-  case Op_Store4C:
-  case Op_Store2C:
-  case Op_Store4I:
-  case Op_Store2I:
-  case Op_Store2L:
-  case Op_Store4F:
-  case Op_Store2F:
-  case Op_Store2D:
+  case Op_LoadVector:
+  case Op_StoreVector:
     break;
 
   case Op_PackB:
   case Op_PackS:
-  case Op_PackC:
   case Op_PackI:
   case Op_PackF:
   case Op_PackL:
@@ -2631,7 +2604,7 @@ static void final_graph_reshaping_impl( Node *n, Final_Reshape_Counts &frc ) {
     if (n->req()-1 > 2) {
       // Replace many operand PackNodes with a binary tree for matching
       PackNode* p = (PackNode*) n;
-      Node* btp = p->binaryTreePack(Compile::current(), 1, n->req());
+      Node* btp = p->binary_tree_pack(Compile::current(), 1, n->req());
       n->subsume_by(btp);
     }
     break;
@@ -3165,7 +3138,7 @@ void Compile::ConstantTable::emit(CodeBuffer& cb) {
     default: ShouldNotReachHere();
     }
     assert(constant_addr, "consts section too small");
-    assert((constant_addr - _masm.code()->consts()->start()) == con.offset(), err_msg("must be: %d == %d", constant_addr - _masm.code()->consts()->start(), con.offset()));
+    assert((constant_addr - _masm.code()->consts()->start()) == con.offset(), err_msg_res("must be: %d == %d", constant_addr - _masm.code()->consts()->start(), con.offset()));
   }
 }
 
@@ -3226,7 +3199,7 @@ void Compile::ConstantTable::fill_jump_table(CodeBuffer& cb, MachConstantNode* n
   if (Compile::current()->in_scratch_emit_size())  return;
 
   assert(labels.is_nonempty(), "must be");
-  assert((uint) labels.length() == n->outcnt(), err_msg("must be equal: %d == %d", labels.length(), n->outcnt()));
+  assert((uint) labels.length() == n->outcnt(), err_msg_res("must be equal: %d == %d", labels.length(), n->outcnt()));
 
   // Since MachConstantNode::constant_offset() also contains
   // table_base_offset() we need to subtract the table_base_offset()
@@ -3238,7 +3211,7 @@ void Compile::ConstantTable::fill_jump_table(CodeBuffer& cb, MachConstantNode* n
 
   for (uint i = 0; i < n->outcnt(); i++) {
     address* constant_addr = &jump_table_base[i];
-    assert(*constant_addr == (((address) n) + i), err_msg("all jump-table entries must contain adjusted node pointer: " INTPTR_FORMAT " == " INTPTR_FORMAT, *constant_addr, (((address) n) + i)));
+    assert(*constant_addr == (((address) n) + i), err_msg_res("all jump-table entries must contain adjusted node pointer: " INTPTR_FORMAT " == " INTPTR_FORMAT, *constant_addr, (((address) n) + i)));
     *constant_addr = cb.consts()->target(*labels.at(i), (address) constant_addr);
     cb.consts()->relocate((address) constant_addr, relocInfo::internal_word_type);
   }

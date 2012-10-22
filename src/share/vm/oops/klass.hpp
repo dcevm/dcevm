@@ -963,6 +963,8 @@ class Klass : public Klass_vtbl {
 
 
 inline oop klassOopDesc::java_mirror() const                        { return klass_part()->java_mirror(); }
+inline klassOop klassOopDesc::old_version() const                   { return klass_part()->old_version(); }
+inline klassOop klassOopDesc::new_version() const                   { return klass_part()->new_version(); }
 
 
 #endif // SHARE_VM_OOPS_KLASS_HPP

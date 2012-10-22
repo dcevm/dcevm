@@ -41,8 +41,10 @@ class klassOopDesc : public oopDesc {
   // returns the Klass part containing dispatching behavior
   Klass* klass_part() const                      { return (Klass*)((address)this + sizeof(klassOopDesc)); }
 
-  // Convenience wrapper
+  // Convenience wrappers
   inline oop java_mirror() const;
+  inline klassOop old_version() const;
+  inline klassOop new_version() const;
 
  private:
   // These have no implementation since klassOop should never be accessed in this fashion

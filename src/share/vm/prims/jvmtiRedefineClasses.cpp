@@ -2109,18 +2109,19 @@ template <class T> void VM_RedefineClasses::do_oop_work(T* p) {
     if (obj->is_instanceKlass()) {
       klassOop klass = (klassOop)obj;
       // DCEVM: note: can overwrite owner of old_klass constants pool with new_klass, so we need to fix it back later
-      if (klass->klass_part()->new_version() != NULL && klass->klass_part()->new_version()->klass_part()->is_redefining()) {
+      if (klass->new_version() != NULL && klass->new_version()->klass_part()->is_redefining()) {
         obj = klass->klass_part()->new_version();
         oopDesc::encode_store_heap_oop_not_null(p, obj);
       }
     } else if (obj->blueprint()->newest_version() == SystemDictionary::Class_klass()->klass_part()->newest_version()) {
-
+      // update references to java.lang.Class to point to newest version. Only update references to non-primitive
+      // java.lang.Class instances.
       klassOop klass_oop = java_lang_Class::as_klassOop(obj);
       if (klass_oop != NULL) {
-        if (klass_oop->klass_part()->new_version() != NULL && klass_oop->klass_part()->new_version()->klass_part()->is_redefining()) {
-          obj = klass_oop->klass_part()->new_version()->klass_part()->java_mirror();
+        if (klass_oop->new_version() != NULL && klass_oop->new_version()->klass_part()->is_redefining()) {
+          obj = klass_oop->new_version()->java_mirror();
         } else if (klass_oop->klass_part()->is_redefining()) {
-          obj = klass_oop->klass_part()->java_mirror();
+          obj = klass_oop->java_mirror();
         }
         oopDesc::encode_store_heap_oop_not_null(p, obj);
 
@@ -2296,7 +2297,7 @@ void VM_RedefineClasses::doit() {
     // Swap marks to have same hashcodes
     for (int i=0; i<_new_classes->length(); i++) {
       swap_marks(_new_classes->at(i)(), _new_classes->at(i)->old_version());
-      swap_marks(_new_classes->at(i)->java_mirror(), _new_classes->at(i)->old_version()->klass_part()->java_mirror());
+      swap_marks(_new_classes->at(i)->java_mirror(), _new_classes->at(i)->old_version()->java_mirror());
     }
 
     _updated_oops = objectClosure.updated_oops();
@@ -2337,7 +2338,7 @@ void VM_RedefineClasses::doit() {
       ((instanceKlass*)cur->klass_part())->set_array_klasses(((instanceKlass*)cur->klass_part()->old_version()->klass_part())->array_klasses());
 
       oop new_mirror = _new_classes->at(i)->java_mirror();
-      oop old_mirror = _new_classes->at(i)->old_version()->klass_part()->java_mirror();
+      oop old_mirror = _new_classes->at(i)->old_version()->java_mirror();
       java_lang_Class::set_array_klass(new_mirror, java_lang_Class::array_klass(old_mirror));
     }
   }

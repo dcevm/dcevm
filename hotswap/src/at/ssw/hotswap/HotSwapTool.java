@@ -28,39 +28,33 @@ import com.sun.jdi.Location;
 import com.sun.jdi.ReferenceType;
 import com.sun.jdi.StackFrame;
 import com.sun.jdi.ThreadReference;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
+
+import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Hashtable;
-import java.util.List;
-import java.util.Map;
+import java.net.URL;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
+
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 
 /**
- *
  * @author Thomas Wuerthinger
  * @author Kerstin Breiteneder
  * @author Christoph Wimberger
- *
  */
 public class HotSwapTool {
 
-    /** Prefix for the version number in the class name. The class bytes are modified that this string including
+    /**
+     * Prefix for the version number in the class name. The class bytes are modified that this string including
      * the following number is removed. This means that e.g. A___2 is treated as A anywhere in the source code. This is introduced
      * to make the IDE not complain about multiple defined classes.
      */
     public static final String IDENTIFIER = "___";
-    /** Level at which the program prints console output. Use 0 to disable the console output. **/
+    /**
+     * Level at which the program prints console output. Use 0 to disable the console output. *
+     */
     private static int TRACE_LEVEL;
     private static final String CLASS_FILE_SUFFIX = ".class";
     private static Map<Class<?>, Integer> currentVersion = new Hashtable<Class<?>, Integer>();
@@ -73,6 +67,7 @@ public class HotSwapTool {
 
     /**
      * Utility method for dumping the current call stack. The parameter identifies the class version the caller method corresponds to.
+     *
      * @param version the manually specified class version of the caller method
      */
     public static void dumpEnter(int version) {
@@ -103,6 +98,7 @@ public class HotSwapTool {
 
     /**
      * Returns the current version of the inner classes of a specified outer class.
+     *
      * @param baseClass the outer class whose version is queried
      * @return the version of the inner classes of the specified outer class
      */
@@ -128,11 +124,12 @@ public class HotSwapTool {
 
     /**
      * Redefines the Java class specified by the array of class files.
+     *
      * @param files the class files with the byte codes of the new version of the java classes
-     * @throws HotSwapException if redefining the classes failed
+     * @throws HotSwapException       if redefining the classes failed
      * @throws ClassNotFoundException if a class that is not yet loaded in the target VM should be redefined
      */
-    public static void redefine(List<File> files, final Map<String,String> replacements) throws HotSwapException, ClassNotFoundException {
+    public static void redefine(Iterable<File> files, final Map<String, String> replacements) throws HotSwapException, ClassNotFoundException {
 
         final JDIProxy jdi = JDIProxy.getJDI();
         assert jdi.isConnected();
@@ -274,7 +271,8 @@ public class HotSwapTool {
     /**
      * Redefines all inner classes of a outer class to a specified version. Inner classes who do not have a particular
      * representation for a version remain unchanged.
-     * @param outerClass the outer class whose inner classes should be redefined
+     *
+     * @param outerClass    the outer class whose inner classes should be redefined
      * @param versionNumber the target version number
      */
     public static void toVersion(Class<?> outerClass, int versionNumber) {
@@ -296,16 +294,13 @@ public class HotSwapTool {
             return;
         }
 
-        List<File> result = new ArrayList<File>();
-        getClassFilesWithVersion(result, new File("."), versionNumber, outerClass);
+        Map<String, File> files = findClassesWithVersion(outerClass, versionNumber);
 
         // Make sure all classes are loaded in the VM, before they are redefined
         List<Class<?>> classes = new ArrayList<Class<?>>();
-        for (File curFile : result) {
-            String curFileName = fileToClassName(curFile.getPath());
-            
+        for (String name : files.keySet()) {
             try {
-                classes.add(Class.forName(curFileName));
+                classes.add(Class.forName(name));
                 if (TRACE_LEVEL >= 2) {
                     System.out.println("Class added: " + classes.get(classes.size() - 1));
                 }
@@ -315,30 +310,27 @@ public class HotSwapTool {
                 return;
             }
         }
-        Map<String,String> replacements = new HashMap<String,String>();
+        Map<String, String> replacements = new HashMap<String, String>();
 
-        for(Class c : classes) {
+        for (Class c : classes) {
             Annotation a = c.getAnnotation(ClassRedefinitionPolicy.class);
-            if(a!=null && a instanceof ClassRedefinitionPolicy) {
-                Class rep = ((ClassRedefinitionPolicy)a).alias();
+            if (a != null && a instanceof ClassRedefinitionPolicy) {
+                Class rep = ((ClassRedefinitionPolicy) a).alias();
 
-                if(rep != ClassRedefinitionPolicy.NoClass.class) {
+                if (rep != ClassRedefinitionPolicy.NoClass.class) {
                     String oldClassName = c.getName();
                     String newClassName = rep.getName();
                     replacements.put(oldClassName, newClassName);
-                }
-                else {
+                } else {
                     replacements.put(c.getName(), stripVersion(c.getName()));
                 }
-            }
-            else {
-               replacements.put(c.getName(), stripVersion(c.getName()));
+            } else {
+                replacements.put(c.getName(), stripVersion(c.getName()));
             }
         }
-       
-        for (File curFile : result) {
-            String curFileName = curFile.getPath();
-            String curClassName = getReplacementClassName(fileToClassName(curFileName), replacements);
+
+        for (String name : files.keySet()) {
+            String curClassName = getReplacementClassName(name, replacements);
 
             try {
                 classes.add(Class.forName(curClassName));
@@ -352,7 +344,7 @@ public class HotSwapTool {
             }
         }
         try {
-            redefine(result, replacements);
+            redefine(files.values(), replacements);
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
             assert false;
@@ -379,34 +371,40 @@ public class HotSwapTool {
         assert getCurrentVersion(outerClass) == versionNumber;
     }
 
-    private static void getClassFilesWithVersion(List<File> files, File f, int versionNumber,
-            Class<?> baseClass) {
-        if (f.isFile()) {
-            String name = f.getName();
-            if (isInnerClass(name, baseClass)) {
-                int curVersionNumber = getVersionNumber(name);
-                if (curVersionNumber == versionNumber) {
-                    files.add(f);
-                }
+    private static Map<String, File> findClassesWithVersion(Class<?> baseClass, int version) {
+        Map<String, File> classes = new HashMap<String, File>();
+
+        String packageName = baseClass.getPackage().getName().replace('.', '/');
+        URL url = baseClass.getClassLoader().getResource(packageName);
+        File folder = new File(url.getFile());
+        for (File f : folder.listFiles(IsClassFile.INSTANCE)) {
+            String fileName = f.getName();
+            String simpleName = f.getName().substring(0, f.getName().length() - CLASS_FILE_SUFFIX.length());
+            String name = baseClass.getPackage().getName() + '.' + simpleName;
+
+            if (isInnerClass(name, baseClass) && parseClassVersion(fileName) == version) {
+                classes.put(name, f);
             }
-        } else if (f.isDirectory()) {
-            for (File subFile : f.listFiles()) {
-                getClassFilesWithVersion(files, subFile, versionNumber, baseClass);
-            }
-        } else {
-            assert false;
+        }
+        return classes;
+    }
+
+    private enum IsClassFile implements FilenameFilter {
+        INSTANCE;
+
+        @Override
+        public boolean accept(File dir, String name) {
+            return name.endsWith(CLASS_FILE_SUFFIX);
         }
     }
 
-    private static String fileToClassName(String s) {
-        s = s.substring(0, s.length() - ".class".length());
-        s = s.replace("./out/production/HotSwapTests/", "");
-        s = s.replace(File.separator, ".");
-        return s;
-    }
-
-    private static int getVersionNumber(String name) {
-
+    /**
+     * Parse version of the class from the class name. Classes are named in the form of [Name]___[Version]
+     *
+     * @param name
+     * @return
+     */
+    private static int parseClassVersion(String name) {
         if (!name.endsWith(CLASS_FILE_SUFFIX)) {
             return -1;
         }
@@ -446,12 +444,11 @@ public class HotSwapTool {
         }
         ClassIdentifier classIdentifier = new ClassIdentifier(clazz);
 
-        
-        for(String key: replacements.keySet()){
+        for (String key : replacements.keySet()) {
             String newClazz = classIdentifier.getDescriptor();
-            if(newClazz.startsWith(key)){
+            if (newClazz.startsWith(key)) {
                 newClazz = newClazz.substring(key.length());
-                classIdentifier.setDescriptor(replacements.get(key)+newClazz);
+                classIdentifier.setDescriptor(replacements.get(key) + newClazz);
                 return classIdentifier.getOriginal();
             }
         }
@@ -514,10 +511,8 @@ public class HotSwapTool {
         jdi.executeSuspended(r);
         return resultList;
     }
-    static int cnt;
 
     private static boolean isClassLoaded(String className) {
-
         List<ReferenceType> klasses = JDIProxy.getJDI().allClasses();
         for (ReferenceType klass : klasses) {
             if (klass.name().equals(className)) {

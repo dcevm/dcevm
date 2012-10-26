@@ -47,32 +47,14 @@
                classpath="target/classes"/>
     </target>
 
-    <target name="install-fastdebug" depends="prepare-jvm">
+    <target name="test-fastdebug" depends="compile,prepare-jvm">
         <install-dcevm kind="fastdebug"/>
+        <test-dcevm kind="fastdebug"/>
     </target>
 
-    <target name="install-product" depends="prepare-jvm">
+    <target name="test-product" depends="compile,prepare-jvm">
         <install-dcevm kind="product"/>
-    </target>
-
-    <target name="test-fastdebug" depends="compile,install-fastdebug">
-        <mkdir dir="target/junit-reports"/>
-        <junit jvm="${basedir}/target/jre/bin/java"
-               fork="true"
-               forkmode="once"
-               dir="${basedir}/target">
-            <jvmarg value="-XXaltjvm=dcevm-compiler2-fastdebug"/>
-            <jvmarg value="-Xdebug" />
-            <jvmarg value="-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=4000" />
-            <classpath>
-                <path refid="libs"/>
-                <pathelement path="target/classes"/>
-                <pathelement path="target/test-classes"/>
-            </classpath>
-            <test name="at.ssw.hotswap.test.CompleteTestSuite" todir="${basedir}/target/junit-reports"/>
-            <formatter type="plain"/>
-            <formatter type="xml"/>
-        </junit>
+        <test-dcevm kind="product"/>
     </target>
 
     <target name="prepare-jvm" description="Prepare private installation of JVM with DCEVM installed.">
@@ -123,6 +105,32 @@
                          includes="libjvm.so,libjsig.so,jvm.dll,jsig.dll,libjvm.dylib,libjsig.dylib"/>
             </copy>
         </sequential>
+    </macrodef>
 
+    <macrodef name="test-dcevm">
+        <attribute name="compiler" default="compiler2"/>
+        <!-- product or fastdebug -->
+        <attribute name="kind"/>
+        <!-- Name of the JVM to use -->
+        <attribute name="jvmname" default="dcevm-@{compiler}-@{kind}"/>
+        <sequential>
+            <mkdir dir="target/junit-reports"/>
+            <junit jvm="${basedir}/target/jre/bin/java"
+                   fork="true"
+                   forkmode="once"
+                   dir="${basedir}/target">
+                <jvmarg value="-XXaltjvm=@{jvmname}"/>
+                <jvmarg value="-Xdebug"/>
+                <jvmarg value="-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=4000"/>
+                <classpath>
+                    <path refid="libs"/>
+                    <pathelement path="target/classes"/>
+                    <pathelement path="target/test-classes"/>
+                </classpath>
+                <test name="at.ssw.hotswap.test.CompleteTestSuite" todir="${basedir}/target/junit-reports"/>
+                <formatter type="plain"/>
+                <formatter type="xml"/>
+            </junit>
+        </sequential>
     </macrodef>
 </project>

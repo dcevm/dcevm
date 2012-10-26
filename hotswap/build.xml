@@ -80,11 +80,12 @@
     </target>
 
     <target name="download-libraries" description="Download 3rd-party libraries from remote repositories">
+        <mkdir dir="${basedir}/lib"/>
         <get src="http://repo1.maven.org/maven2/asm/asm-all/3.3.1/asm-all-3.3.1.jar"
-             dest="${basedir}/lib"
+             dest="${basedir}/lib/"
              skipexisting="true"/>
         <get src="http://repo1.maven.org/maven2/junit/junit/4.10/junit-4.10.jar"
-             dest="${basedir}/lib"
+             dest="${basedir}/lib/"
              skipexisting="true"/>
     </target>
 

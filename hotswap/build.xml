@@ -92,11 +92,11 @@
             <condition property="path" value="lib/@{jvmname}">
                 <os family="mac"/>
             </condition>
+            <condition property="path" value="bin/@{jvmname}">
+                <os family="windows"/>
+            </condition>
             <condition property="path" value="lib/${jvm.arch}/@{jvmname}">
-                <or>
-                    <os family="unix"/>
-                    <os family="windows"/>
-                </or>
+                <os family="unix"/>
             </condition>
 
             <echo message="Installing DCEVM runtime into JRE with JVM name @{jvmname}"/>

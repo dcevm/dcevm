@@ -46,7 +46,7 @@ public class AccessDeletedStaticFieldTest {
     // Version 0
     public static class A {
 
-        public static int x;
+        public static int x = 1;
 
         static int getFieldInOldCode() {
             
@@ -59,7 +59,7 @@ public class AccessDeletedStaticFieldTest {
         }
 
         static int getFieldEMCPMethod() {
-            HotSwapTool.toVersion(AccessDeletedStaticFieldTest.class, 2);
+            toVersionTwo();
             return A.x;
         }
     }
@@ -74,9 +74,17 @@ public class AccessDeletedStaticFieldTest {
 
         // EMCP to method in version 0
         static int getFieldEMCPMethod() {
-            HotSwapTool.toVersion(AccessDeletedStaticFieldTest.class, 2);
+            toVersionTwo();
             return A.x;
         }
+    }
+
+    private static void toVersionTwo() {
+        // For some reason, javac generates LDC_W even when index is < 256. ASM library rewrites LDC_W into LDC.
+        // If EMCP test is the only test invoked, version zero is not passed through ASM, therefore, methods
+        // A#getFieldEMCPMethod and A___2#getFieldEMCPMethod do not match.
+        // To workaround this, we call helper to do all the work.
+        HotSwapTool.toVersion(AccessDeletedStaticFieldTest.class, 2);
     }
 
     private static void newMethodFromOldCode() {

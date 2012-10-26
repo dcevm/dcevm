@@ -24,23 +24,23 @@
 
 package at.ssw.hotswap.test.fields;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.assertEquals;
 
 import org.junit.Before;
 import org.junit.Test;
-
-import at.ssw.hotswap.HotSwapTool;
 
 /**
  * @author Thomas Wuerthinger
  */
 public class ObjectStressTest {
 
-    private final int COUNT = 10000;
+    private final int COUNT = 100000;
 
     @Before
     public void setUp() throws Exception {
-        HotSwapTool.toVersion(ObjectStressTest.class, 0);
+        __toVersion__(0);
     }
 
     // Version 0
@@ -85,8 +85,7 @@ public class ObjectStressTest {
 
     @Test
     public void testLotsOfObjects() {
-
-        assert HotSwapTool.getCurrentVersion(ObjectStressTest.class) == 0;
+        assertEquals(0, __version__());
 
         A[] arr = new A[COUNT];
         for (int i = 0; i < arr.length; i++) {
@@ -104,15 +103,14 @@ public class ObjectStressTest {
             arr[i].i10 = 10;
         }
 
-
-        HotSwapTool.toVersion(ObjectStressTest.class, 1);
+        __toVersion__(1);
 
         for (int i = 0; i < arr.length; i++) {
             assertEquals(1 * 2 * 3 * 4 * 5 * 6 * 7 * 8 * 9 * 10, arr[i].sum());
             assertEquals(arr[i].thisPointer, arr[i]);
         }
 
-        HotSwapTool.toVersion(ObjectStressTest.class, 0);
+        __toVersion__(0);
 
         for (int i = 0; i < arr.length; i++) {
             assertEquals(1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10, arr[i].sum());

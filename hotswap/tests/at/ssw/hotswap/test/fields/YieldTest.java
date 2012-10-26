@@ -24,6 +24,8 @@
 
 package at.ssw.hotswap.test.fields;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
@@ -31,9 +33,8 @@ import org.junit.Before;
 import java.util.Arrays;
 import java.util.List;
 import java.util.ArrayList;
-import org.junit.Test;
 
-import at.ssw.hotswap.HotSwapTool;
+import org.junit.Test;
 
 /**
  * Test case that produces a list of integer values recursively.
@@ -44,22 +45,25 @@ import at.ssw.hotswap.HotSwapTool;
  */
 public class YieldTest {
 
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
+
     // Version 0
     public static class Base {
-
         protected List<Integer> arr = new ArrayList<Integer>();
 
         public void reset() {
-            HotSwapTool.toVersion(YieldTest.class, 0);
+            __toVersion__(0);
         }
 
         public void next() {
-            HotSwapTool.toVersion(YieldTest.class, HotSwapTool.getCurrentVersion(YieldTest.class) + 1);
+            __toVersion__(__version__() + 1);
         }
     }
 
     public static abstract class A extends Base {
-
         public List<Integer> gen() {
             arr.add(produce());
             next();
@@ -70,21 +74,18 @@ public class YieldTest {
     }
 
     public static class B extends A {
-
         public int produce() {
             return 1;
         }
     }
 
     public static class B___10 extends A {
-
         public int produce() {
             return 2;
         }
     }
 
     public static class B___20 extends A {
-
         private int x;
 
         public int produce() {
@@ -93,28 +94,22 @@ public class YieldTest {
     }
 
     public static class A___30 extends Base {
-
         public List<Integer> gen() {
             reset();
             return arr;
         }
     }
 
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(YieldTest.class, 0);
-    }
 
     @Test
     public void testYield() {
-
-        assert HotSwapTool.getCurrentVersion(YieldTest.class) == 0;
+        assertEquals(0, __version__());
 
         B b = new B();
         assertEquals(Arrays.asList(
                 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
                 1, 2, 3, 4, 5, 6, 7, 8, 9, 10), b.gen());
-        assert HotSwapTool.getCurrentVersion(YieldTest.class) == 0;
+        assertEquals(0, __version__());
     }
 }

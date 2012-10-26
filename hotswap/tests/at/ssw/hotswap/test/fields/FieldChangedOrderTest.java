@@ -24,12 +24,12 @@
 
 package at.ssw.hotswap.test.fields;
 
-import static org.junit.Assert.*;
-
+import at.ssw.hotswap.test.util.HotSwapTestHelper;
 import org.junit.Before;
 import org.junit.Test;
 
-import at.ssw.hotswap.HotSwapTool;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Test that changes the order of two int fields.
@@ -37,6 +37,11 @@ import at.ssw.hotswap.HotSwapTool;
  * @author Thomas Wuerthinger
  */
 public class FieldChangedOrderTest {
+
+    @Before
+    public void setUp() throws Exception {
+        HotSwapTestHelper.__toVersion__(0);
+    }
 
     // Version 0
     public static class A {
@@ -128,32 +133,38 @@ public class FieldChangedOrderTest {
         }
     }
 
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(FieldChangedOrderTest.class, 0);
-    }
-
     @Test
     public void testRenameField() {
-        assert HotSwapTool.getCurrentVersion(FieldChangedOrderTest.class) == 0;
+        assertEquals(0, __version__());
         A a = new A();
         assertObjectOK(a);
-        HotSwapTool.toVersion(FieldChangedOrderTest.class, 3);
+        HotSwapTestHelper.__toVersion__(3);
         assertEquals(0, a.getValue1());
         assertEquals(2, a.getValue2());
-        HotSwapTool.toVersion(FieldChangedOrderTest.class, 0);
+        HotSwapTestHelper.__toVersion__(0);
         assertEquals(0, a.getValue1());
         assertEquals(2, a.getValue2());
     }
 
     @Test
     public void testSimpleOrderChange() {
-        assert HotSwapTool.getCurrentVersion(FieldChangedOrderTest.class) == 0;
+        assertEquals(0, __version__());
         A a = new A();
         assertObjectOK(a);
-        HotSwapTool.toVersion(FieldChangedOrderTest.class, 1);
+        HotSwapTestHelper.__toVersion__(1);
         assertObjectOK(a);
-        HotSwapTool.toVersion(FieldChangedOrderTest.class, 0);
+        HotSwapTestHelper.__toVersion__(0);
+        assertObjectOK(a);
+    }
+
+    @Test
+    public void testSimpleOrderChangeWithNewTempFields() {
+        assertEquals(0, __version__());
+        A a = new A();
+        assertObjectOK(a);
+        HotSwapTestHelper.__toVersion__(2);
+        assertObjectOK(a);
+        HotSwapTestHelper.__toVersion__(0);
         assertObjectOK(a);
     }
 
@@ -168,16 +179,5 @@ public class FieldChangedOrderTest {
         assertEquals(2, B.getStaticValue2(a));
         assertEquals(1, a.value1);
         assertEquals(2, a.value2);
-    }
-
-    @Test
-    public void testSimpleOrderChangeWithNewTempFields() {
-        assert HotSwapTool.getCurrentVersion(FieldChangedOrderTest.class) == 0;
-        A a = new A();
-        assertObjectOK(a);
-        HotSwapTool.toVersion(FieldChangedOrderTest.class, 2);
-        assertObjectOK(a);
-        HotSwapTool.toVersion(FieldChangedOrderTest.class, 0);
-        assertObjectOK(a);
     }
 }

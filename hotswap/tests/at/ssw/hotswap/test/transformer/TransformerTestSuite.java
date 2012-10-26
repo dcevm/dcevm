@@ -35,10 +35,9 @@ import org.junit.runners.Suite;
  */
 @RunWith(Suite.class)
 @Suite.SuiteClasses({
-    SimpleTransformerTest.class,
+    TransformerTest.class,
     BaseClassTransformerTest.class,
-    StaticTransformerTest.class,
-    StaticConstructorTransformerTest.class
+    StaticTransformerTest.class
 })
 public class TransformerTestSuite {
 }

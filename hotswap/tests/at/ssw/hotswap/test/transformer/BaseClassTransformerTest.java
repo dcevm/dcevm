@@ -24,22 +24,12 @@
 
 package at.ssw.hotswap.test.transformer;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
 import org.junit.Test;
-
-import at.ssw.hotswap.HotSwapTool;
-
-class BaseClass {
-    public void $transformer() {
-        transformerExecuted();
-    }
-
-    public void transformerExecuted() {
-        
-    }
-}
 
 /**
  * Tests for executing the transformer of a base class.
@@ -48,53 +38,55 @@ class BaseClass {
  */
 public class BaseClassTransformerTest {
 
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
+
+    static class TransformerClass {
+        public void $transformer() {
+            transformerExecuted();
+        }
+
+        public void transformerExecuted() {
+            // Nothing.
+        }
+    }
+
+
     // Version 0
     public static class A {
-
         public int x = 2;
     }
 
     // Version 3
-    public static class A___1 extends BaseClass {
+    public static class A___1 extends TransformerClass {
 
         public int x;
 
         @Override
         public void transformerExecuted() {
-            System.out.println("Transformer of A executing...");
             x = x * 2;
         }
     }
 
-
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(BaseClassTransformerTest.class, 0);
-    }
-
     @Test
     public void testSimpleTransformer() {
-
-        assert HotSwapTool.getCurrentVersion(BaseClassTransformerTest.class) == 0;
+        assertEquals(0, __version__());
 
         A a = new A();
-
         assertEquals(2, a.x);
 
-        HotSwapTool.toVersion(BaseClassTransformerTest.class, 1);
-
+        __toVersion__(1);
         assertEquals(4, a.x);
 
-        HotSwapTool.toVersion(BaseClassTransformerTest.class, 0);
-
+        __toVersion__(0);
         assertEquals(4, a.x);
 
-        HotSwapTool.toVersion(BaseClassTransformerTest.class, 1);
-
+        __toVersion__(1);
         assertEquals(8, a.x);
 
-        HotSwapTool.toVersion(BaseClassTransformerTest.class, 0);
-
+        __toVersion__(0);
         assertEquals(8, a.x);
     }
 }

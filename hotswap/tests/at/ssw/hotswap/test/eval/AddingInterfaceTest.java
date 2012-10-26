@@ -25,8 +25,6 @@
 package at.ssw.hotswap.test.eval;
 
 import at.ssw.hotswap.HotSwapTool;
-import java.util.ArrayList;
-import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
 

@@ -66,37 +66,6 @@ public class HotSwapTool {
     }
 
     /**
-     * Utility method for dumping the current call stack. The parameter identifies the class version the caller method corresponds to.
-     *
-     * @param version the manually specified class version of the caller method
-     */
-    public static void dumpEnter(int version) {
-
-        System.out.print("Method enter version " + version + " of ");
-
-        StackTraceElement[] trace = Thread.currentThread().getStackTrace();
-        if (trace.length < 3) {
-            return;
-        }
-
-        boolean first = true;
-        for (int i = 2; i <= 3; i++) {
-            StackTraceElement elem = trace[i];
-            if (elem.getClassName().startsWith("at.ssw")) {
-                String className = elem.getClassName();
-                className = className.substring(className.lastIndexOf('.') + 1);
-                if (first) {
-                    first = false;
-                    System.out.print(className + "." + elem.getMethodName() + ": ");
-                } else {
-                    System.out.print(className + "." + elem.getMethodName() + "[" + elem.getLineNumber() + "] ");
-                }
-            }
-        }
-        System.out.println();
-    }
-
-    /**
      * Returns the current version of the inner classes of a specified outer class.
      *
      * @param baseClass the outer class whose version is queried
@@ -106,7 +75,7 @@ public class HotSwapTool {
         if (!currentVersion.containsKey(baseClass)) {
             currentVersion.put(baseClass, 0);
         }
-        return currentVersion.get(baseClass).intValue();
+        return currentVersion.get(baseClass);
     }
 
     /**
@@ -156,7 +125,6 @@ public class HotSwapTool {
             }
         }
 
-        final Set<String> redefinedClasses = new HashSet<String>();
         Map<ReferenceType, byte[]> map = new HashMap<ReferenceType, byte[]>();
 
         for (File f : files) {
@@ -168,8 +136,7 @@ public class HotSwapTool {
                 TestCaseClassAdapter adapter = new TestCaseClassAdapter(writer, new TypeNameAdapter() {
 
                     public String adapt(String typeName) {
-                        String newClass = getReplacementClassName(typeName, replacements);
-                        return newClass;
+                        return getReplacementClassName(typeName, replacements);
                     }
                 });
 
@@ -187,7 +154,6 @@ public class HotSwapTool {
                 // This could be used to make redefinition of not-yet-loaded classes possible.
                 // Problem: Which class loaded to choose from? Currently a ReferenceType object is a combination of classname/classloader.
                 map.put(t, bytes);
-                redefinedClasses.add(t.name());
             } catch (FileNotFoundException e) {
                 throw new HotSwapException(
                         "Could not find specified class file", e);
@@ -221,7 +187,7 @@ public class HotSwapTool {
                 StackFrame frame = frames.get(i);
 
                 // Access the parts of the stack frame one-by-one.
-                Field f = null;
+                Field f;
                 try {
                     f = frame.getClass().getDeclaredField("location");
                 } catch (NoSuchFieldException ex) {
@@ -230,7 +196,7 @@ public class HotSwapTool {
                     throw new HotSwapException(ex);
                 }
                 f.setAccessible(true);
-                Location l = null;
+                Location l;
                 try {
                     l = (Location) f.get(frame);
                 } catch (IllegalArgumentException ex) {
@@ -279,7 +245,7 @@ public class HotSwapTool {
         assert versionNumber >= 0;
 
         if (TRACE_LEVEL >= 2) {
-            System.out.println("Entering toVersion");
+            System.out.println("Entering $$toVersion");
         }
 
         // Touch stack frames to make sure everything is OK.
@@ -312,7 +278,7 @@ public class HotSwapTool {
         }
         Map<String, String> replacements = new HashMap<String, String>();
 
-        for (Class c : classes) {
+        for (Class<?> c : classes) {
             Annotation a = c.getAnnotation(ClassRedefinitionPolicy.class);
             if (a != null && a instanceof ClassRedefinitionPolicy) {
                 Class rep = ((ClassRedefinitionPolicy) a).alias();
@@ -376,6 +342,9 @@ public class HotSwapTool {
 
         String packageName = baseClass.getPackage().getName().replace('.', '/');
         URL url = baseClass.getClassLoader().getResource(packageName);
+        if (url == null) {
+            throw new IllegalStateException("Cannot find URL corresponding to the package '" + packageName + "'");
+        }
         File folder = new File(url.getFile());
         for (File f : folder.listFiles(IsClassFile.INSTANCE)) {
             String fileName = f.getName();
@@ -400,9 +369,6 @@ public class HotSwapTool {
 
     /**
      * Parse version of the class from the class name. Classes are named in the form of [Name]___[Version]
-     *
-     * @param name
-     * @return
      */
     private static int parseClassVersion(String name) {
         if (!name.endsWith(CLASS_FILE_SUFFIX)) {

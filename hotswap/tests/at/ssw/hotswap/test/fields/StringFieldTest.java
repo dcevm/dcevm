@@ -24,19 +24,23 @@
 
 package at.ssw.hotswap.test.fields;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
 import org.junit.Test;
 
-import at.ssw.hotswap.HotSwapTool;
-
 /**
- * Complex field test.
+ * String field test.
  *
  * @author Thomas Wuerthinger
  */
 public class StringFieldTest {
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
 
     // Version 0
     public static class A {
@@ -51,11 +55,6 @@ public class StringFieldTest {
         public String stringComplNewFld = "completely new String field";
     }
     
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(StringFieldTest.class, 0);
-    }
-
     /**
      * Checks that the given object is unmodified (i.e. the values of the fields are correct)
      * @param a the object to be checked
@@ -66,12 +65,13 @@ public class StringFieldTest {
 
     @Test
     public void testComplexFieldChange() {
-        assert HotSwapTool.getCurrentVersion(StringFieldTest.class) == 0;
+        assertEquals(0, __version__());
+
         A a = new A();
         assertObjectOK(a);
-        HotSwapTool.toVersion(StringFieldTest.class, 1);
+        __toVersion__(1);
         assertObjectOK(a);
-        HotSwapTool.toVersion(StringFieldTest.class, 0);
+        __toVersion__(0);
         assertObjectOK(a);
     }
 }

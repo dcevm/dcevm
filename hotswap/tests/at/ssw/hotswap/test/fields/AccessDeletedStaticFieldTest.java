@@ -23,13 +23,13 @@
  */
 package at.ssw.hotswap.test.fields;
 
-import static org.junit.Assert.assertEquals;
-
+import at.ssw.hotswap.test.util.HotSwapTestHelper;
 import org.junit.Before;
 import org.junit.Test;
 
-import at.ssw.hotswap.HotSwapTool;
-import at.ssw.hotswap.test.TestUtil;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 
 /**
  * Tests for accessing a deleted static field.
@@ -40,27 +40,20 @@ public class AccessDeletedStaticFieldTest {
 
     @Before
     public void setUp() throws Exception {
-        HotSwapTool.toVersion(AccessDeletedStaticFieldTest.class, 0);
+        HotSwapTestHelper.__toVersion__(0);
     }
 
     // Version 0
     public static class A {
-
-        public static int x = 1;
+        public static int x = -1;
 
         static int getFieldInOldCode() {
-            
-            HotSwapTool.toVersion(AccessDeletedStaticFieldTest.class, 1);
+            HotSwapTestHelper.__toVersion__(1);
 
             newMethodFromOldCode();
 
             // This field does no longer exist
             return x;
-        }
-
-        static int getFieldEMCPMethod() {
-            toVersionTwo();
-            return A.x;
         }
     }
 
@@ -68,64 +61,64 @@ public class AccessDeletedStaticFieldTest {
     public static class A___1 {
     }
 
-    // Version 2
+    // Version 0
+    public static class B {
+        public static int x;
 
-    public static class A___2 {
-
-        // EMCP to method in version 0
         static int getFieldEMCPMethod() {
-            toVersionTwo();
-            return A.x;
+            HotSwapTestHelper.__toVersion__(1);
+            return B.x;
         }
     }
 
-    private static void toVersionTwo() {
-        // For some reason, javac generates LDC_W even when index is < 256. ASM library rewrites LDC_W into LDC.
-        // If EMCP test is the only test invoked, version zero is not passed through ASM, therefore, methods
-        // A#getFieldEMCPMethod and A___2#getFieldEMCPMethod do not match.
-        // To workaround this, we call helper to do all the work.
-        HotSwapTool.toVersion(AccessDeletedStaticFieldTest.class, 2);
+    // Version 1
+    public static class B___1 {
+        // EMCP to method in version 0
+        static int getFieldEMCPMethod() {
+            HotSwapTestHelper.__toVersion__(1);
+            return B.x;
+        }
     }
 
     private static void newMethodFromOldCode() {
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
-            @Override
-            public void run() {
-                System.out.println(A.x);
-            }
-        });
+        try {
+            A.x += 1;
+            fail("NoSuchFieldError expected!");
+        } catch(NoSuchFieldError e) {
+            // Expected.
+        }
     }
 
     @Test
     public void testAccessDeletedStaticField() {
-
-        assert HotSwapTool.getCurrentVersion(AccessDeletedStaticFieldTest.class) == 0;
+        assertEquals(0, __version__());
 
         A.x = 1;
         assertEquals(1, A.getFieldInOldCode());
 
-        assert HotSwapTool.getCurrentVersion(AccessDeletedStaticFieldTest.class) == 1;
-        HotSwapTool.toVersion(AccessDeletedStaticFieldTest.class, 0);
+        assertEquals(1, __version__());
+        HotSwapTestHelper.__toVersion__(0);
         assertEquals(0, A.x);
         
-        assert HotSwapTool.getCurrentVersion(AccessDeletedStaticFieldTest.class) == 0;
+        assertEquals(0, __version__());
     }
 
 
     @Test
     public void testAccessDeletedStaticFieldFromEMCPMethod() {
+        assertEquals(0, __version__());
 
-        assert HotSwapTool.getCurrentVersion(AccessDeletedStaticFieldTest.class) == 0;
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
-            @Override
-            public void run() {
-                System.out.println(A.getFieldEMCPMethod());
-            }
-        });
-        
-        HotSwapTool.toVersion(AccessDeletedStaticFieldTest.class, 0);
-        assertEquals(0, A.x);
+        B.x = 1;
 
-        assert HotSwapTool.getCurrentVersion(AccessDeletedStaticFieldTest.class) == 0;
+        try {
+            System.out.println(B.getFieldEMCPMethod());
+            fail("NoSuchFieldError expected!");
+        } catch(NoSuchFieldError e) {
+            // Expected.
+        }
+
+        HotSwapTestHelper.__toVersion__(0);
+        assertEquals(0, B.x); // Not initialized, so value is 0
+        assertEquals(0, __version__());
     }
 }

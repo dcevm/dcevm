@@ -25,11 +25,12 @@ package at.ssw.hotswap.test.fields;
 
 import static org.junit.Assert.assertEquals;
 
+import at.ssw.hotswap.test.util.HotSwapTestHelper;
 import org.junit.Before;
 import org.junit.Test;
 
-import at.ssw.hotswap.HotSwapTool;
-import at.ssw.hotswap.test.TestUtil;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
+import static org.junit.Assert.fail;
 
 /**
  * Tests for accessing a deleted field. In the first scenario, the field is deleted from the class.
@@ -41,17 +42,15 @@ public class AccessDeletedFieldTest {
 
     @Before
     public void setUp() throws Exception {
-        HotSwapTool.toVersion(AccessDeletedFieldTest.class, 0);
+        HotSwapTestHelper.__toVersion__(0);
     }
 
     // Version 0
     public static class A {
-
         public int x;
 
         int getFieldInOldCode() {
-            
-            HotSwapTool.toVersion(AccessDeletedFieldTest.class, 1);
+            HotSwapTestHelper.__toVersion__(1);
 
             // This field does no longer exist
             return x;
@@ -69,125 +68,104 @@ public class AccessDeletedFieldTest {
     public static class B___2 {
     }
 
-    // Method to enforce cast (otherwise bytecodes become invalid in version 2)
-    public static A convertBtoA(Object b) {
-        return (A) b;
-    }
-
     @Test
     public void testOldCodeAccessesDeletedField() {
+        assertEquals(0, __version__());
 
-        assert HotSwapTool.getCurrentVersion(AccessDeletedFieldTest.class) == 0;
-
-        final A a = new A();
+        A a = new A();
         a.x = 1;
 
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
-            @Override
-            public void run() {
-                assertEquals(0, a.getFieldInOldCode());
-            }
-        });
+        try {
+            a.getFieldInOldCode();
+            fail("NoSuchFieldError expected!");
+        } catch (NoSuchFieldError e) {
+            // Expected.
+        }
 
-        assert HotSwapTool.getCurrentVersion(AccessDeletedFieldTest.class) == 1;
-        HotSwapTool.toVersion(AccessDeletedFieldTest.class, 0);
+        assertEquals(1, __version__());
+        HotSwapTestHelper.__toVersion__(0);
         assertEquals(0, a.x);
     }
 
     @Test
     public void testAccessDeletedField() {
+        assertEquals(0, __version__());
 
-        assert HotSwapTool.getCurrentVersion(AccessDeletedFieldTest.class) == 0;
-
-        final A a = new A();
+        A a = new A();
         a.x = 1;
 
-        assertEquals(1, a.x);
+        HotSwapTestHelper.__toVersion__(1);
 
-        HotSwapTool.toVersion(AccessDeletedFieldTest.class, 1);
+        try {
+            System.out.println(a.x);
+            fail("NoSuchFieldError expected!");
+        } catch (NoSuchFieldError e) {
+            // Expected.
+        }
 
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
-            @Override
-            public void run() {
-                System.out.println(a.x);
-            }
-        });
-
-        HotSwapTool.toVersion(AccessDeletedFieldTest.class, 0);
+        HotSwapTestHelper.__toVersion__(0);
         assertEquals(0, a.x);
     }
 
     @Test
     public void testAccessDeleteBaseClassFieldNormal() {
+        assertEquals(0, __version__());
 
-        HotSwapTool.toVersion(AccessDeletedFieldTest.class, 0);
-        assert HotSwapTool.getCurrentVersion(AccessDeletedFieldTest.class) == 0;
-        final B b = new B();
-        b.x = 1;
-        final A a = new A();
+        A a = new A();
+        B b = new B();
         a.x = 2;
+        b.x = 1;
 
-        assertEquals(1, b.x);
-        assertEquals(2, a.x);
+        HotSwapTestHelper.__toVersion__(2);
 
-        HotSwapTool.toVersion(AccessDeletedFieldTest.class, 2);
-
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
-
-            @Override
-            public void run() {
-                System.out.println(b.x);
-            }
-        });
+        try {
+            System.out.println(b.x);
+            fail("NoSuchFieldError expected!");
+        } catch (NoSuchFieldError e) {
+            // Expected.
+        }
 
         assertEquals(2, a.x);
 
-        HotSwapTool.toVersion(AccessDeletedFieldTest.class, 0);
+        HotSwapTestHelper.__toVersion__(0);
         assertEquals(0, b.x);
     }
 
     @Test
     public void testAccessDeleteBaseClassFieldInvalid() {
+        assertEquals(0, __version__());
 
-        HotSwapTool.toVersion(AccessDeletedFieldTest.class, 0);
-        assert HotSwapTool.getCurrentVersion(AccessDeletedFieldTest.class) == 0;
-        final B b = new B();
-        final A a1 = new A();
-        a1.x = 1;
+        A a = new A();
+        B b = new B();
+        a.x = 1;
         b.x = 1;
 
-        HotSwapTool.toVersion(AccessDeletedFieldTest.class, 2);
+        HotSwapTestHelper.__toVersion__(2);
 
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
+        try {
+            System.out.println(b.x);
+            fail("NoSuchFieldError expected!");
+        } catch (NoSuchFieldError e) {
+            // Expected.
+        }
 
-            @Override
-            public void run() {
-                System.out.println(b.x);
-            }
-        });
+        assertEquals(1, a.x);
 
-        assertEquals(1, a1.x);
-
-        HotSwapTool.toVersion(AccessDeletedFieldTest.class, 0);
+        HotSwapTestHelper.__toVersion__(0);
         assertEquals(0, b.x);
-        assertEquals(1, a1.x);
+        assertEquals(1, a.x);
 
-        A a = convertBtoA(b);
+        A a2 = b;
+        try {
 
-        assertEquals(0, b.x);
+            HotSwapTestHelper.__toVersion__(2);
+            fail("Must fail, because now an instance of B is in a local variable of type A!");
+        } catch (UnsupportedOperationException e) {
 
-        // Must fail, because now an instance of B is in a local variable of type A!
-        TestUtil.assertException(UnsupportedOperationException.class, new Runnable() {
-
-            @Override
-            public void run() {
-                HotSwapTool.toVersion(AccessDeletedFieldTest.class, 2);
-            }
-        });
-
-        assertEquals(0, a.x);
+        }
+        assertEquals(0, a2.x);
 
         // Still at version 0
-        assert HotSwapTool.getCurrentVersion(AccessDeletedFieldTest.class) == 0;
+        assertEquals(0, __version__());
     }
 }

@@ -25,7 +25,6 @@
 package at.ssw.hotswap.test.methods;
 
 import static org.junit.Assert.assertEquals;
-import junit.framework.Assert;
 
 import org.junit.Before;
 import org.junit.Test;

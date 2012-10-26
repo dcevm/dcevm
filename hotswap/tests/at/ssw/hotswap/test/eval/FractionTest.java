@@ -24,7 +24,6 @@
 
 package at.ssw.hotswap.test.eval;
 
-import java.lang.Runnable;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.Before;

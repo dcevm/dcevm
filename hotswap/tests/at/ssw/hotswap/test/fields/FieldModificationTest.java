@@ -24,17 +24,22 @@
 
 package at.ssw.hotswap.test.fields;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
 import org.junit.Test;
 
-import at.ssw.hotswap.HotSwapTool;
-
 /**
  * @author Thomas Wuerthinger
  */
 public class FieldModificationTest {
+
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
 
     // Version 0
     public static class A {
@@ -135,28 +140,9 @@ public class FieldModificationTest {
         public int val4;
     }
 
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(FieldModificationTest.class, 0);
-    }
-
-    @Test
-    public void testReorder() {
-
-        A a = new A();
-
-        a.val0 = 0;
-        a.val1 = 1;
-        a.val2 = 2;
-        a.val3 = 3;
-        a.val4 = 4;
-        a.val5 = 5;
-        a.val6 = 6;
-        a.val7 = 7;
-    }
-
     @Test
     public void testIncreaseFirst() {
+        assertEquals(0, __version__());
 
         A a = new A();
 
@@ -179,7 +165,7 @@ public class FieldModificationTest {
         assertEquals(7, a.val7);
         assertEquals(0 + 1 + 2 + 3 + 4 + 5 + 6 + 7, a.sum());
 
-        HotSwapTool.toVersion(FieldModificationTest.class, 2);
+        __toVersion__(2);
 
         assertEquals(0, a.val0);
         assertEquals(1, a.val1);
@@ -194,7 +180,7 @@ public class FieldModificationTest {
         a.increaseAllByOne();
         assertEquals(0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 16, a.sum());
 
-        HotSwapTool.toVersion(FieldModificationTest.class, 0);
+        __toVersion__(0);
 
         assertEquals(0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8, a.sum());
         assertEquals(1, a.val0);
@@ -206,7 +192,7 @@ public class FieldModificationTest {
         assertEquals(7, a.val6);
         assertEquals(8, a.val7);
 
-        HotSwapTool.toVersion(FieldModificationTest.class, 2);
+        __toVersion__(2);
 
         assertEquals(0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8, a.sum());
         assertEquals(1, a.val0);
@@ -229,7 +215,7 @@ public class FieldModificationTest {
         assertEquals(7, a.val5);
         assertEquals(8, a.val6);
         assertEquals(9, a.val7);
-        HotSwapTool.toVersion(FieldModificationTest.class, 0);
+        __toVersion__(0);
 
         assertEquals(0 + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 16, a.sum());
         assertEquals(2, a.val0);
@@ -244,19 +230,18 @@ public class FieldModificationTest {
 
     @Test
     public void testAddRemoveField() {
-
-        assert HotSwapTool.getCurrentVersion(FieldModificationTest.class) == 0;
+        assertEquals(0, __version__());
 
         A a = new A();
 
         assertEquals(0, a.val0);
         assertEquals(0, a.val1);
 
-        HotSwapTool.toVersion(FieldModificationTest.class, 1);
+        __toVersion__(1);
 
         a.val0 = 1234;
 
-        HotSwapTool.toVersion(FieldModificationTest.class, 0);
+        __toVersion__(0);
 
         assertEquals(1234, a.val0);
         assertEquals(0, a.val1);
@@ -266,11 +251,11 @@ public class FieldModificationTest {
         assertEquals(1234, a.val0);
         assertEquals(1234, a.val1);
 
-        HotSwapTool.toVersion(FieldModificationTest.class, 1);
+        __toVersion__(1);
 
         assertEquals(1234, a.val0);
 
-        HotSwapTool.toVersion(FieldModificationTest.class, 0);
+        __toVersion__(0);
 
         assertEquals(1234, a.val0);
         assertEquals(0, a.val1);

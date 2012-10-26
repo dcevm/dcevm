@@ -24,12 +24,12 @@
 
 package at.ssw.hotswap.test.fields;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
 import org.junit.Test;
-
-import at.ssw.hotswap.HotSwapTool;
 
 /**
  * Tests redefinition of a class such that old code still accesses a redefined private field.
@@ -37,6 +37,11 @@ import at.ssw.hotswap.HotSwapTool;
  * @author Thomas Wuerthinger
  */
 public class RedefinePrivateFieldTest {
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
+
 
     // Version 0
     public static class A {
@@ -49,7 +54,7 @@ public class RedefinePrivateFieldTest {
 
         public int foo() {
             int result = f1;
-            HotSwapTool.toVersion(RedefinePrivateFieldTest.class, 1);
+            __toVersion__(1);
             result += f1;
             return result;
         }
@@ -66,32 +71,21 @@ public class RedefinePrivateFieldTest {
         }
     }
 
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(RedefinePrivateFieldTest.class, 0);
-    }
-
     @Test
     public void testRedefinePrivateField() {
-
-        assert HotSwapTool.getCurrentVersion(RedefinePrivateFieldTest.class) == 0;
+        assertEquals(0, __version__());
 
         A a = new A();
 
         assertEquals(10, a.foo());
-
-        assert HotSwapTool.getCurrentVersion(RedefinePrivateFieldTest.class) == 1;
-
+        assertEquals(1, __version__());
         assertEquals(-1, a.foo());
 
-        HotSwapTool.toVersion(RedefinePrivateFieldTest.class, 0);
-
+        __toVersion__(0);
         assertEquals(10, a.foo());
-
-        assert HotSwapTool.getCurrentVersion(RedefinePrivateFieldTest.class) == 1;
+        assertEquals(1, __version__());
 
         assertEquals(-1, a.foo());
-
-        HotSwapTool.toVersion(RedefinePrivateFieldTest.class, 0);
+        __toVersion__(0);
     }
 }

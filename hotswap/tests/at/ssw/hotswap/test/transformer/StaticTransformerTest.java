@@ -24,6 +24,8 @@
 
 package at.ssw.hotswap.test.transformer;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
@@ -38,50 +40,55 @@ import at.ssw.hotswap.HotSwapTool;
  */
 public class StaticTransformerTest {
 
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
+
     // Version 0
     public static class A {
-
         public static int x = 2;
+
+        public static int getY() {
+            return -1;
+        }
     }
 
     // Version 3
     public static class A___1 {
-
         public static int x;
+        public static int y;
 
         public static void $staticTransformer() {
-            System.out.println("Static transformer of A executing...");
             x = x * 2;
+            y = 10;
         }
-    }
 
-
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(StaticTransformerTest.class, 0);
+        public static int getY() {
+            return y;
+        }
     }
 
     @Test
     public void testStaticTransformer() {
-
-        assert HotSwapTool.getCurrentVersion(StaticTransformerTest.class) == 0;
-
+        assertEquals(0, __version__());
         assertEquals(2, A.x);
+        assertEquals(-1, A.getY());
 
-        HotSwapTool.toVersion(StaticTransformerTest.class, 1);
-
+        __toVersion__(1);
         assertEquals(4, A.x);
+        assertEquals(10, A.getY());
 
-        HotSwapTool.toVersion(StaticTransformerTest.class, 0);
-
+        __toVersion__(0);
         assertEquals(4, A.x);
+        assertEquals(-1, A.getY());
 
-        HotSwapTool.toVersion(StaticTransformerTest.class, 1);
-
+        __toVersion__(1);
         assertEquals(8, A.x);
+        assertEquals(10, A.getY());
 
-        HotSwapTool.toVersion(StaticTransformerTest.class, 0);
-
+        __toVersion__(0);
         assertEquals(8, A.x);
+        assertEquals(-1, A.getY());
     }
 }

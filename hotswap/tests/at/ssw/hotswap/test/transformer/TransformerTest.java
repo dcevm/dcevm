@@ -24,6 +24,8 @@
 
 package at.ssw.hotswap.test.transformer;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
@@ -36,54 +38,59 @@ import at.ssw.hotswap.HotSwapTool;
  *
  * @author Thomas Wuerthinger
  */
-public class SimpleTransformerTest {
+public class TransformerTest {
+
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
 
     // Version 0
     public static class A {
-
         public int x = 2;
+
+        public int getY() {
+            return -1;
+        }
     }
 
     // Version 3
     public static class A___1 {
-
         public int x;
+        public int y;
 
         public void $transformer() {
-            System.out.println("Transformer of A executing...");
             x = x * 2;
+            y = 10;
         }
-    }
 
-
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(SimpleTransformerTest.class, 0);
+        public int getY() {
+            return y;
+        }
     }
 
     @Test
     public void testSimpleTransformer() {
-
-        assert HotSwapTool.getCurrentVersion(SimpleTransformerTest.class) == 0;
+        assertEquals(0, __version__());
 
         A a = new A();
-
         assertEquals(2, a.x);
+        assertEquals(-1, a.getY());
 
-        HotSwapTool.toVersion(SimpleTransformerTest.class, 1);
-
+        __toVersion__(1);
         assertEquals(4, a.x);
+        assertEquals(10, a.getY());
 
-        HotSwapTool.toVersion(SimpleTransformerTest.class, 0);
-
+        __toVersion__(0);
         assertEquals(4, a.x);
+        assertEquals(-1, a.getY());
 
-        HotSwapTool.toVersion(SimpleTransformerTest.class, 1);
-
+        __toVersion__(1);
         assertEquals(8, a.x);
+        assertEquals(10, a.getY());
 
-        HotSwapTool.toVersion(SimpleTransformerTest.class, 0);
-
+        __toVersion__(0);
         assertEquals(8, a.x);
+        assertEquals(-1, a.getY());
     }
 }

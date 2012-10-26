@@ -26,10 +26,11 @@ package at.ssw.hotswap.test.fields;
 
 import static org.junit.Assert.*;
 
+import at.ssw.hotswap.test.util.HotSwapTestHelper;
 import org.junit.Before;
 import org.junit.Test;
 
-import at.ssw.hotswap.HotSwapTool;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 
 /**
  * Complex field test.
@@ -37,6 +38,10 @@ import at.ssw.hotswap.HotSwapTool;
  * @author Thomas Wuerthinger
  */
 public class ComplexFieldTest {
+    @Before
+    public void setUp() throws Exception {
+        HotSwapTestHelper.__toVersion__(0);
+    }
 
     // Version 0
     public static class A {
@@ -68,11 +73,6 @@ public class ComplexFieldTest {
         public long longComplNewFld = 444L;
         public String stringComplNewFld = "completely new String field";
     }
-    
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(ComplexFieldTest.class, 0);
-    }
 
     /**
      * Checks that the given object is unmodified (i.e. the values of the fields are correct)
@@ -92,12 +92,13 @@ public class ComplexFieldTest {
 
     @Test
     public void testComplexFieldChange() {
-        assert HotSwapTool.getCurrentVersion(ComplexFieldTest.class) == 0;
+        assertEquals(0, __version__());
+
         A a = new A();
         assertObjectOK(a);
-        HotSwapTool.toVersion(ComplexFieldTest.class, 1);
+        HotSwapTestHelper.__toVersion__(1);
         assertObjectOK(a);
-        HotSwapTool.toVersion(ComplexFieldTest.class, 0);
+        HotSwapTestHelper.__toVersion__(0);
         assertObjectOK(a);
     }
 }

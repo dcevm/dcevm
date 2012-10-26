@@ -71,6 +71,7 @@
             </classpath>
             <test name="at.ssw.hotswap.test.CompleteTestSuite" todir="${basedir}/target/junit-reports"/>
             <formatter type="plain"/>
+            <formatter type="xml"/>
         </junit>
     </target>
 

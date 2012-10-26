@@ -19,7 +19,7 @@
     <path id="libs">
         <pathelement path="lib/asm-all-3.3.1.jar"/>
         <pathelement path="lib/junit-4.10.jar"/>
-        <pathelement path="${env.JRE}/../lib/tools.jar"/>
+        <pathelement path="${java.home}/../lib/tools.jar"/>
     </path>
 
     <target name="clean">

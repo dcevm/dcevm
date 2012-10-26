@@ -8,6 +8,9 @@
     <condition property="dcevm.os" value="windows">
         <os family="windows"/>
     </condition>
+    <condition property="dcevm.os" value="bsd">
+        <os family="mac"/>
+    </condition>
     <condition property="dcevm.os" value="linux">
         <os family="unix"/>
     </condition>
@@ -103,6 +106,9 @@
             <condition property="jvm.arch" value="amd64">
                 <equals arg1="${env.ARCH}" arg2="amd64"/>
             </condition>
+            <condition property="path" value="lib/@{jvmname}">
+                <os family="mac"/>
+            </condition>
             <condition property="path" value="lib/${jvm.arch}/@{jvmname}">
                 <or>
                     <os family="unix"/>
@@ -113,7 +119,7 @@
             <echo message="Installing DCEVM runtime into JRE with JVM name @{jvmname}"/>
             <copy todir="target/jre/${path}">
                 <fileset dir="../build/${dcevm.os}/${dcevm.os}_${env.ARCH}_@{compiler}/@{kind}"
-                         includes="libjvm.so,libjsig.so,jvm.dll,jsig.dll"/>
+                         includes="libjvm.so,libjsig.so,jvm.dll,jsig.dll,libjvm.dylib,libjsig.dylib"/>
             </copy>
         </sequential>
 

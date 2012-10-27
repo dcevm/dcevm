@@ -36,5 +36,5 @@ public @interface ClassRedefinitionPolicy {
     public final static class NoClass {
     }
 
-    Class alias() default NoClass.class;
+    Class<?> alias() default NoClass.class;
 }

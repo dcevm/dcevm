@@ -279,9 +279,9 @@ public class HotSwapTool {
         Map<String, String> replacements = new HashMap<String, String>();
 
         for (Class<?> c : classes) {
-            Annotation a = c.getAnnotation(ClassRedefinitionPolicy.class);
-            if (a != null && a instanceof ClassRedefinitionPolicy) {
-                Class rep = ((ClassRedefinitionPolicy) a).alias();
+            ClassRedefinitionPolicy a = c.getAnnotation(ClassRedefinitionPolicy.class);
+            if (a != null) {
+                Class<?> rep = a.alias();
 
                 if (rep != ClassRedefinitionPolicy.NoClass.class) {
                     String oldClassName = c.getName();

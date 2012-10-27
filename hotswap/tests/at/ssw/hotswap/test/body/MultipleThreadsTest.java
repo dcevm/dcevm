@@ -24,13 +24,18 @@
 
 package at.ssw.hotswap.test.body;
 
-import static org.junit.Assert.*;
-
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
-import at.ssw.hotswap.HotSwapTool;
-import at.ssw.hotswap.test.methods.OverrideMethodTest;
+import java.util.Arrays;
+import java.util.List;
+
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
+import static org.junit.Assert.*;
 
 /**
  * Class for testing redefining methods of classes that extend the Thread class. In the test setup the run method
@@ -38,9 +43,23 @@ import at.ssw.hotswap.test.methods.OverrideMethodTest;
  *
  * @author Thomas Wuerthinger
  */
+@RunWith(Parameterized.class)
 public class MultipleThreadsTest {
 
-    public static final int COUNT = 10;
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
+
+    @Parameters
+    public static List<Object[]> parameters() {
+        return Arrays.asList(new Object[][]{{1}, {50}});
+    }
+
+    private int count;
+    public MultipleThreadsTest(int count) {
+        this.count = count;
+    }
 
     // Version 0
     public static class A extends Thread {
@@ -58,7 +77,7 @@ public class MultipleThreadsTest {
 
         public boolean doit() {
             if (flag) {
-                throw new RuntimeException("Must not reach here");
+                throw new IllegalStateException("Must not reach here");
             }
             flag = true;
             try {
@@ -143,24 +162,9 @@ public class MultipleThreadsTest {
         }
     }
 
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(MultipleThreadsTest.class, 0);
-    }
-
     @Test
-    public void testOneThread() {
-        test(1);
-    }
-
-    @Test
-    public void testThreads() {
-        test(COUNT);
-    }
-
-    private void test(int count) {
-
-        assert HotSwapTool.getCurrentVersion(MultipleThreadsTest.class) == 0;
+    public void testThreads() throws Exception {
+        assertEquals(0, __version__());
 
         A[] arr = new A[count];
         for (int i = 0; i < count; i++) {
@@ -168,40 +172,23 @@ public class MultipleThreadsTest {
             arr[i].start();
         }
 
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException e) {
-        }
-
+        __toVersion__(0);
+        Thread.sleep(500);
         for (int i = 0; i < count; i++) {
-            //assertTrue(arr[i].getValue() > 0);
+            assertTrue(arr[i].getValue() > 0);
+            assertEquals(0, arr[i].getValue2());
         }
 
-        HotSwapTool.toVersion(MultipleThreadsTest.class, 1);
-
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException e) {
-        }
-
+        __toVersion__(1);
+        Thread.sleep(500);
         for (int i = 0; i < count; i++) {
             assertTrue(arr[i].getValue2() > 0);
         }
 
-        HotSwapTool.toVersion(MultipleThreadsTest.class, 2);
-
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException e) {
-        }
-
-
+        __toVersion__(2);
+        Thread.sleep(500);
         for (int i = 0; i < count; i++) {
             assertFalse(arr[i].isAlive());
         }
-
-        HotSwapTool.toVersion(OverrideMethodTest.class, 0);
-
-
     }
 }

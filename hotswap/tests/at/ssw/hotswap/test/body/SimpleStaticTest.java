@@ -24,6 +24,8 @@
 
 package at.ssw.hotswap.test.body;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
@@ -39,11 +41,11 @@ public class SimpleStaticTest {
 
     @Before
     public void setUp() throws Exception {
-        HotSwapTool.toVersion(SimpleStaticTest.class, 0);
-        
+        __toVersion__(0);
+
         // E and Helper must be loaded and initialized
-        E e = new E();
-        Helper h = new Helper();
+        new E();
+        new Helper();
     }
 
     // Version 0
@@ -82,42 +84,41 @@ public class SimpleStaticTest {
 
     @Test
     public void testSimpleNewStaticField() {
+        assertEquals(0, __version__());
 
-        assert HotSwapTool.getCurrentVersion(SimpleStaticTest.class) == 0;
 
-        HotSwapTool.toVersion(SimpleStaticTest.class, 1);
+        __toVersion__(1);
 
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable(){
-            @Override
-            public void run() {
-                Helper.getIntegerField();
-            }
-        });
+        try {
+            Helper.getIntegerField();
+            fail("NoSuchFieldError expected!");
+        } catch(NoSuchFieldError e) {
+            // Expected
+        }
 
-        HotSwapTool.toVersion(SimpleStaticTest.class, 2);
+        __toVersion__(2);
+        assertEquals(0, Helper.getIntegerField());
+        assertEquals(7, Helper.getFinalIntegerField());
+        Helper.setIntegerField(1000);
+        assertEquals(1000, Helper.getIntegerField());
+
+        __toVersion__(1);
+
+        try {
+            Helper.getIntegerField();
+            fail("NoSuchFieldError expected!");
+        } catch(NoSuchFieldError e) {
+            // Expected
+        }
+
+        __toVersion__(2);
 
         assertEquals(0, Helper.getIntegerField());
         assertEquals(7, Helper.getFinalIntegerField());
         Helper.setIntegerField(1000);
         assertEquals(1000, Helper.getIntegerField());
 
-        HotSwapTool.toVersion(SimpleStaticTest.class, 1);
-
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable(){
-            @Override
-            public void run() {
-                Helper.getIntegerField();
-            }
-        });
-
-        HotSwapTool.toVersion(SimpleStaticTest.class, 2);
-
-        assertEquals(0, Helper.getIntegerField());
-        assertEquals(7, Helper.getFinalIntegerField());
-        Helper.setIntegerField(1000);
-        assertEquals(1000, Helper.getIntegerField());
-        
-        HotSwapTool.toVersion(SimpleStaticTest.class, 0);
+        __toVersion__(0);
 
         assertEquals(7, Helper.getFinalIntegerField());
         assertEquals(1000, Helper.getIntegerField());

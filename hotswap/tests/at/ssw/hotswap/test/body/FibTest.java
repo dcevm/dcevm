@@ -24,6 +24,8 @@
 
 package at.ssw.hotswap.test.body;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
@@ -38,23 +40,20 @@ import at.ssw.hotswap.HotSwapTool;
  * @author Thomas Wuerthinger
  */
 public class FibTest {
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
 
     public static abstract class Base {
-
-        protected int calc() {
-            return calc(HotSwapTool.getCurrentVersion(FibTest.class));
-        }
-
         public int calcAt(int version) {
             HotSwapTool.toVersion(FibTest.class, version);
-            int result = calc();
+            int result = calc(__version__());
             HotSwapTool.toVersion(FibTest.class, 0);
             return result;
         }
 
-        protected int calc(int version) {
-            return calc();
-        }
+        protected abstract int calc(int version);
     }
 
     public static class Fib extends Base {
@@ -68,7 +67,7 @@ public class FibTest {
     public static class Fib___1 extends Base {
 
         @Override
-        protected int calc() {
+        protected int calc(int n) {
             return 1;
         }
     }
@@ -76,36 +75,32 @@ public class FibTest {
     public static class Fib___2 extends Base {
 
         @Override
-        protected int calc() {
+        protected int calc(int n) {
             return 2;
         }
     }
 
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(FibTest.class, 0);
-    }
 
     @Test
     public void testFib() {
+        assertEquals(0, __version__());
 
         // 0 1 2 3 4 5
         // 1 1 2 3 5 8
-        assert HotSwapTool.getCurrentVersion(FibTest.class) == 0;
         Fib f = new Fib();
 
         assertEquals(1, f.calcAt(1));
 
-        assert HotSwapTool.getCurrentVersion(FibTest.class) == 0;
+        assertEquals(0, __version__());
         assertEquals(2, f.calcAt(2));
 
-        assert HotSwapTool.getCurrentVersion(FibTest.class) == 0;
+        assertEquals(0, __version__());
         assertEquals(3, f.calcAt(3));
 
-        assert HotSwapTool.getCurrentVersion(FibTest.class) == 0;
+        assertEquals(0, __version__());
         assertEquals(5, f.calcAt(4));
 
-        assert HotSwapTool.getCurrentVersion(FibTest.class) == 0;
+        assertEquals(0, __version__());
         assertEquals(8, f.calcAt(5));
     }
 }

@@ -24,6 +24,8 @@
 
 package at.ssw.hotswap.test.body;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
@@ -40,12 +42,10 @@ public class StaticTest {
 
     @Before
     public void setUp() throws Exception {
-        HotSwapTool.toVersion(StaticTest.class, 0);
+        __toVersion__(0);
     }
 
     // Version 0
-
-
     public static class Helper {
         public static int getAdditionalField() {
             return -1;
@@ -57,14 +57,12 @@ public class StaticTest {
     }
 
     public static class A {
-
         public static int value() {
             return 1;
         }
     }
 
     public static class B {
-
         public static int value() {
             return 2;
         }
@@ -92,7 +90,6 @@ public class StaticTest {
 
     // Version 1
     public static class A___1 {
-
         public static int value() {
             return B.value() * 2;
         }
@@ -100,7 +97,6 @@ public class StaticTest {
 
     // Version 2
     public static class B___2 {
-
         public static int value() {
             return 3;
         }
@@ -108,14 +104,12 @@ public class StaticTest {
 
     // Version 3
     public static class A___3 {
-
         public static int value() {
             return 5;
         }
     }
 
     public static class B___3 {
-
         public static int value() {
             return A.value() * 2;
         }
@@ -157,29 +151,27 @@ public class StaticTest {
 
     @Test
     public void testBase() {
-
-        assert HotSwapTool.getCurrentVersion(StaticTest.class) == 0;
-
+        assertEquals(0, __version__());
 
         assertEquals(1, A.value());
         assertEquals(2, B.value());
 
-        HotSwapTool.toVersion(StaticTest.class, 1);
+        __toVersion__(1);
 
         assertEquals(4, A.value());
         assertEquals(2, B.value());
 
-        HotSwapTool.toVersion(StaticTest.class, 2);
+        __toVersion__(2);
 
         assertEquals(6, A.value());
         assertEquals(3, B.value());
 
-        HotSwapTool.toVersion(StaticTest.class, 3);
+        __toVersion__(3);
 
         assertEquals(5, A.value());
         assertEquals(10, B.value());
 
-        HotSwapTool.toVersion(StaticTest.class, 0);
+        __toVersion__(0);
 
         assertEquals(1, A.value());
         assertEquals(2, B.value());
@@ -187,22 +179,22 @@ public class StaticTest {
 
     @Test
     public void testStaticField() {
+        assertEquals(0, __version__());
 
-        assert HotSwapTool.getCurrentVersion(StaticTest.class) == 0;
         assertEquals(5, C.value);
 
-        HotSwapTool.toVersion(StaticTest.class, 4);
+        __toVersion__(4);
         assertEquals(5, C.value);
 
-        HotSwapTool.toVersion(StaticTest.class, 0);
+        __toVersion__(0);
         assertEquals(5, C.value);
     }
 
 
     @Test
     public void testManyStaticFields() {
+        assertEquals(0, __version__());
 
-        assert HotSwapTool.getCurrentVersion(StaticTest.class) == 0;
         assertTrue(D.objectField != null);
         assertTrue(D.arrayField != null);
         assertEquals(5, D.integerField);
@@ -213,7 +205,7 @@ public class StaticTest {
         assertEquals(8, D.longField);
         assertEquals(true, D.booleanField);
 
-        HotSwapTool.toVersion(StaticTest.class, 5);
+        __toVersion__(5);
         assertTrue(D.objectField != null);
         assertTrue(D.arrayField != null);
         assertEquals(5, D.integerField);
@@ -229,7 +221,7 @@ public class StaticTest {
         assertEquals(1000, Helper.getAdditionalField());
 
 
-        HotSwapTool.toVersion(StaticTest.class, 0);
+        __toVersion__(0);
 
         assertTrue(D.objectField != null);
         assertTrue(D.arrayField != null);
@@ -241,7 +233,7 @@ public class StaticTest {
         assertEquals(8, D.longField);
         assertEquals(true, D.booleanField);
 
-        HotSwapTool.toVersion(StaticTest.class, 5);
+        __toVersion__(5);
         assertTrue(D.objectField != null);
         assertTrue(D.arrayField != null);
         assertEquals(5, D.integerField);
@@ -254,7 +246,7 @@ public class StaticTest {
 
         assertEquals(0, Helper.getAdditionalField());
 
-        HotSwapTool.toVersion(StaticTest.class, 0);
+        __toVersion__(0);
         assertTrue(D.objectField != null);
         assertTrue(D.arrayField != null);
         assertEquals(5, D.integerField);
@@ -264,6 +256,5 @@ public class StaticTest {
         assertEquals(2.0f, D.floatField, 0.0);
         assertEquals(8, D.longField);
         assertEquals(true, D.booleanField);
-
     }
 }

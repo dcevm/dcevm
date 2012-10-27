@@ -24,6 +24,8 @@
 
 package at.ssw.hotswap.test.body;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
@@ -38,12 +40,16 @@ import at.ssw.hotswap.HotSwapTool;
  */
 public class RedefinePrivateMethodTest {
 
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
+
     // Version 0
     public static class A {
-
         public int foo() {
             int result = bar();
-            HotSwapTool.toVersion(RedefinePrivateMethodTest.class, 1);
+            __toVersion__(1);
             result += bar();
             return result;
         }
@@ -65,32 +71,19 @@ public class RedefinePrivateMethodTest {
         }
     }
 
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(RedefinePrivateMethodTest.class, 0);
-    }
-
     @Test
     public void testRedefinePrivateMethod() {
-
-        assert HotSwapTool.getCurrentVersion(RedefinePrivateMethodTest.class) == 0;
+        assertEquals(0, __version__());
 
         A a = new A();
 
         assertEquals(3, a.foo());
-
-        assert HotSwapTool.getCurrentVersion(RedefinePrivateMethodTest.class) == 1;
-
+        assertEquals(1, __version__());
         assertEquals(-1, a.foo());
 
-        HotSwapTool.toVersion(RedefinePrivateMethodTest.class, 0);
-
+        __toVersion__(0);
         assertEquals(3, a.foo());
-
-        assert HotSwapTool.getCurrentVersion(RedefinePrivateMethodTest.class) == 1;
-
+        assertEquals(1, __version__());
         assertEquals(-1, a.foo());
-
-        HotSwapTool.toVersion(RedefinePrivateMethodTest.class, 0);
     }
 }

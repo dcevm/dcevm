@@ -57,11 +57,11 @@ public class AccessDeletedFieldTest {
         }
     }
 
-    public static class B extends A {
-    }
-
     // Version 1
     public static class A___1 {
+    }
+
+    public static class B extends A {
     }
 
     // Version 2

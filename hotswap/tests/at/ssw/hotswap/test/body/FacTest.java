@@ -24,6 +24,8 @@
 
 package at.ssw.hotswap.test.body;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
@@ -38,27 +40,23 @@ import at.ssw.hotswap.HotSwapTool;
  * @author Thomas Wuerthinger
  */
 public class FacTest {
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
 
     public static abstract class Base {
-
-        protected int calc() {
-            return calc(HotSwapTool.getCurrentVersion(FacTest.class));
-        }
-
         public int calcAt(int version) {
-            HotSwapTool.toVersion(FacTest.class, version);
-            int result = calc();
-            HotSwapTool.toVersion(FacTest.class, 0);
+            __toVersion__(version);
+            int result = calc(__version__());
+            __toVersion__(0);
             return result;
         }
 
-        protected int calc(int version) {
-            return calc();
-        }
+        protected abstract int calc(int version);
     }
 
     public static class Factorial extends Base {
-
         @Override
         protected int calc(int n) {
             return n * calcAt(n - 1);
@@ -66,39 +64,33 @@ public class FacTest {
     }
 
     public static class Factorial___1 extends Base {
-
         @Override
-        protected int calc() {
+        protected int calc(int n) {
             return 1;
         }
     }
 
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(FacTest.class, 0);
-    }
-
     @Test
     public void testFac() {
+        assertEquals(0, __version__());
 
-        assert HotSwapTool.getCurrentVersion(FacTest.class) == 0;
         Factorial f = new Factorial();
 
         assertEquals(1, f.calcAt(1));
 
-        assert HotSwapTool.getCurrentVersion(FacTest.class) == 0;
+        assertEquals(0, __version__());
         assertEquals(2, f.calcAt(2));
 
-        assert HotSwapTool.getCurrentVersion(FacTest.class) == 0;
+        assertEquals(0, __version__());
         assertEquals(6, f.calcAt(3));
 
-        assert HotSwapTool.getCurrentVersion(FacTest.class) == 0;
+        assertEquals(0, __version__());
         assertEquals(24, f.calcAt(4));
 
-        assert HotSwapTool.getCurrentVersion(FacTest.class) == 0;
+        assertEquals(0, __version__());
         assertEquals(120, f.calcAt(5));
 
-        assert HotSwapTool.getCurrentVersion(FacTest.class) == 0;
+        assertEquals(0, __version__());
         assertEquals(479001600, f.calcAt(12));
     }
 }

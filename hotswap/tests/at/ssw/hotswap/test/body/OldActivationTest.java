@@ -24,6 +24,8 @@
 
 package at.ssw.hotswap.test.body;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
@@ -38,11 +40,15 @@ import at.ssw.hotswap.HotSwapTool;
  */
 public class OldActivationTest {
 
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
+
     // Version 0
     public static class A {
-
         public int value() {
-            HotSwapTool.toVersion(OldActivationTest.class, 1);
+            __toVersion__(1);
             return 1 + this.value();
         }
     }
@@ -51,7 +57,7 @@ public class OldActivationTest {
     public static class A___1 {
 
         public int value() {
-            HotSwapTool.toVersion(OldActivationTest.class, 2);
+            __toVersion__(2);
             return 2 + this.value();
         }
     }
@@ -60,7 +66,7 @@ public class OldActivationTest {
     public static class A___2 {
 
         public int value() {
-            HotSwapTool.toVersion(OldActivationTest.class, 3);
+            __toVersion__(3);
             return 3 + this.value();
         }
     }
@@ -69,7 +75,7 @@ public class OldActivationTest {
     public static class A___3 {
 
         public int value() {
-            HotSwapTool.toVersion(OldActivationTest.class, 4);
+            __toVersion__(4);
             return 4 + this.value();
         }
     }
@@ -78,7 +84,7 @@ public class OldActivationTest {
     public static class A___4 {
 
         public int value() {
-            HotSwapTool.toVersion(OldActivationTest.class, 5);
+            __toVersion__(5);
             return 5 + this.value();
         }
     }
@@ -87,7 +93,7 @@ public class OldActivationTest {
     public static class A___5 {
 
         public int value() {
-            HotSwapTool.toVersion(OldActivationTest.class, 6);
+            __toVersion__(6);
             return 6 + this.value();
         }
     }
@@ -96,7 +102,7 @@ public class OldActivationTest {
     public static class A___6 {
 
         public int value() {
-            HotSwapTool.toVersion(OldActivationTest.class, 7);
+            __toVersion__(7);
             return 7 + this.value();
         }
     }
@@ -105,7 +111,7 @@ public class OldActivationTest {
     public static class A___7 {
 
         public int value() {
-            HotSwapTool.toVersion(OldActivationTest.class, 8);
+            __toVersion__(8);
             return 8 + this.value();
         }
     }
@@ -114,7 +120,7 @@ public class OldActivationTest {
     public static class A___8 {
 
         public int value() {
-            HotSwapTool.toVersion(OldActivationTest.class, 9);
+            __toVersion__(9);
             return 9 + this.value();
         }
     }
@@ -123,36 +129,30 @@ public class OldActivationTest {
     public static class A___9 {
 
         public int value() {
-            HotSwapTool.toVersion(OldActivationTest.class, 0);
+            __toVersion__(0);
             return 10;
         }
     }
 
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(OldActivationTest.class, 0);
-    }
-
     @Test
     public void testOldActivationTest() {
-
-        assert HotSwapTool.getCurrentVersion(OldActivationTest.class) == 0;
+        assertEquals(0, __version__());
 
         A a = new A();
 
         assertEquals(1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10, a.value());
-        assert HotSwapTool.getCurrentVersion(OldActivationTest.class) == 0;
+        assertEquals(0, __version__());
 
-        HotSwapTool.toVersion(OldActivationTest.class, 1);
+        __toVersion__(1);
         assertEquals(2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10, a.value());
-        assert HotSwapTool.getCurrentVersion(OldActivationTest.class) == 0;
+        assertEquals(0, __version__());
 
-        HotSwapTool.toVersion(OldActivationTest.class, 8);
+        __toVersion__(8);
         assertEquals(9 + 10, a.value());
-        assert HotSwapTool.getCurrentVersion(OldActivationTest.class) == 0;
+        assertEquals(0, __version__());
 
-        HotSwapTool.toVersion(OldActivationTest.class, 4);
+        __toVersion__(4);
         assertEquals(5 + 6 + 7 + 8 + 9 + 10, a.value());
-        assert HotSwapTool.getCurrentVersion(OldActivationTest.class) == 0;
+        assertEquals(0, __version__());
     }
 }

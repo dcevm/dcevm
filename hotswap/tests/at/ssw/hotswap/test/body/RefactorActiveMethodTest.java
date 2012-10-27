@@ -24,6 +24,8 @@
 
 package at.ssw.hotswap.test.body;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
@@ -35,12 +37,15 @@ import at.ssw.hotswap.HotSwapTool;
  * @author Thomas Wuerthinger
  */
 public class RefactorActiveMethodTest {
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
 
     // Version 0
     public static class A {
-
         public int value() {
-            HotSwapTool.toVersion(RefactorActiveMethodTest.class, 1);
+            __toVersion__(1);
             return 5;
         }
 
@@ -61,36 +66,26 @@ public class RefactorActiveMethodTest {
         }
     }
 
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(RefactorActiveMethodTest.class, 0);
-    }
-
     @Test
     public void testActiveMethodReplacement() {
-
-        assert HotSwapTool.getCurrentVersion(RefactorActiveMethodTest.class) == 0;
+        assertEquals(0, __version__());
 
         A a = new A();
 
         assertEquals(5, a.value());
-
-        assert HotSwapTool.getCurrentVersion(RefactorActiveMethodTest.class) == 1;
+        assertEquals(1, __version__());
 
         assertEquals(2, a.secondValue());
         assertEquals(4, a.value());
-        assertEquals(2, a.secondValue());
 
-        assert HotSwapTool.getCurrentVersion(RefactorActiveMethodTest.class) == 1;
-
-        HotSwapTool.toVersion(RefactorActiveMethodTest.class, 0);
+        assertEquals(1, __version__());
+        __toVersion__(0);
 
         assertEquals(1, a.secondValue());
         assertEquals(5, a.value());
         assertEquals(4, a.value());
 
-        HotSwapTool.toVersion(RefactorActiveMethodTest.class, 0);
-
+        __toVersion__(0);
         assertEquals(1, a.secondValue());
     }
 }

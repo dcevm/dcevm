@@ -24,6 +24,8 @@
 
 package at.ssw.hotswap.test.body;
 
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
 
 import org.junit.Before;
@@ -36,11 +38,15 @@ import at.ssw.hotswap.HotSwapTool;
  */
 public class StressTest {
 
-    public final static int COUNT = 10;
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
+
+    public final static int COUNT = 20;
 
     // Version 0
     public static class A {
-
         public int value() {
             return 1;
         }
@@ -48,35 +54,22 @@ public class StressTest {
 
     // Version 1
     public static class A___1 {
-
         public int value() {
             return 2;
         }
     }
 
-    @Before
-    public void setUp() throws Exception {
-        HotSwapTool.toVersion(StressTest.class, 0);
-    }
-
     @Test
     public void testStressSwap() {
-
-        assert HotSwapTool.getCurrentVersion(StressTest.class) == 0;
+        assertEquals(0, __version__());
 
         A a = new A();
-
         for (int i = 0; i < COUNT; i++) {
-
             assertEquals(1, a.value());
-
-            HotSwapTool.toVersion(StressTest.class, 1);
-
+            __toVersion__(1);
             assertEquals(2, a.value());
-
-            HotSwapTool.toVersion(StressTest.class, 0);
+            __toVersion__(0);
         }
-
         assertEquals(1, a.value());
     }
 }

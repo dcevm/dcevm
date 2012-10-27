@@ -25,7 +25,12 @@ package at.ssw.hotswap.test.body;
 
 import at.ssw.hotswap.ClassRedefinitionPolicy;
 import at.ssw.hotswap.HotSwapTool;
+
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
+
+import org.junit.Before;
 import org.junit.Test;
 
 /**
@@ -36,8 +41,12 @@ import org.junit.Test;
  */
 public class ClassRenamingTestCase {
 
-    public static class B {
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
 
+    public static class B {
         public int a() {
             return 1;
         }
@@ -45,7 +54,6 @@ public class ClassRenamingTestCase {
 
     @ClassRedefinitionPolicy(alias = B.class)
     public static class A___1 {
-
         public int a() {
             return 2;
         }
@@ -53,17 +61,15 @@ public class ClassRenamingTestCase {
 
     @Test
     public void testRenaming() {
-        HotSwapTool.toVersion(ClassRenamingTestCase.class, 0);
+        assertEquals(0, __version__());
 
         B b = new B();
         assertEquals(1, b.a());
 
-        HotSwapTool.toVersion(ClassRenamingTestCase.class, 1);
-
+        __toVersion__(1);
         assertEquals(2, b.a());
 
-        HotSwapTool.toVersion(ClassRenamingTestCase.class, 0);
-
+        __toVersion__(0);
         assertEquals(1, b.a());
     }
 }

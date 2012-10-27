@@ -25,38 +25,43 @@ package at.ssw.hotswap.test.body;
 
 import at.ssw.hotswap.HotSwapTool;
 import at.ssw.hotswap.test.TestUtil;
+
 import java.io.PrintStream;
+
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__toVersion__;
+import static at.ssw.hotswap.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.*;
+
+import org.junit.Before;
 import org.junit.Test;
 
 /**
- *
  * EMCP (Equivalent modulo Constant Pool) tests.
  *
  * @author Thomas Wuerthinger
- *
  */
 public class EMCPTest {
 
-    public static class A {
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
 
+    public static class A {
         public static int EMCPReturn() {
             change();
-            PrintStream s = System.out;
             return 1;
         }
     }
 
     public static class B {
-
         public static int b() {
             change();
-            throw new RuntimeException();
+            throw new ExpectedException();
         }
     }
 
     public static class C {
-
         public static int c() {
             changeAndThrow();
             return 0;
@@ -64,7 +69,6 @@ public class EMCPTest {
     }
 
     public static class D {
-
         private static int value = 1;
 
         public static int EMCPReturn() {
@@ -74,30 +78,26 @@ public class EMCPTest {
     }
 
     public static class A___1 {
-
         public static int EMCPReturn() {
             change();
-            PrintStream s = System.out;
             return 1;
         }
     }
 
     public static class B___1 {
-
         public static int b() {
             change();
-            throw new RuntimeException();
+            throw new ExpectedException();
         }
     }
 
     public static class C___1 {
-
         public static int c() {
             changeAndThrow();
             return 0;
         }
     }
-    
+
     public static class D___1 {
         private static int value = 1;
 
@@ -126,94 +126,94 @@ public class EMCPTest {
     }
 
     public static void change() {
-
-        HotSwapTool.toVersion(EMCPTest.class, 1);
+        __toVersion__(1);
     }
 
     public static void change3() {
-
-        HotSwapTool.toVersion(EMCPTest.class, 1);
-        HotSwapTool.toVersion(EMCPTest.class, 2);
-        HotSwapTool.toVersion(EMCPTest.class, 3);
+        __toVersion__(1);
+        __toVersion__(2);
+        __toVersion__(3);
     }
 
     public static void changeAndThrow() {
-
-        HotSwapTool.toVersion(EMCPTest.class, 1);
-
-        throw new RuntimeException();
+        __toVersion__(1);
+        throw new ExpectedException();
     }
 
 
     @Test
     public void testEMCPReturn() {
-        HotSwapTool.toVersion(EMCPTest.class, 0);
+        assertEquals(0, __version__());
 
+        __toVersion__(0);
         assertEquals(1, A.EMCPReturn());
 
-        HotSwapTool.toVersion(EMCPTest.class, 0);
-
+        __toVersion__(0);
         assertEquals(1, A.EMCPReturn());
-        
-        HotSwapTool.toVersion(EMCPTest.class, 0);
+
+        __toVersion__(0);
     }
-    
+
     @Test
     public void testEMCPMultiChangeReturn() {
-        HotSwapTool.toVersion(EMCPTest.class, 0);
+        assertEquals(0, __version__());
 
+        __toVersion__(0);
         assertEquals(1, D.EMCPReturn());
 
-        HotSwapTool.toVersion(EMCPTest.class, 0);
-
+        __toVersion__(0);
         assertEquals(1, D.EMCPReturn());
 
-        HotSwapTool.toVersion(EMCPTest.class, 0);
+        __toVersion__(0);
     }
 
     @Test
     public void testEMCPException() {
-        HotSwapTool.toVersion(EMCPTest.class, 0);
+        assertEquals(0, __version__());
 
-        TestUtil.assertException(RuntimeException.class, new Runnable(){
-            @Override
-            public void run() {
-               B.b();
-            }
-        });
+        __toVersion__(0);
+        try {
+            B.b();
+            fail("ExpectedException expected!");
+        } catch (ExpectedException e) {
+            // Expected.
+        }
 
-        HotSwapTool.toVersion(EMCPTest.class, 0);
+        __toVersion__(0);
+        try {
+            B.b();
+            fail("ExpectedException expected!");
+        } catch (ExpectedException e) {
+            // Expected.
+        }
 
-        TestUtil.assertException(RuntimeException.class, new Runnable(){
-            @Override
-            public void run() {
-               B.b();
-            }
-        });
-
-        HotSwapTool.toVersion(EMCPTest.class, 0);
+        __toVersion__(0);
     }
 
     @Test
     public void testEMCPExceptionInCallee() {
-        HotSwapTool.toVersion(EMCPTest.class, 0);
+        assertEquals(0, __version__());
 
-        TestUtil.assertException(RuntimeException.class, new Runnable(){
-            @Override
-            public void run() {
-               C.c();
-            }
-        });
+        __toVersion__(0);
+        try {
+            C.c();
+            fail("ExpectedException expected!");
+        } catch (ExpectedException e) {
+            // Expected.
+        }
 
-        HotSwapTool.toVersion(EMCPTest.class, 0);
+        __toVersion__(0);
+        try {
+            C.c();
+            fail("ExpectedException expected!");
+        } catch (ExpectedException e) {
+            // Expected.
+        }
 
-        TestUtil.assertException(RuntimeException.class, new Runnable(){
-            @Override
-            public void run() {
-               C.c();
-            }
-        });
+        __toVersion__(0);
+    }
 
-        HotSwapTool.toVersion(EMCPTest.class, 0);
+    private static class ExpectedException extends RuntimeException {
+
     }
 }

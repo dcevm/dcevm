@@ -2132,7 +2132,7 @@ template <class T> void VM_RedefineClasses::do_oop_work(T* p) {
         // case we need to run write barrier to make sure card table is properly updated. This will
         // allow JVM to detect reference in tenured generation properly during young generation GC.
         if (Universe::heap()->is_in_reserved(p)) {
-          if (!GenCollectedHeap::heap()->is_in_young(obj)) {
+          if (GenCollectedHeap::heap()->is_in_young(obj)) {
             GenRemSet* rs = GenCollectedHeap::heap()->rem_set();
             assert(rs->rs_kind() == GenRemSet::CardTable, "Wrong rem set kind.");
             CardTableRS* _rs = (CardTableRS*)rs;

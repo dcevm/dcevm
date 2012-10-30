@@ -284,60 +284,11 @@ address JvmtiBreakpoint::getBcp() {
 }
 
 void JvmtiBreakpoint::each_method_version_do(method_action meth_act) {
-  ((methodOopDesc*)_method->*meth_act)(_bci);
-
-  // add/remove breakpoint to/from versions of the method that
-  // are EMCP. Directly or transitively obsolete methods are
-  // not saved in the PreviousVersionInfo.
-  Thread *thread = Thread::current();
-  instanceKlassHandle ikh = instanceKlassHandle(thread, _method->method_holder());
-  Symbol* m_name = _method->name();
-  Symbol* m_signature = _method->signature();
-
-  {
-    ResourceMark rm(thread);
-    // PreviousVersionInfo objects returned via PreviousVersionWalker
-    // contain a GrowableArray of handles. We have to clean up the
-    // GrowableArray _after_ the PreviousVersionWalker destructor
-    // has destroyed the handles.
-    {
-      // search previous versions if they exist
-      PreviousVersionWalker pvw((instanceKlass *)ikh()->klass_part());
-      for (PreviousVersionInfo * pv_info = pvw.next_previous_version();
-           pv_info != NULL; pv_info = pvw.next_previous_version()) {
-        GrowableArray<methodHandle>* methods =
-          pv_info->prev_EMCP_method_handles();
-
-        if (methods == NULL) {
-          // We have run into a PreviousVersion generation where
-          // all methods were made obsolete during that generation's
-          // RedefineClasses() operation. At the time of that
-          // operation, all EMCP methods were flushed so we don't
-          // have to go back any further.
-          //
-          // A NULL methods array is different than an empty methods
-          // array. We cannot infer any optimizations about older
-          // generations from an empty methods array for the current
-          // generation.
-          break;
-        }
-
-        for (int i = methods->length() - 1; i >= 0; i--) {
-          methodHandle method = methods->at(i);
-          if (method->name() == m_name && method->signature() == m_signature) {
-            RC_TRACE(0x00000800, ("%sing breakpoint in %s(%s)",
-              meth_act == &methodOopDesc::set_breakpoint ? "sett" : "clear",
-              method->name()->as_C_string(),
-              method->signature()->as_C_string()));
-            assert(!method->is_obsolete(), "only EMCP methods here");
-
-            ((methodOopDesc*)method()->*meth_act)(_bci);
-            break;
-          }
-        }
-      }
-    } // pvw is cleaned up
-  } // rm is cleaned up
+  methodOop method = _method;
+  while (method != NULL) {
+    ((methodOopDesc*)method->*meth_act)(_bci);
+    method = method->old_version();
+  }
 }
 
 void JvmtiBreakpoint::set() {

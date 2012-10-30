@@ -37,6 +37,7 @@
 
 // Forward declarations.
 class OopClosure;
+class OopClosureNoHeader;
 class OopsInGenClosure;
 // DefNew
 class ScanClosure;
@@ -74,6 +75,7 @@ class CMSInnerParMarkAndPushClosure;
 #endif
 
 #define SPECIALIZED_OOP_OOP_ITERATE_CLOSURES_S(f)       \
+  f(OopClosureNoHeader,_v)                              \
   f(ScanClosure,_nv)                                    \
   f(FastScanClosure,_nv)                                \
   f(FilteringClosure,_nv)
@@ -132,6 +134,7 @@ class CMSInnerParMarkAndPushClosure;
 
 #define ALL_PAR_OOP_ITERATE_CLOSURES(f)                \
   f(OopClosure,_v)                                     \
+  f(OopClosureNoHeader,_v)                             \
   SPECIALIZED_PAR_OOP_ITERATE_CLOSURES(f)
 #endif // SERIALGC
 

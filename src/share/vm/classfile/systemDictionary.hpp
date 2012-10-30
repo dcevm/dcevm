@@ -268,7 +268,7 @@ public:
   // Resolve from stream (called by jni_DefineClass and JVM_DefineClass)
   static klassOop resolve_from_stream(Symbol* class_name, Handle class_loader,
                                       Handle protection_domain,
-                                      ClassFileStream* st, bool verify, TRAPS);
+                                      ClassFileStream* st, bool verify, KlassHandle old_class, TRAPS);
 
   // Lookup an already loaded class. If not found NULL is returned.
   static klassOop find(Symbol* class_name, Handle class_loader, Handle protection_domain, TRAPS);
@@ -343,6 +343,8 @@ public:
   // System loader lock
   static oop system_loader_lock()           { return _system_loader_lock_obj; }
 
+  // Remove link to hierarchy
+  static void remove_from_hierarchy(instanceKlassHandle k);
 private:
   //    Traverses preloaded oops: various system classes.  These are
   //    guaranteed to be in the perm gen.
@@ -414,6 +416,8 @@ public:
     int limit = (int)end_id + 1;
     initialize_wk_klasses_until((WKID) limit, start_id, THREAD);
   }
+
+  static void rollback_redefinition();
 
 public:
   #define WK_KLASS_DECLARE(name, symbol, option) \
@@ -596,7 +600,7 @@ private:
   // after waiting, but before reentering SystemDictionary_lock
   // to preserve lock order semantics.
   static void double_lock_wait(Handle lockObject, TRAPS);
-  static void define_instance_class(instanceKlassHandle k, TRAPS);
+  static void define_instance_class(instanceKlassHandle k, KlassHandle old_class, TRAPS);
   static instanceKlassHandle find_or_define_instance_class(Symbol* class_name,
                                                 Handle class_loader,
                                                 instanceKlassHandle k, TRAPS);

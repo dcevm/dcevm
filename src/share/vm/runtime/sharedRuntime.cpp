@@ -603,21 +603,13 @@ void SharedRuntime::throw_and_post_jvmti_exception(JavaThread *thread, Symbol* n
 //
 JRT_LEAF(int, SharedRuntime::rc_trace_method_entry(
     JavaThread* thread, methodOopDesc* method))
-  assert(RC_TRACE_IN_RANGE(0x00001000, 0x00002000), "wrong call");
+  assert(TraceRedefineClasses >= 4, "wrong call");
 
   if (method->is_obsolete()) {
     // We are calling an obsolete method, but this is not necessarily
     // an error. Our method could have been redefined just after we
     // fetched the methodOop from the constant pool.
-
-    // RC_TRACE macro has an embedded ResourceMark
-    RC_TRACE_WITH_THREAD(0x00001000, thread,
-                         ("calling obsolete method '%s'",
-                          method->name_and_sig_as_C_string()));
-    if (RC_TRACE_ENABLED(0x00002000)) {
-      // this option is provided to debug calls to obsolete methods
-      guarantee(false, "faulting at call to an obsolete method.");
-    }
+    TRACE_RC4("calling obsolete method '%s'", method->name_and_sig_as_C_string());
   }
   return 0;
 JRT_END
@@ -1137,7 +1129,20 @@ methodHandle SharedRuntime::resolve_helper(JavaThread *thread,
   if (JvmtiExport::can_hotswap_or_post_breakpoint()) {
     int retry_count = 0;
     while (!HAS_PENDING_EXCEPTION && callee_method->is_old() &&
-           callee_method->method_holder() != SystemDictionary::Object_klass()) {
+           callee_method->method_holder()->klass_part()->super() != NULL) {
+
+      // (tw) If we are executing an old method, this is OK!
+      {
+        ResourceMark rm(thread);
+        RegisterMap cbl_map(thread, false);
+        frame caller_frame = thread->last_frame().sender(&cbl_map);
+
+        CodeBlob* caller_cb = caller_frame.cb();
+        guarantee(caller_cb != NULL && caller_cb->is_nmethod(), "must be called from nmethod");
+        nmethod* caller_nm = caller_cb->as_nmethod_or_null();
+        if (caller_nm->method()->is_old()) break;
+      }
+
       // If has a pending exception then there is no need to re-try to
       // resolve this method.
       // If the method has been redefined, we need to try again.

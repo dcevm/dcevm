@@ -95,6 +95,7 @@ class oopDesc {
   narrowOop* compressed_klass_addr();
 
   void set_klass(klassOop k);
+  void set_klass_no_check(klassOop k);
 
   // For klass field compression
   int klass_gap() const;
@@ -135,6 +136,7 @@ class oopDesc {
   bool is_array()              const;
   bool is_objArray()           const;
   bool is_klass()              const;
+  bool is_instanceKlass()      const;
   bool is_thread()             const;
   bool is_method()             const;
   bool is_constMethod()        const;

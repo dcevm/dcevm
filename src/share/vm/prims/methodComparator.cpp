@@ -42,10 +42,9 @@ bool MethodComparator::methods_EMCP(methodOop old_method, methodOop new_method) 
   if (old_method->code_size() != new_method->code_size())
     return false;
   if (check_stack_and_locals_size(old_method, new_method) != 0) {
-    // RC_TRACE macro has an embedded ResourceMark
-    RC_TRACE(0x00800000, ("Methods %s non-comparable with diagnosis %d",
+    TRACE_RC4("Methods %s non-comparable with diagnosis %d",
       old_method->name()->as_C_string(),
-      check_stack_and_locals_size(old_method, new_method)));
+      check_stack_and_locals_size(old_method, new_method));
     return false;
   }
 
@@ -114,10 +113,9 @@ bool MethodComparator::methods_switchable(methodOop old_method, methodOop new_me
   // Now we can test all forward jumps
   for (int i = 0; i < fwd_jmps.length() / 2; i++) {
     if (! bci_map.old_and_new_locations_same(fwd_jmps.at(i*2), fwd_jmps.at(i*2+1))) {
-      RC_TRACE(0x00800000,
-        ("Fwd jump miss: old dest = %d, calc new dest = %d, act new dest = %d",
+      TRACE_RC4("Fwd jump miss: old dest = %d, calc new dest = %d, act new dest = %d",
         fwd_jmps.at(i*2), bci_map.new_bci_for_old(fwd_jmps.at(i*2)),
-        fwd_jmps.at(i*2+1)));
+        fwd_jmps.at(i*2+1));
       return false;
     }
   }

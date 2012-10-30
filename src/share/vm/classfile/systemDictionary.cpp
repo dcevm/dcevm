@@ -157,6 +157,7 @@ klassOop SystemDictionary::resolve_or_fail(Symbol* class_name, Handle class_load
     // can return a null klass
     klass = handle_resolution_exception(class_name, class_loader, protection_domain, throw_error, k_h, THREAD);
   }
+  assert(klass == NULL || klass->klass_part()->is_newest_version() || klass->klass_part()->newest_version()->klass_part()->is_redefining(), "must be");
   return klass;
 }
 
@@ -199,7 +200,7 @@ klassOop SystemDictionary::resolve_or_fail(Symbol* class_name,
 // Forwards to resolve_instance_class_or_null
 
 klassOop SystemDictionary::resolve_or_null(Symbol* class_name, Handle class_loader, Handle protection_domain, TRAPS) {
-  assert(!THREAD->is_Compiler_thread(),
+  assert(!THREAD->is_Compiler_thread() || JvmtiThreadState::state_for(JavaThread::current())->get_class_being_redefined() != NULL,
          err_msg("can not load classes with compiler thread: class=%s, classloader=%s",
                  class_name->as_C_string(),
                  class_loader.is_null() ? "null" : class_loader->klass()->klass_part()->name()->as_C_string()));
@@ -961,8 +962,10 @@ klassOop SystemDictionary::parse_stream(Symbol* class_name,
   instanceKlassHandle k = ClassFileParser(st).parseClassFile(class_name,
                                                              class_loader,
                                                              protection_domain,
+                                                             KlassHandle(),
                                                              host_klass,
                                                              cp_patches,
+                                                             NULL,
                                                              parsed_name,
                                                              true,
                                                              THREAD);
@@ -1022,7 +1025,15 @@ klassOop SystemDictionary::resolve_from_stream(Symbol* class_name,
                                                Handle protection_domain,
                                                ClassFileStream* st,
                                                bool verify,
+                                               KlassHandle old_class,
                                                TRAPS) {
+
+  bool redefine_classes_locked = false;
+  if (!Thread::current()->redefine_classes_mutex()->owned_by_self()) {
+    Thread::current()->redefine_classes_mutex()->lock();
+    redefine_classes_locked = true;
+  }
+  
   // Classloaders that support parallelism, e.g. bootstrap classloader,
   // or all classloaders with UnsyncloadClass do not acquire lock here
   bool DoObjectLock = true;
@@ -1050,9 +1061,14 @@ klassOop SystemDictionary::resolve_from_stream(Symbol* class_name,
   instanceKlassHandle k = ClassFileParser(st).parseClassFile(class_name,
                                                              class_loader,
                                                              protection_domain,
+                                                             old_class,
                                                              parsed_name,
                                                              verify,
                                                              THREAD);
+  if (!old_class.is_null() && !k.is_null()) {
+    k->set_redefining(true);
+    k->set_old_version(old_class());
+  }
 
   const char* pkg = "java/";
   if (!HAS_PENDING_EXCEPTION &&
@@ -1087,11 +1103,16 @@ klassOop SystemDictionary::resolve_from_stream(Symbol* class_name,
     // Add class just loaded
     // If a class loader supports parallel classloading handle parallel define requests
     // find_or_define_instance_class may return a different instanceKlass
-    if (is_parallelCapable(class_loader)) {
+    // (tw) TODO: for class redefinition the parallel version does not work, check if this is a problem?
+    if (is_parallelCapable(class_loader) && old_class.is_null()) {
       k = find_or_define_instance_class(class_name, class_loader, k, THREAD);
     } else {
-      define_instance_class(k, THREAD);
+      define_instance_class(k, old_class, THREAD);
     }
+  }
+
+  if (redefine_classes_locked) {
+    Thread::current()->redefine_classes_mutex()->unlock();
   }
 
   // If parsing the class file or define_instance_class failed, we
@@ -1122,7 +1143,7 @@ klassOop SystemDictionary::resolve_from_stream(Symbol* class_name,
       MutexLocker mu(SystemDictionary_lock, THREAD);
 
       klassOop check = find_class(parsed_name, class_loader);
-      assert(check == k(), "should be present in the dictionary");
+      assert((check == k() && !k->is_redefining()) || (k->is_redefining() && check == k->old_version()), "should be present in the dictionary");
 
       klassOop check2 = find_class(h_name, h_loader);
       assert(check == check2, "name inconsistancy in SystemDictionary");
@@ -1349,7 +1370,11 @@ instanceKlassHandle SystemDictionary::load_instance_class(Symbol* class_name, Ha
   }
 }
 
-void SystemDictionary::define_instance_class(instanceKlassHandle k, TRAPS) {
+void SystemDictionary::rollback_redefinition() {
+  dictionary()->rollback_redefinition();
+}
+
+void SystemDictionary::define_instance_class(instanceKlassHandle k, KlassHandle old_class, TRAPS) {
 
   Handle class_loader_h(THREAD, k->class_loader());
 
@@ -1376,13 +1401,23 @@ void SystemDictionary::define_instance_class(instanceKlassHandle k, TRAPS) {
   Symbol*  name_h = k->name();
   unsigned int d_hash = dictionary()->compute_hash(name_h, class_loader_h);
   int d_index = dictionary()->hash_to_index(d_hash);
-  check_constraints(d_index, d_hash, k, class_loader_h, true, CHECK);
+
+  // (tw) Update version of the klassOop in the system dictionary
+  // TODO: Check for thread safety!
+  if (!old_class.is_null()) {
+    bool ok = dictionary()->update_klass(d_index, d_hash, name_h, class_loader_h, k, old_class);
+    assert (ok, "must have found old class and updated!");
+  }
+  check_constraints(d_index, d_hash, k, class_loader_h, old_class.is_null(), CHECK);
+
+  if(!old_class.is_null() && TraceRedefineClasses >= 3){ tty->print_cr("Class has been updated!"); }
 
   // Register class just loaded with class loader (placed in Vector)
   // Note we do this before updating the dictionary, as this can
   // fail with an OutOfMemoryError (if it does, we will *not* put this
   // class in the dictionary and will not update the class hierarchy).
-  if (k->class_loader() != NULL) {
+  // (tw) Only register if not redefining a class.
+  if (k->class_loader() != NULL && old_class.is_null()) {
     methodHandle m(THREAD, Universe::loader_addClass_method());
     JavaValue result(T_VOID);
     JavaCallArguments args(class_loader_h);
@@ -1408,8 +1443,9 @@ void SystemDictionary::define_instance_class(instanceKlassHandle k, TRAPS) {
   }
   k->eager_initialize(THREAD);
 
+  // (tw) Only notify jvmti if not redefining a class.
   // notify jvmti
-  if (JvmtiExport::should_post_class_load()) {
+  if (JvmtiExport::should_post_class_load() && old_class.is_null()) {
       assert(THREAD->is_Java_thread(), "thread->is_Java_thread()");
       JvmtiExport::post_class_load((JavaThread *) THREAD, k());
 
@@ -1482,7 +1518,7 @@ instanceKlassHandle SystemDictionary::find_or_define_instance_class(Symbol* clas
     }
   }
 
-  define_instance_class(k, THREAD);
+  define_instance_class(k, KlassHandle(), THREAD);
 
   Handle linkage_exception = Handle(); // null handle
 
@@ -1612,6 +1648,14 @@ void SystemDictionary::add_to_hierarchy(instanceKlassHandle k, TRAPS) {
   Universe::flush_dependents_on(k);
 }
 
+// (tw) Remove from hierarchy - Undo add_to_hierarchy.
+void SystemDictionary::remove_from_hierarchy(instanceKlassHandle k) {
+  assert(k.not_null(), "just checking");
+
+  k->remove_from_sibling_list();
+
+  // TODO (tw): Remove from interfaces.
+}
 
 // ----------------------------------------------------------------------------
 // GC support
@@ -1869,9 +1913,12 @@ void SystemDictionary::initialize_preloaded_classes(TRAPS) {
 
   // Preload ref klasses and set reference types
   instanceKlass::cast(WK_KLASS(Reference_klass))->set_reference_type(REF_OTHER);
-  instanceRefKlass::update_nonstatic_oop_maps(WK_KLASS(Reference_klass));
+
+  // (tw) This is now done in parseClassFile in order to support class redefinition
+  // instanceRefKlass::update_nonstatic_oop_maps(WK_KLASS(Reference_klass));
 
   initialize_wk_klasses_through(WK_KLASS_ENUM_NAME(PhantomReference_klass), scan, CHECK);
+  // TODO(tw): Check that the following is also not necessary?
   instanceKlass::cast(WK_KLASS(SoftReference_klass))->set_reference_type(REF_SOFT);
   instanceKlass::cast(WK_KLASS(WeakReference_klass))->set_reference_type(REF_WEAK);
   instanceKlass::cast(WK_KLASS(FinalReference_klass))->set_reference_type(REF_FINAL);
@@ -1955,7 +2002,7 @@ void SystemDictionary::check_constraints(int d_index, unsigned int d_hash,
       // also holds array classes
 
       assert(check->klass_part()->oop_is_instance(), "noninstance in systemdictionary");
-      if ((defining == true) || (k() != check)) {
+      if ((defining == true) && ((k() != check) && k->old_version() != check)) {
         linkage_error = "loader (instance of  %s): attempted  duplicate class "
           "definition for name: \"%s\"";
       } else {
@@ -2602,8 +2649,10 @@ void SystemDictionary::verify_obj_klass_present(Handle obj,
       name = find_placeholder(class_name, class_loader);
     }
   }
-  guarantee(probe != NULL || name != NULL,
-            "Loaded klasses should be in SystemDictionary");
+  // (tw) Relaxed assertion to allow different class versions. Also allow redefining classes lie around (because of rollback).
+  guarantee(probe != NULL &&
+            (!probe->is_klass() || (!((klassOop)(obj()))->klass_part()->is_redefining()) || ((klassOop)probe)->klass_part()->is_same_or_older_version((klassOop)(obj()))) || ((klassOop)(obj()))->klass_part()->is_redefining(),
+                     "Loaded klasses should be in SystemDictionary");
 }
 
 // utility function for posting class load event

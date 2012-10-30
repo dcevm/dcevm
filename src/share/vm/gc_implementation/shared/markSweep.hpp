@@ -117,7 +117,11 @@ class MarkSweep : AllStatic {
   friend class AdjustPointerClosure;
   friend class KeepAliveClosure;
   friend class VM_MarkSweep;
+  friend class GenMarkSweep;
   friend void marksweep_init();
+
+public:
+  static GrowableArray<oop>*             _rescued_oops;
 
   //
   // Vars
@@ -208,6 +212,9 @@ class MarkSweep : AllStatic {
   template <class T> static inline void mark_and_push(T* p);
   static inline void push_objarray(oop obj, size_t index);
 
+  static void copy_rescued_objects_back();
+  static void update_fields(oop q, oop new_location);
+  static void update_fields(oop new_location, oop tmp_obj, int *cur);
   static void follow_stack();   // Empty marking stack.
 
   static void preserve_mark(oop p, markOop mark);

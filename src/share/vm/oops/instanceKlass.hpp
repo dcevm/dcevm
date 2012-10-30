@@ -271,9 +271,6 @@ class instanceKlass: public Klass {
   nmethodBucket*  _dependencies;         // list of dependent nmethods
   nmethod*        _osr_nmethods_head;    // Head of list of on-stack replacement nmethods for this class
   BreakpointInfo* _breakpoints;          // bpt lists, managed by methodOop
-  // Array of interesting part(s) of the previous version(s) of this
-  // instanceKlass. See PreviousVersionWalker below.
-  GrowableArray<PreviousVersionNode *>* _previous_versions;
   // JVMTI fields can be moved to their own structure - see 6315920
   unsigned char * _cached_class_file_bytes;       // JVMTI: cached class file, before retransformable agent modified it in CFLH
   jint            _cached_class_file_len;         // JVMTI: length of above
@@ -571,20 +568,11 @@ class instanceKlass: public Klass {
     _nonstatic_oop_map_size = words;
   }
 
-  // RedefineClasses() support for previous versions:
-  void add_previous_version(instanceKlassHandle ikh, BitMap *emcp_methods,
-         int emcp_method_count);
   // If the _previous_versions array is non-NULL, then this klass
   // has been redefined at least once even if we aren't currently
   // tracking a previous version.
-  bool has_been_redefined() const { return _previous_versions != NULL; }
+  bool has_been_redefined() const { return _old_version != NULL; }
   bool has_previous_version() const;
-  void init_previous_versions() {
-    _previous_versions = NULL;
-  }
-  GrowableArray<PreviousVersionNode *>* previous_versions() const {
-    return _previous_versions;
-  }
 
   // JVMTI: Support for caching a class file before it is modified by an agent that can do retransformation
   void set_cached_class_file(unsigned char *class_file_bytes,
@@ -629,6 +617,7 @@ class instanceKlass: public Klass {
   static void get_jmethod_id_length_value(jmethodID* cache, size_t idnum,
                 size_t *length_p, jmethodID* id_p);
   jmethodID jmethod_id_or_null(methodOop method);
+  bool update_jmethod_id(methodOop method, jmethodID newMethodID);
 
   // cached itable index support
   void set_cached_itable_index(size_t idnum, int index);
@@ -711,6 +700,7 @@ class instanceKlass: public Klass {
 
   // subclass/subinterface checks
   bool implements_interface(klassOop k) const;
+  bool implements_interface_any_version(klassOop k) const;
 
   // Access to the implementor of an interface.
   klassOop implementor() const
@@ -760,6 +750,9 @@ class instanceKlass: public Klass {
   void do_local_static_fields(FieldClosure* cl);
   void do_nonstatic_fields(FieldClosure* cl); // including inherited fields
   void do_local_static_fields(void f(fieldDescriptor*, TRAPS), TRAPS);
+  void store_update_information(GrowableArray<int> &values);
+  void clear_update_information();
+
 
   void methods_do(void f(methodOop method));
   void array_klasses_do(void f(klassOop k));
@@ -895,7 +888,6 @@ class instanceKlass: public Klass {
   ALL_OOP_OOP_ITERATE_CLOSURES_2(InstanceKlass_OOP_OOP_ITERATE_BACKWARDS_DECL)
 #endif // !SERIALGC
 
-private:
   // initialization state
 #ifdef ASSERT
   void set_init_state(ClassState state);
@@ -1056,106 +1048,6 @@ class JNIid: public CHeapObj<mtClass> {
 #endif
   void verify(klassOop holder);
 };
-
-
-// If breakpoints are more numerous than just JVMTI breakpoints,
-// consider compressing this data structure.
-// It is currently a simple linked list defined in methodOop.hpp.
-
-class BreakpointInfo;
-
-
-// A collection point for interesting information about the previous
-// version(s) of an instanceKlass. This class uses weak references to
-// the information so that the information may be collected as needed
-// by the system. If the information is shared, then a regular
-// reference must be used because a weak reference would be seen as
-// collectible. A GrowableArray of PreviousVersionNodes is attached
-// to the instanceKlass as needed. See PreviousVersionWalker below.
-class PreviousVersionNode : public CHeapObj<mtClass> {
- private:
-  // A shared ConstantPool is never collected so we'll always have
-  // a reference to it so we can update items in the cache. We'll
-  // have a weak reference to a non-shared ConstantPool until all
-  // of the methods (EMCP or obsolete) have been collected; the
-  // non-shared ConstantPool becomes collectible at that point.
-  jobject _prev_constant_pool;  // regular or weak reference
-  bool    _prev_cp_is_weak;     // true if not a shared ConstantPool
-
-  // If the previous version of the instanceKlass doesn't have any
-  // EMCP methods, then _prev_EMCP_methods will be NULL. If all the
-  // EMCP methods have been collected, then _prev_EMCP_methods can
-  // have a length of zero.
-  GrowableArray<jweak>* _prev_EMCP_methods;
-
-public:
-  PreviousVersionNode(jobject prev_constant_pool, bool prev_cp_is_weak,
-    GrowableArray<jweak>* prev_EMCP_methods);
-  ~PreviousVersionNode();
-  jobject prev_constant_pool() const {
-    return _prev_constant_pool;
-  }
-  GrowableArray<jweak>* prev_EMCP_methods() const {
-    return _prev_EMCP_methods;
-  }
-};
-
-
-// A Handle-ized version of PreviousVersionNode.
-class PreviousVersionInfo : public ResourceObj {
- private:
-  constantPoolHandle   _prev_constant_pool_handle;
-  // If the previous version of the instanceKlass doesn't have any
-  // EMCP methods, then _prev_EMCP_methods will be NULL. Since the
-  // methods cannot be collected while we hold a handle,
-  // _prev_EMCP_methods should never have a length of zero.
-  GrowableArray<methodHandle>* _prev_EMCP_method_handles;
-
-public:
-  PreviousVersionInfo(PreviousVersionNode *pv_node);
-  ~PreviousVersionInfo();
-  constantPoolHandle prev_constant_pool_handle() const {
-    return _prev_constant_pool_handle;
-  }
-  GrowableArray<methodHandle>* prev_EMCP_method_handles() const {
-    return _prev_EMCP_method_handles;
-  }
-};
-
-
-// Helper object for walking previous versions. This helper cleans up
-// the Handles that it allocates when the helper object is destroyed.
-// The PreviousVersionInfo object returned by next_previous_version()
-// is only valid until a subsequent call to next_previous_version() or
-// the helper object is destroyed.
-class PreviousVersionWalker : public StackObj {
- private:
-  GrowableArray<PreviousVersionNode *>* _previous_versions;
-  int                                   _current_index;
-  // Fields for cleaning up when we are done walking the previous versions:
-  // A HandleMark for the PreviousVersionInfo handles:
-  HandleMark                            _hm;
-
-  // It would be nice to have a ResourceMark field in this helper also,
-  // but the ResourceMark code says to be careful to delete handles held
-  // in GrowableArrays _before_ deleting the GrowableArray. Since we
-  // can't guarantee the order in which the fields are destroyed, we
-  // have to let the creator of the PreviousVersionWalker object do
-  // the right thing. Also, adding a ResourceMark here causes an
-  // include loop.
-
-  // A pointer to the current info object so we can handle the deletes.
-  PreviousVersionInfo *                 _current_p;
-
- public:
-  PreviousVersionWalker(instanceKlass *ik);
-  ~PreviousVersionWalker();
-
-  // Return the interesting information for the next previous version
-  // of the klass. Returns NULL if there are no more previous versions.
-  PreviousVersionInfo* next_previous_version();
-};
-
 
 //
 // nmethodBucket is used to record dependent nmethods for

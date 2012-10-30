@@ -30,6 +30,9 @@
 # GNU Makefile and Microsoft nmake formats.
 #
 
+# DCEVM release
+USER_RELEASE_SUFFIX=dcevmlight03
+
 # Don't put quotes (fail windows build).
 HOTSPOT_VM_COPYRIGHT=Copyright 2013
 

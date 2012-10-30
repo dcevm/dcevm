@@ -355,17 +355,6 @@ class ConstantPoolCacheEntry VALUE_OBJ_CLASS_SPEC {
 
   void update_pointers();
 
-  // RedefineClasses() API support:
-  // If this constantPoolCacheEntry refers to old_method then update it
-  // to refer to new_method.
-  // trace_name_printed is set to true if the current call has
-  // printed the klass name so that other routines in the adjust_*
-  // group don't print the klass name.
-  bool adjust_method_entry(methodOop old_method, methodOop new_method,
-         bool * trace_name_printed);
-  bool check_no_old_or_obsolete_entries();
-  bool is_interesting_method_entry(klassOop k);
-
   // Debugging & Printing
   void print (outputStream* st, int index) const;
   void verify(outputStream* st) const;
@@ -485,16 +474,8 @@ class constantPoolCacheOopDesc: public oopDesc {
     return (base_offset() + ConstantPoolCacheEntry::size_in_bytes() * index);
   }
 
-  // RedefineClasses() API support:
-  // If any entry of this constantPoolCache points to any of
-  // old_methods, replace it with the corresponding new_method.
-  // trace_name_printed is set to true if the current call has
-  // printed the klass name so that other routines in the adjust_*
-  // group don't print the klass name.
-  void adjust_method_entries(methodOop* old_methods, methodOop* new_methods,
-                             int methods_length, bool * trace_name_printed);
-  bool check_no_old_or_obsolete_entries();
-  void dump_cache();
+  // (tw) Clear references to methods and fields from this cache.
+  void adjust_entries();
 };
 
 #endif // SHARE_VM_OOPS_CPCACHEOOP_HPP

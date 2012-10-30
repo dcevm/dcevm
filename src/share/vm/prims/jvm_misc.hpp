@@ -84,6 +84,7 @@ extern "C" {
     (JNIEnv *env, jobject obj, jfieldID fieldID);
 }
 
+// TODO(tw): Check if we need to "unquicken" because of class redefinition.
 void    quicken_jni_functions();
 address jni_GetBooleanField_addr();
 address jni_GetByteField_addr();

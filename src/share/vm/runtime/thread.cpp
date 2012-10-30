@@ -216,6 +216,8 @@ Thread::Thread() {
   set_self_raw_id(0);
   set_lgrp_id(-1);
 
+  _redefine_classes_mutex = new Mutex(Mutex::redefine_classes, "redefine classes lock", false);
+
   // allocated data structures
   set_osthread(NULL);
   set_resource_area(new (mtThread)ResourceArea());
@@ -249,6 +251,7 @@ Thread::Thread() {
   omFreeProvision = 32 ;
   omInUseList = NULL ;
   omInUseCount = 0 ;
+  _pretend_new_universe = false;
 
 #ifdef ASSERT
   _visited_for_critical_count = false;
@@ -880,6 +883,15 @@ static int ref_use_count  = 0;
 bool Thread::owns_locks_but_compiled_lock() const {
   for(Monitor *cur = _owned_locks; cur; cur = cur->next()) {
     if (cur != Compile_lock) return true;
+  }
+  return false;
+}
+
+bool Thread::owns_locks_but_redefine_classes_lock() const {
+  for(Monitor *cur = _owned_locks; cur; cur = cur->next()) {
+    if (cur != RedefineClasses_lock && cur->rank() != Mutex::redefine_classes) {
+      return true;
+    }
   }
   return false;
 }
@@ -1637,7 +1649,7 @@ void JavaThread::run() {
   ThreadStateTransition::transition_and_fence(this, _thread_new, _thread_in_vm);
 
   assert(JavaThread::current() == this, "sanity check");
-  assert(!Thread::current()->owns_locks(), "sanity check");
+  assert(!Thread::current()->owns_locks_but_redefine_classes_lock(), "sanity check");
 
   DTRACE_THREAD_PROBE(start, this);
 
@@ -3193,7 +3205,7 @@ static void compiler_thread_entry(JavaThread* thread, TRAPS) {
 
 // Create a CompilerThread
 CompilerThread::CompilerThread(CompileQueue* queue, CompilerCounters* counters)
-: JavaThread(&compiler_thread_entry) {
+: JavaThread(&compiler_thread_entry), _should_bailout(false) {
   _env   = NULL;
   _log   = NULL;
   _task  = NULL;
@@ -3201,6 +3213,7 @@ CompilerThread::CompilerThread(CompileQueue* queue, CompilerCounters* counters)
   _counters = counters;
   _buffer_blob = NULL;
   _scanned_nmethod = NULL;
+  _compilation_mutex = new Mutex(Mutex::redefine_classes, "compilationMutex", false);
 
 #ifndef PRODUCT
   _ideal_graph_printer = NULL;

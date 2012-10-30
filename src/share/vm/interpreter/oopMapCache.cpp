@@ -536,9 +536,9 @@ void OopMapCache::flush_obsolete_entries() {
     if (!_array[i].is_empty() && _array[i].method()->is_old()) {
       // Cache entry is occupied by an old redefined method and we don't want
       // to pin it down so flush the entry.
-      RC_TRACE(0x08000000, ("flush: %s(%s): cached entry @%d",
+      TRACE_RC3("flush: %s(%s): cached entry @%d",
         _array[i].method()->name()->as_C_string(),
-        _array[i].method()->signature()->as_C_string(), i));
+        _array[i].method()->signature()->as_C_string(), i);
 
       _array[i].flush();
     }

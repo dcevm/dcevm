@@ -73,6 +73,10 @@ public:
 
   void add_klass(Symbol* class_name, Handle class_loader,KlassHandle obj);
 
+  bool update_klass(int index, unsigned int hash, Symbol* name, Handle loader, KlassHandle k, KlassHandle old_class);
+
+  void rollback_redefinition();
+
   klassOop find_class(int index, unsigned int hash,
                       Symbol* name, Handle loader);
 
@@ -105,6 +109,7 @@ public:
   bool do_unloading(BoolObjectClosure* is_alive);
 
   // Protection domains
+  static klassOop intercept_for_version(klassOop k);
   klassOop find(int index, unsigned int hash, Symbol* name,
                 Handle loader, Handle protection_domain, TRAPS);
   bool is_valid_protection_domain(int index, unsigned int hash,

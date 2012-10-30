@@ -170,6 +170,7 @@ class Klass_vtbl {
   void* operator new(size_t ignored, KlassHandle& klass, int size, TRAPS);
 };
 
+template<class L, class R> class Pair;
 
 class Klass : public Klass_vtbl {
   friend class VMStructs;
@@ -222,6 +223,31 @@ class Klass : public Klass_vtbl {
   oop* oop_block_beg() const { return adr_secondary_super_cache(); }
   oop* oop_block_end() const { return adr_next_sibling() + 1; }
 
+  // (tw) Different class redefinition flags of code evolution.
+  enum RedefinitionFlags {
+
+    // This class is not redefined at all!
+    NoRedefinition,
+
+    // There are changes to the class meta data.
+    ModifyClass = 1,
+
+    // The size of the class meta data changes.
+    ModifyClassSize = ModifyClass << 1,
+
+    // There are change to the instance format.
+    ModifyInstances = ModifyClassSize << 1,
+
+    // The size of instances changes.
+    ModifyInstanceSize = ModifyInstances << 1,
+
+    // A super type of this class is removed.
+    RemoveSuperType = ModifyInstanceSize << 1,
+
+    // This class has been marked as an affected class.
+    MarkedAsAffected = RemoveSuperType << 1
+  };
+
  protected:
   //
   // The oop block.  All oop fields must be declared here and only oop fields
@@ -241,6 +267,10 @@ class Klass : public Klass_vtbl {
   oop       _java_mirror;
   // Superclass
   klassOop  _super;
+  // Old class
+  klassOop _old_version;
+  // New class
+  klassOop _new_version;
   // First subclass (NULL if none); _subklass->next_sibling() is next one
   klassOop _subklass;
   // Sibling link (or NULL); links all subklasses of a klass
@@ -252,6 +282,16 @@ class Klass : public Klass_vtbl {
 
   jint        _modifier_flags;  // Processed access flags, for use by Class.getModifiers.
   AccessFlags _access_flags;    // Access flags. The class/interface distinction is stored here.
+
+  // (tw) Non-oop fields for enhanced class redefinition
+  jint                  _revision_number;        // The revision number for redefined classes
+  jint                  _redefinition_index;     // Index of this class when performing the redefinition
+  bool                  _subtype_changed;
+  int                   _redefinition_flags;     // Level of class redefinition
+  bool                  _is_copying_backwards;   // Does the class need to copy fields backwards? => possibly overwrite itself?
+  bool                  _original_field_offsets_changed; // Did the original field offsets of this class change during class redefinition?
+  int *                 _update_information;     // Update information
+  bool                  _is_redefining;
 
 #ifndef PRODUCT
   int           _verify_count;  // to avoid redundant verifies
@@ -300,6 +340,75 @@ class Klass : public Klass_vtbl {
 
   klassOop secondary_super_cache() const     { return _secondary_super_cache; }
   void set_secondary_super_cache(klassOop k) { oop_store_without_check((oop*) &_secondary_super_cache, (oop) k); }
+
+  // BEGIN class redefinition utilities
+
+  // double links between new and old version of a class
+  klassOop old_version() const                         { return _old_version; }
+  void set_old_version(klassOop klass)                 { assert(_old_version == NULL || klass == NULL, "Can only be set once!"); _old_version = klass; }
+  klassOop new_version() const                         { return _new_version; }
+  void set_new_version(klassOop klass)                 { assert(_new_version == NULL || klass == NULL, "Can only be set once!"); _new_version = klass; }
+
+  // A subtype of this class is no longer a subtype
+  bool has_subtype_changed() const                     { return _subtype_changed; }
+  void set_subtype_changed(bool b)                     { assert(is_newest_version() || new_version()->klass_part()->is_newest_version(), "must be newest or second newest version");
+                                                         _subtype_changed = b; }
+  // state of being redefined
+  int redefinition_index() const                       { return _redefinition_index; }
+  void set_redefinition_index(int index)               { _redefinition_index = index; }
+  void set_redefining(bool b)                          { _is_redefining = b; }
+  bool is_redefining() const                           { return _is_redefining; }
+  int redefinition_flags() const                       { return _redefinition_flags; }
+  bool check_redefinition_flag(int flags) const        { return (_redefinition_flags & flags) != 0; }
+  void set_redefinition_flags(int flags)               { _redefinition_flags = flags; }
+  void set_redefinition_flag(int flag)                 { _redefinition_flags |= flag; }
+  void clear_redefinition_flag(int flag)                 { _redefinition_flags &= ~flag; }
+  bool is_copying_backwards() const                    { return _is_copying_backwards; }
+  void set_copying_backwards(bool b)                   { _is_copying_backwards = b; }
+
+  // update information
+  int *update_information() const                      { return _update_information; }
+  void set_update_information(int *info)               { _update_information = info; }
+
+  bool is_same_or_older_version(klassOop klass) const {
+    if (Klass::cast(klass) == this) { return true; }
+    else if (_old_version == NULL) { return false; }
+    else { return _old_version->klass_part()->is_same_or_older_version(klass); }
+  }
+
+  // Revision number for redefined classes, -1 for originally loaded classes
+  jint revision_number() const {
+    return _revision_number;
+  }
+
+  bool was_redefined() const {
+    return _revision_number != -1;
+  }
+
+  void set_revision_number(jint number) {
+    _revision_number = number;
+  }
+
+  klassOop oldest_version() const {
+    if (_old_version == NULL) { return this->as_klassOop(); }
+    else { return _old_version->klass_part()->oldest_version(); };
+  }
+
+  klassOop newest_version() const {
+    if (_new_version == NULL) { return this->as_klassOop(); }
+    else { return _new_version->klass_part()->newest_version(); };
+  }
+
+  klassOop active_version() const {
+    if (_new_version == NULL || _new_version->klass_part()->is_redefining()) { return this->as_klassOop(); assert(!this->is_redefining(), "just checking"); }
+    else { return _new_version->klass_part()->active_version(); };
+  }
+
+  bool is_newest_version() const {
+    return _new_version == NULL;
+  }
+
+  // END class redefinition utilities
 
   objArrayOop secondary_supers() const { return _secondary_supers; }
   void set_secondary_supers(objArrayOop k) { oop_store_without_check((oop*) &_secondary_supers, (oop) k); }
@@ -361,6 +470,8 @@ class Klass : public Klass_vtbl {
   void     set_next_sibling(klassOop s);
 
   oop* adr_super()           const { return (oop*)&_super;             }
+  oop* adr_old_version()           const { return (oop*)&_old_version; }
+  oop* adr_new_version()           const { return (oop*)&_new_version; }
   oop* adr_primary_supers()  const { return (oop*)&_primary_supers[0]; }
   oop* adr_secondary_super_cache() const { return (oop*)&_secondary_super_cache; }
   oop* adr_secondary_supers()const { return (oop*)&_secondary_supers;  }
@@ -490,6 +601,7 @@ class Klass : public Klass_vtbl {
       return search_secondary_supers(k);
     }
   }
+  void update_supers_to_newest_version();
   bool search_secondary_supers(klassOop k) const;
 
   // Find LCA in class hierarchy

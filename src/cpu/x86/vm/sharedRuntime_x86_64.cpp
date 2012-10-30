@@ -2235,7 +2235,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
   }
 
   // RedefineClasses() tracing support for obsolete method entry
-  if (RC_TRACE_IN_RANGE(0x00001000, 0x00002000)) {
+  IF_TRACE_RC4 {
     // protect the args we've loaded
     save_args(masm, total_c_args, c_arg, out_regs);
     __ movoop(c_rarg1, JNIHandles::make_local(method()));

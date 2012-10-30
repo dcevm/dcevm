@@ -202,11 +202,14 @@ class Thread: public ThreadShadow {
  public:
   void enter_signal_handler() { _num_nested_signal++; }
   void leave_signal_handler() { _num_nested_signal--; }
-  bool is_inside_signal_handler() const { return _num_nested_signal > 0; }
+  bool is_inside_signal_handler() const  { return _num_nested_signal > 0; }
+  Mutex* redefine_classes_mutex() { return _redefine_classes_mutex; }
 
  private:
   // Debug tracing
   static void trace(const char* msg, const Thread* const thread) PRODUCT_RETURN;
+
+  Mutex* _redefine_classes_mutex;
 
   // Active_handles points to a block of handles
   JNIHandleBlock* _active_handles;
@@ -530,10 +533,15 @@ public:
   uintptr_t        _self_raw_id;      // used by get_thread (mutable)
   int              _lgrp_id;
 
+
+  bool             _pretend_new_universe;
+
  public:
   // Stack overflow support
   address stack_base() const           { assert(_stack_base != NULL,"Sanity check"); return _stack_base; }
 
+  void    set_pretend_new_universe(bool b) { if (_pretend_new_universe != b) { if (TraceRedefineClasses >= 5) tty->print_cr("Changing pretend universe to %d", (int)b); _pretend_new_universe = b; } }
+  bool    pretend_new_universe() { return _pretend_new_universe; }
   void    set_stack_base(address base) { _stack_base = base; }
   size_t  stack_size() const           { return _stack_size; }
   void    set_stack_size(size_t size)  { _stack_size = size; }
@@ -570,6 +578,7 @@ public:
   void print_owned_locks() const                 { print_owned_locks_on(tty);    }
   Monitor* owned_locks() const                   { return _owned_locks;          }
   bool owns_locks() const                        { return owned_locks() != NULL; }
+  bool owns_locks_but_redefine_classes_lock() const;
   bool owns_locks_but_compiled_lock() const;
 
   // Deadlock detection
@@ -1793,6 +1802,8 @@ class CompilerThread : public JavaThread {
   CompileTask*  _task;
   CompileQueue* _queue;
   BufferBlob*   _buffer_blob;
+  bool          _should_bailout;
+  Mutex*        _compilation_mutex;
 
   nmethod*      _scanned_nmethod;  // nmethod being scanned by the sweeper
 
@@ -1802,12 +1813,16 @@ class CompilerThread : public JavaThread {
 
   CompilerThread(CompileQueue* queue, CompilerCounters* counters);
 
+  bool should_bailout() const                    { return _should_bailout; }
+  void set_should_bailout(bool b)                { _should_bailout = false; }
+
   bool is_Compiler_thread() const                { return true; }
   // Hide this compiler thread from external view.
   bool is_hidden_from_external_view() const      { return true; }
 
   CompileQueue* queue()                          { return _queue; }
   CompilerCounters* counters()                   { return _counters; }
+  Mutex *compilation_mutex()                      { return _compilation_mutex; }
 
   // Get/set the thread's compilation environment.
   ciEnv*        env()                            { return _env; }

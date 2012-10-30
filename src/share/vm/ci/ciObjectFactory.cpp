@@ -764,3 +764,26 @@ void ciObjectFactory::print() {
              _unloaded_instances->length(),
              _unloaded_klasses->length());
 }
+
+int ciObjectFactory::compare_ciobjects(ciObject** a, ciObject** b) {
+  oop oop1 = (*a)->get_oop();
+  oop oop2 = (*b)->get_oop();
+  return ((oop1 > oop2) ? 1 : ((oop1 == oop2) ? 0 : -1));
+}
+
+// (DCEVM) Resoring the ciObject arrays after class redefinition
+void ciObjectFactory::resort_shared_ci_objects() {
+  _shared_ci_objects->sort(ciObjectFactory::compare_ciobjects);
+
+#ifdef ASSERT
+  if (CIObjectFactoryVerify) {
+    oop last = NULL;
+    for (int j = 0; j < _shared_ci_objects->length(); j++) {
+      oop o = _shared_ci_objects->at(j)->get_oop();
+      assert(last < o, "out of order");
+      last = o;
+    }
+  }
+#endif // ASSERT
+}
+

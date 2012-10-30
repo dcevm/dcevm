@@ -153,8 +153,8 @@ void CallInfo::set_common(KlassHandle resolved_klass, KlassHandle selected_klass
 // Klass resolution
 
 void LinkResolver::check_klass_accessability(KlassHandle ref_klass, KlassHandle sel_klass, TRAPS) {
-  if (!Reflection::verify_class_access(ref_klass->as_klassOop(),
-                                       sel_klass->as_klassOop(),
+  if (!Reflection::verify_class_access(ref_klass->as_klassOop()->klass_part()->newest_version(),
+                                       sel_klass->as_klassOop()->klass_part()->newest_version(),
                                        true)) {
     ResourceMark rm(THREAD);
     Exceptions::fthrow(
@@ -338,7 +338,7 @@ void LinkResolver::check_method_accessability(KlassHandle ref_klass,
   // We'll check for the method name first, as that's most likely
   // to be false (so we'll short-circuit out of these tests).
   if (sel_method->name() == vmSymbols::clone_name() &&
-      sel_klass() == SystemDictionary::Object_klass() &&
+      sel_klass()->klass_part()->newest_version() == SystemDictionary::Object_klass()->klass_part()->newest_version() &&
       resolved_klass->oop_is_array()) {
     // We need to change "protected" to "public".
     assert(flags.is_protected(), "clone not protected?");
@@ -634,7 +634,7 @@ void LinkResolver::resolve_field(FieldAccessInfo& result, constantPoolHandle poo
   }
 
   // Final fields can only be accessed from its own class.
-  if (is_put && fd.access_flags().is_final() && sel_klass() != pool->pool_holder()) {
+  if (is_put && fd.access_flags().is_final() && sel_klass() != pool->pool_holder()->klass_part()->active_version() && sel_klass() != pool->pool_holder()) {
     THROW(vmSymbols::java_lang_IllegalAccessError());
   }
 
@@ -839,7 +839,7 @@ void LinkResolver::resolve_virtual_call(CallInfo& result, Handle recv, KlassHand
                                         bool check_access, bool check_null_and_abstract, TRAPS) {
   methodHandle resolved_method;
   linktime_resolve_virtual_method(resolved_method, resolved_klass, method_name, method_signature, current_klass, check_access, CHECK);
-  runtime_resolve_virtual_method(result, resolved_method, resolved_klass, recv, receiver_klass, check_null_and_abstract, CHECK);
+  runtime_resolve_virtual_method(result, resolved_method, resolved_klass, recv, receiver_klass, current_klass, check_null_and_abstract, CHECK);
 }
 
 // throws linktime exceptions
@@ -869,6 +869,7 @@ void LinkResolver::runtime_resolve_virtual_method(CallInfo& result,
                                                   KlassHandle resolved_klass,
                                                   Handle recv,
                                                   KlassHandle recv_klass,
+                                                  KlassHandle current_klass,
                                                   bool check_null_and_abstract,
                                                   TRAPS) {
 
@@ -917,6 +918,9 @@ void LinkResolver::runtime_resolve_virtual_method(CallInfo& result,
       // recv_klass might be an arrayKlassOop but all vtables start at
       // the same place. The cast is to avoid virtual call and assertion.
       instanceKlass* inst = (instanceKlass*)recv_klass()->klass_part();
+
+      // (tw) Check that the receiver is a subtype of the holder of the resolved method.
+      assert(inst->is_subtype_of(resolved_method->method_holder()), "receiver and resolved method holder are inconsistent");
       selected_method = methodHandle(THREAD, inst->method_at_vtable(vtable_index));
     }
   }

@@ -49,6 +49,7 @@
 // Consider using GCC's __read_mostly.
 
 Mutex*   Patching_lock                = NULL;
+Mutex*   RedefineClasses_lock         = NULL;
 Monitor* SystemDictionary_lock        = NULL;
 Mutex*   PackageTable_lock            = NULL;
 Mutex*   CompiledIC_lock              = NULL;
@@ -278,6 +279,7 @@ void mutex_init() {
   def(MethodCompileQueue_lock      , Monitor, nonleaf+4,   true );
   def(Debug2_lock                  , Mutex  , nonleaf+4,   true );
   def(Debug3_lock                  , Mutex  , nonleaf+4,   true );
+  def(RedefineClasses_lock         , Mutex  , nonleaf+7,   false ); // for ensuring that class redefinition is not done in parallel
   def(CompileThread_lock           , Monitor, nonleaf+5,   false );
 
   def(JfrMsg_lock                  , Monitor, leaf,        true);

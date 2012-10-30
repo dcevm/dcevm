@@ -402,7 +402,7 @@ IRT_ENTRY(address, InterpreterRuntime::exception_handler_for_exception(JavaThrea
     assert(h_exception.not_null(), "NULL exceptions should be handled by athrow");
     assert(h_exception->is_oop(), "just checking");
     // Check that exception is a subclass of Throwable, otherwise we have a VerifyError
-    if (!(h_exception->is_a(SystemDictionary::Throwable_klass()))) {
+    if (!(h_exception->is_a(SystemDictionary::Throwable_klass()->klass_part()->newest_version())) && !(h_exception->is_a(SystemDictionary::Throwable_klass()))) {
       if (ExitVMOnVerifyError) vm_exit(-1);
       ShouldNotReachHere();
     }

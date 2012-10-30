@@ -47,7 +47,7 @@ class Verifier : AllStatic {
    * Otherwise, no exception is thrown and the return indicates the
    * error.
    */
-  static bool verify(instanceKlassHandle klass, Mode mode, bool should_verify_class, TRAPS);
+  static bool verify(instanceKlassHandle klass, Mode mode, bool should_verify_class, bool may_use_old_verifier, TRAPS);
 
   // Return false if the class is loaded by the bootstrap loader,
   // or if defineClass was called requesting skipping verification
@@ -256,7 +256,10 @@ class ClassVerifier : public StackObj {
 
   ErrorContext _error_context;  // contains information about an error
 
+public:
   void verify_method(methodHandle method, TRAPS);
+
+private:
   char* generate_code_data(methodHandle m, u4 code_length, TRAPS);
   void verify_exception_handler_table(u4 code_length, char* code_data,
                                       int& min, int& max, TRAPS);
@@ -329,6 +332,7 @@ class ClassVerifier : public StackObj {
 
   VerificationType object_type() const;
 
+  instanceKlassHandle _klass_to_verify;
   instanceKlassHandle _klass;  // the class being verified
   methodHandle        _method; // current method being verified
   VerificationType    _this_type; // the verification type of the current class

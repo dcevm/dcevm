@@ -144,87 +144,10 @@ bool Dictionary::do_unloading(BoolObjectClosure* is_alive) {
       probe = *p;
       klassOop e = probe->klass();
       oop class_loader = probe->loader();
-
       instanceKlass* ik = instanceKlass::cast(e);
-      if (ik->previous_versions() != NULL) {
-        // This klass has previous versions so see what we can cleanup
-        // while it is safe to do so.
-
-        int gc_count = 0;    // leave debugging breadcrumbs
-        int live_count = 0;
-
-        // RC_TRACE macro has an embedded ResourceMark
-        RC_TRACE(0x00000200, ("unload: %s: previous version length=%d",
-          ik->external_name(), ik->previous_versions()->length()));
-
-        for (int i = ik->previous_versions()->length() - 1; i >= 0; i--) {
-          // check the previous versions array for GC'ed weak refs
-          PreviousVersionNode * pv_node = ik->previous_versions()->at(i);
-          jobject cp_ref = pv_node->prev_constant_pool();
-          assert(cp_ref != NULL, "cp ref was unexpectedly cleared");
-          if (cp_ref == NULL) {
-            delete pv_node;
-            ik->previous_versions()->remove_at(i);
-            // Since we are traversing the array backwards, we don't have to
-            // do anything special with the index.
-            continue;  // robustness
-          }
-
-          constantPoolOop pvcp = (constantPoolOop)JNIHandles::resolve(cp_ref);
-          if (pvcp == NULL) {
-            // this entry has been GC'ed so remove it
-            delete pv_node;
-            ik->previous_versions()->remove_at(i);
-            // Since we are traversing the array backwards, we don't have to
-            // do anything special with the index.
-            gc_count++;
-            continue;
-          } else {
-            RC_TRACE(0x00000200, ("unload: previous version @%d is alive", i));
-            if (is_alive->do_object_b(pvcp)) {
-              live_count++;
-            } else {
-              guarantee(false, "sanity check");
-            }
-          }
-
-          GrowableArray<jweak>* method_refs = pv_node->prev_EMCP_methods();
-          if (method_refs != NULL) {
-            RC_TRACE(0x00000200, ("unload: previous methods length=%d",
-              method_refs->length()));
-            for (int j = method_refs->length() - 1; j >= 0; j--) {
-              jweak method_ref = method_refs->at(j);
-              assert(method_ref != NULL, "weak method ref was unexpectedly cleared");
-              if (method_ref == NULL) {
-                method_refs->remove_at(j);
-                // Since we are traversing the array backwards, we don't have to
-                // do anything special with the index.
-                continue;  // robustness
-              }
-
-              methodOop method = (methodOop)JNIHandles::resolve(method_ref);
-              if (method == NULL) {
-                // this method entry has been GC'ed so remove it
-                JNIHandles::destroy_weak_global(method_ref);
-                method_refs->remove_at(j);
-              } else {
-                // RC_TRACE macro has an embedded ResourceMark
-                RC_TRACE(0x00000200,
-                  ("unload: %s(%s): prev method @%d in version @%d is alive",
-                  method->name()->as_C_string(),
-                  method->signature()->as_C_string(), j, i));
-              }
-            }
-          }
-        }
-        assert(ik->previous_versions()->length() == live_count, "sanity check");
-        RC_TRACE(0x00000200,
-          ("unload: previous version stats: live=%d, GC'ed=%d", live_count,
-          gc_count));
-      }
-
+      
       // Non-unloadable classes were handled in always_strong_oops_do
-      if (!is_strongly_reachable(class_loader, e)) {
+      if (!ik->is_redefining() && !is_strongly_reachable(class_loader, e)) {
         // Entry was not visited in phase1 (negated test from phase1)
         assert(class_loader != NULL, "unloading entry with null class loader");
         oop k_def_class_loader = ik->class_loader();
@@ -325,6 +248,7 @@ void Dictionary::classes_do(void f(klassOop)) {
     }
   }
 }
+
 
 // Added for initialize_itable_for_klass to handle exceptions
 //   Just the classes from defining class loaders
@@ -433,6 +357,33 @@ void Dictionary::add_klass(Symbol* class_name, Handle class_loader,
   add_entry(index, entry);
 }
 
+// (tw) Updates the klass entry to point to the new klassOop. Necessary only for class redefinition.
+bool Dictionary::update_klass(int index, unsigned int hash, Symbol* name, Handle loader, KlassHandle k, KlassHandle old_class) {
+
+  // There are several entries for the same class in the dictionary: One extra entry for each parent classloader of the classloader of the class.
+  bool found = false;
+  for (int index = 0; index < table_size(); index++) {
+    for (DictionaryEntry* entry = bucket(index); entry != NULL; entry = entry->next()) {
+      if (entry->klass() == old_class()) {
+        entry->set_literal(k());
+        found = true;
+      }
+    }
+  }
+
+  return found;
+}
+
+// (tw) Undo previous updates to the system dictionary
+void Dictionary::rollback_redefinition() {
+  for (int index = 0; index < table_size(); index++) {
+    for (DictionaryEntry* entry = bucket(index); entry != NULL; entry = entry->next()) {
+      if (entry->klass()->klass_part()->is_redefining()) {
+        entry->set_literal(entry->klass()->klass_part()->old_version());
+      }
+    }
+  }
+}
 
 // This routine does not lock the system dictionary.
 //
@@ -459,12 +410,21 @@ DictionaryEntry* Dictionary::get_entry(int index, unsigned int hash,
   return NULL;
 }
 
+klassOop Dictionary::intercept_for_version(klassOop k) {
+  if (k == NULL) return k;
+
+  if (k->klass_part()->is_redefining() && !Thread::current()->pretend_new_universe()) {
+    return k->klass_part()->old_version();
+  }
+
+  return k;
+}
 
 klassOop Dictionary::find(int index, unsigned int hash, Symbol* name,
                           Handle loader, Handle protection_domain, TRAPS) {
   DictionaryEntry* entry = get_entry(index, hash, name, loader);
   if (entry != NULL && entry->is_valid_protection_domain(protection_domain)) {
-    return entry->klass();
+    return intercept_for_version(entry->klass());
   } else {
     return NULL;
   }
@@ -477,7 +437,7 @@ klassOop Dictionary::find_class(int index, unsigned int hash,
   assert (index == index_for(name, loader), "incorrect index?");
 
   DictionaryEntry* entry = get_entry(index, hash, name, loader);
-  return (entry != NULL) ? entry->klass() : (klassOop)NULL;
+  return intercept_for_version((entry != NULL) ? entry->klass() : (klassOop)NULL);
 }
 
 
@@ -489,7 +449,7 @@ klassOop Dictionary::find_shared_class(int index, unsigned int hash,
   assert (index == index_for(name, Handle()), "incorrect index?");
 
   DictionaryEntry* entry = get_entry(index, hash, name, Handle());
-  return (entry != NULL) ? entry->klass() : (klassOop)NULL;
+  return intercept_for_version((entry != NULL) ? entry->klass() : (klassOop)NULL);
 }
 
 

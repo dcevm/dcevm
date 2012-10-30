@@ -255,7 +255,7 @@ bool instanceKlass::verify_code(
   // 1) Verify the bytecodes
   Verifier::Mode mode =
     throw_verifyerror ? Verifier::ThrowException : Verifier::NoException;
-  return Verifier::verify(this_oop, mode, this_oop->should_verify_class(), CHECK_false);
+  return Verifier::verify(this_oop, mode, this_oop->should_verify_class(), true, CHECK_false);
 }
 
 
@@ -362,7 +362,13 @@ bool instanceKlass::link_class_impl(
                                    jt->get_thread_stat()->perf_recursion_counts_addr(),
                                    jt->get_thread_stat()->perf_timers_addr(),
                                    PerfClassTraceTime::CLASS_VERIFY);
+          if (this_oop->is_redefining()) {
+            Thread::current()->set_pretend_new_universe(true);
+          }
           bool verify_ok = verify_code(this_oop, throw_verifyerror, THREAD);
+          if (this_oop->is_redefining()) {
+            Thread::current()->set_pretend_new_universe(false);
+          }
           if (!verify_ok) {
             return false;
           }
@@ -400,7 +406,8 @@ bool instanceKlass::link_class_impl(
       }
 #endif
       this_oop->set_init_state(linked);
-      if (JvmtiExport::should_post_class_prepare()) {
+      // (tw) Must check for old version in order to prevent infinite loops.
+      if (JvmtiExport::should_post_class_prepare() && this_oop->old_version() == NULL /* JVMTI deadlock otherwise */) {
         Thread *thread = THREAD;
         assert(thread->is_Java_thread(), "thread->is_Java_thread()");
         JvmtiExport::post_class_prepare((JavaThread *) thread, this_oop());
@@ -454,7 +461,9 @@ void instanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
     // If we were to use wait() instead of waitInterruptibly() then
     // we might end up throwing IE from link/symbol resolution sites
     // that aren't expected to throw.  This would wreak havoc.  See 6320309.
-    while(this_oop->is_being_initialized() && !this_oop->is_reentrant_initialization(self)) {
+    // (tw) Wait also for the old class version to be fully initialized.
+    while((this_oop->is_being_initialized() && !this_oop->is_reentrant_initialization(self))
+          || (this_oop->old_version() != NULL && ((instanceKlass*)this_oop->old_version()->klass_part())->is_being_initialized())) {
         wait = true;
       ol.waitUninterruptibly(CHECK);
     }
@@ -673,6 +682,18 @@ bool instanceKlass::implements_interface(klassOop k) const {
   return false;
 }
 
+bool instanceKlass::implements_interface_any_version(klassOop k) const {
+  k = k->klass_part()->newest_version();
+  if (this->newest_version() == k) return true;
+  assert(Klass::cast(k)->is_interface(), "should be an interface class");
+  for (int i = 0; i < transitive_interfaces()->length(); i++) {
+    if (((klassOop)transitive_interfaces()->obj_at(i))->klass_part()->newest_version() == k) {
+      return true;
+    }
+  }
+  return false;
+}
+
 objArrayOop instanceKlass::allocate_objArray(int n, int length, TRAPS) {
   if (length < 0) THROW_0(vmSymbols::java_lang_NegativeArraySizeException());
   if (length > arrayOopDesc::max_array_length(T_OBJECT)) {
@@ -801,16 +822,20 @@ methodOop instanceKlass::class_initializer() {
 }
 
 void instanceKlass::call_class_initializer_impl(instanceKlassHandle this_oop, TRAPS) {
+
+  ResourceMark rm(THREAD);
   methodHandle h_method(THREAD, this_oop->class_initializer());
+
   assert(!this_oop->is_initialized(), "we cannot initialize twice");
   if (TraceClassInitialization) {
     tty->print("%d Initializing ", call_class_initializer_impl_counter++);
     this_oop->name()->print_value();
     tty->print_cr("%s (" INTPTR_FORMAT ")", h_method() == NULL ? "(no method)" : "", (address)this_oop());
   }
-  if (h_method() != NULL) {
-    JavaCallArguments args; // No arguments
-    JavaValue result(T_VOID);
+
+  JavaCallArguments args; // No arguments
+  JavaValue result(T_VOID);
+  if (!h_method.is_null() && (this_oop->old_version() == NULL || ((instanceKlass*)this_oop->old_version()->klass_part())->is_not_initialized())) {
     JavaCalls::call(&result, h_method, &args, CHECK); // Static call (no args)
   }
 }
@@ -949,6 +974,18 @@ void instanceKlass::methods_do(void f(methodOop method)) {
   }
 }
 
+void instanceKlass::store_update_information(GrowableArray<int> &values) {
+  int *arr = NEW_C_HEAP_ARRAY(int, values.length(), mtClass);
+  for (int i=0; i<values.length(); i++) {
+    arr[i] = values.at(i);
+  }
+  set_update_information(arr);
+}
+
+void instanceKlass::clear_update_information() {
+  FREE_C_HEAP_ARRAY(int, update_information(), mtClass);
+  set_update_information(NULL);
+}
 
 void instanceKlass::do_local_static_fields(FieldClosure* cl) {
   for (JavaFieldStream fs(this); !fs.done(); fs.next()) {
@@ -1368,6 +1405,20 @@ jmethodID instanceKlass::jmethod_id_or_null(methodOop method) {
   return id;
 }
 
+bool instanceKlass::update_jmethod_id(methodOop method, jmethodID newMethodID) {
+  size_t idnum = (size_t)method->method_idnum();
+  jmethodID* jmeths = methods_jmethod_ids_acquire();
+  size_t length;                                // length assigned as debugging crumb
+  jmethodID id = NULL;
+  if (jmeths != NULL &&                         // If there is a cache
+    (length = (size_t)jmeths[0]) > idnum) {   // and if it is long enough,
+      jmeths[idnum+1] = newMethodID;                       // Set the id (may be NULL)
+      return true;
+  }
+
+  return false;
+}
+
 
 // Cache an itable index
 void instanceKlass::set_cached_itable_index(size_t idnum, int index) {
@@ -1527,6 +1578,13 @@ void instanceKlass::remove_dependent_nmethod(nmethod* nm) {
     last = b;
     b = b->next();
   }
+
+  // (tw) Hack as dependencies get wrong version of klassOop
+  if(this->old_version() != NULL) {
+    ((instanceKlass *)this->old_version()->klass_part())->remove_dependent_nmethod(nm);
+    return;
+  }
+
 #ifdef ASSERT
   tty->print_cr("### %s can't find dependent nmethod:", this->external_name());
   nm->print();
@@ -1920,16 +1978,6 @@ void instanceKlass::release_C_heap_structures() {
   if (breakpoints() != 0x0) {
     methods_do(clear_all_breakpoints);
     assert(breakpoints() == 0x0, "should have cleared breakpoints");
-  }
-
-  // deallocate information about previous versions
-  if (_previous_versions != NULL) {
-    for (int i = _previous_versions->length() - 1; i >= 0; i--) {
-      PreviousVersionNode * pv_node = _previous_versions->at(i);
-      delete pv_node;
-    }
-    delete _previous_versions;
-    _previous_versions = NULL;
   }
 
   // deallocate the cached class file
@@ -2545,275 +2593,10 @@ void instanceKlass::set_init_state(ClassState state) {
 }
 #endif
 
-
-// RedefineClasses() support for previous versions:
-
-// Add an information node that contains weak references to the
-// interesting parts of the previous version of the_class.
-// This is also where we clean out any unused weak references.
-// Note that while we delete nodes from the _previous_versions
-// array, we never delete the array itself until the klass is
-// unloaded. The has_been_redefined() query depends on that fact.
-//
-void instanceKlass::add_previous_version(instanceKlassHandle ikh,
-       BitMap* emcp_methods, int emcp_method_count) {
-  assert(Thread::current()->is_VM_thread(),
-         "only VMThread can add previous versions");
-
-  if (_previous_versions == NULL) {
-    // This is the first previous version so make some space.
-    // Start with 2 elements under the assumption that the class
-    // won't be redefined much.
-    _previous_versions =  new (ResourceObj::C_HEAP, mtClass)
-                            GrowableArray<PreviousVersionNode *>(2, true);
-  }
-
-  // RC_TRACE macro has an embedded ResourceMark
-  RC_TRACE(0x00000100, ("adding previous version ref for %s @%d, EMCP_cnt=%d",
-    ikh->external_name(), _previous_versions->length(), emcp_method_count));
-  constantPoolHandle cp_h(ikh->constants());
-  jobject cp_ref;
-  if (cp_h->is_shared()) {
-    // a shared ConstantPool requires a regular reference; a weak
-    // reference would be collectible
-    cp_ref = JNIHandles::make_global(cp_h);
-  } else {
-    cp_ref = JNIHandles::make_weak_global(cp_h);
-  }
-  PreviousVersionNode * pv_node = NULL;
-  objArrayOop old_methods = ikh->methods();
-
-  if (emcp_method_count == 0) {
-    // non-shared ConstantPool gets a weak reference
-    pv_node = new PreviousVersionNode(cp_ref, !cp_h->is_shared(), NULL);
-    RC_TRACE(0x00000400,
-      ("add: all methods are obsolete; flushing any EMCP weak refs"));
-  } else {
-    int local_count = 0;
-    GrowableArray<jweak>* method_refs = new (ResourceObj::C_HEAP, mtClass)
-      GrowableArray<jweak>(emcp_method_count, true);
-    for (int i = 0; i < old_methods->length(); i++) {
-      if (emcp_methods->at(i)) {
-        // this old method is EMCP so save a weak ref
-        methodOop old_method = (methodOop) old_methods->obj_at(i);
-        methodHandle old_method_h(old_method);
-        jweak method_ref = JNIHandles::make_weak_global(old_method_h);
-        method_refs->append(method_ref);
-        if (++local_count >= emcp_method_count) {
-          // no more EMCP methods so bail out now
-          break;
-        }
-      }
-    }
-    // non-shared ConstantPool gets a weak reference
-    pv_node = new PreviousVersionNode(cp_ref, !cp_h->is_shared(), method_refs);
-  }
-
-  _previous_versions->append(pv_node);
-
-  // Using weak references allows the interesting parts of previous
-  // classes to be GC'ed when they are no longer needed. Since the
-  // caller is the VMThread and we are at a safepoint, this is a good
-  // time to clear out unused weak references.
-
-  RC_TRACE(0x00000400, ("add: previous version length=%d",
-    _previous_versions->length()));
-
-  // skip the last entry since we just added it
-  for (int i = _previous_versions->length() - 2; i >= 0; i--) {
-    // check the previous versions array for a GC'ed weak refs
-    pv_node = _previous_versions->at(i);
-    cp_ref = pv_node->prev_constant_pool();
-    assert(cp_ref != NULL, "cp ref was unexpectedly cleared");
-    if (cp_ref == NULL) {
-      delete pv_node;
-      _previous_versions->remove_at(i);
-      // Since we are traversing the array backwards, we don't have to
-      // do anything special with the index.
-      continue;  // robustness
-    }
-
-    constantPoolOop cp = (constantPoolOop)JNIHandles::resolve(cp_ref);
-    if (cp == NULL) {
-      // this entry has been GC'ed so remove it
-      delete pv_node;
-      _previous_versions->remove_at(i);
-      // Since we are traversing the array backwards, we don't have to
-      // do anything special with the index.
-      continue;
-    } else {
-      RC_TRACE(0x00000400, ("add: previous version @%d is alive", i));
-    }
-
-    GrowableArray<jweak>* method_refs = pv_node->prev_EMCP_methods();
-    if (method_refs != NULL) {
-      RC_TRACE(0x00000400, ("add: previous methods length=%d",
-        method_refs->length()));
-      for (int j = method_refs->length() - 1; j >= 0; j--) {
-        jweak method_ref = method_refs->at(j);
-        assert(method_ref != NULL, "weak method ref was unexpectedly cleared");
-        if (method_ref == NULL) {
-          method_refs->remove_at(j);
-          // Since we are traversing the array backwards, we don't have to
-          // do anything special with the index.
-          continue;  // robustness
-        }
-
-        methodOop method = (methodOop)JNIHandles::resolve(method_ref);
-        if (method == NULL || emcp_method_count == 0) {
-          // This method entry has been GC'ed or the current
-          // RedefineClasses() call has made all methods obsolete
-          // so remove it.
-          JNIHandles::destroy_weak_global(method_ref);
-          method_refs->remove_at(j);
-        } else {
-          // RC_TRACE macro has an embedded ResourceMark
-          RC_TRACE(0x00000400,
-            ("add: %s(%s): previous method @%d in version @%d is alive",
-            method->name()->as_C_string(), method->signature()->as_C_string(),
-            j, i));
-        }
-      }
-    }
-  }
-
-  int obsolete_method_count = old_methods->length() - emcp_method_count;
-
-  if (emcp_method_count != 0 && obsolete_method_count != 0 &&
-      _previous_versions->length() > 1) {
-    // We have a mix of obsolete and EMCP methods. If there is more
-    // than the previous version that we just added, then we have to
-    // clear out any matching EMCP method entries the hard way.
-    int local_count = 0;
-    for (int i = 0; i < old_methods->length(); i++) {
-      if (!emcp_methods->at(i)) {
-        // only obsolete methods are interesting
-        methodOop old_method = (methodOop) old_methods->obj_at(i);
-        Symbol* m_name = old_method->name();
-        Symbol* m_signature = old_method->signature();
-
-        // skip the last entry since we just added it
-        for (int j = _previous_versions->length() - 2; j >= 0; j--) {
-          // check the previous versions array for a GC'ed weak refs
-          pv_node = _previous_versions->at(j);
-          cp_ref = pv_node->prev_constant_pool();
-          assert(cp_ref != NULL, "cp ref was unexpectedly cleared");
-          if (cp_ref == NULL) {
-            delete pv_node;
-            _previous_versions->remove_at(j);
-            // Since we are traversing the array backwards, we don't have to
-            // do anything special with the index.
-            continue;  // robustness
-          }
-
-          constantPoolOop cp = (constantPoolOop)JNIHandles::resolve(cp_ref);
-          if (cp == NULL) {
-            // this entry has been GC'ed so remove it
-            delete pv_node;
-            _previous_versions->remove_at(j);
-            // Since we are traversing the array backwards, we don't have to
-            // do anything special with the index.
-            continue;
-          }
-
-          GrowableArray<jweak>* method_refs = pv_node->prev_EMCP_methods();
-          if (method_refs == NULL) {
-            // We have run into a PreviousVersion generation where
-            // all methods were made obsolete during that generation's
-            // RedefineClasses() operation. At the time of that
-            // operation, all EMCP methods were flushed so we don't
-            // have to go back any further.
-            //
-            // A NULL method_refs is different than an empty method_refs.
-            // We cannot infer any optimizations about older generations
-            // from an empty method_refs for the current generation.
-            break;
-          }
-
-          for (int k = method_refs->length() - 1; k >= 0; k--) {
-            jweak method_ref = method_refs->at(k);
-            assert(method_ref != NULL,
-              "weak method ref was unexpectedly cleared");
-            if (method_ref == NULL) {
-              method_refs->remove_at(k);
-              // Since we are traversing the array backwards, we don't
-              // have to do anything special with the index.
-              continue;  // robustness
-            }
-
-            methodOop method = (methodOop)JNIHandles::resolve(method_ref);
-            if (method == NULL) {
-              // this method entry has been GC'ed so skip it
-              JNIHandles::destroy_weak_global(method_ref);
-              method_refs->remove_at(k);
-              continue;
-            }
-
-            if (method->name() == m_name &&
-                method->signature() == m_signature) {
-              // The current RedefineClasses() call has made all EMCP
-              // versions of this method obsolete so mark it as obsolete
-              // and remove the weak ref.
-              RC_TRACE(0x00000400,
-                ("add: %s(%s): flush obsolete method @%d in version @%d",
-                m_name->as_C_string(), m_signature->as_C_string(), k, j));
-
-              method->set_is_obsolete();
-              JNIHandles::destroy_weak_global(method_ref);
-              method_refs->remove_at(k);
-              break;
-            }
-          }
-
-          // The previous loop may not find a matching EMCP method, but
-          // that doesn't mean that we can optimize and not go any
-          // further back in the PreviousVersion generations. The EMCP
-          // method for this generation could have already been GC'ed,
-          // but there still may be an older EMCP method that has not
-          // been GC'ed.
-        }
-
-        if (++local_count >= obsolete_method_count) {
-          // no more obsolete methods so bail out now
-          break;
-        }
-      }
-    }
-  }
-} // end add_previous_version()
-
-
 // Determine if instanceKlass has a previous version.
 bool instanceKlass::has_previous_version() const {
-  if (_previous_versions == NULL) {
-    // no previous versions array so answer is easy
-    return false;
-  }
-
-  for (int i = _previous_versions->length() - 1; i >= 0; i--) {
-    // Check the previous versions array for an info node that hasn't
-    // been GC'ed
-    PreviousVersionNode * pv_node = _previous_versions->at(i);
-
-    jobject cp_ref = pv_node->prev_constant_pool();
-    assert(cp_ref != NULL, "cp reference was unexpectedly cleared");
-    if (cp_ref == NULL) {
-      continue;  // robustness
-    }
-
-    constantPoolOop cp = (constantPoolOop)JNIHandles::resolve(cp_ref);
-    if (cp != NULL) {
-      // we have at least one previous version
-      return true;
-    }
-
-    // We don't have to check the method refs. If the constant pool has
-    // been GC'ed then so have the methods.
-  }
-
-  // all of the underlying nodes' info has been GC'ed
-  return false;
-} // end has_previous_version()
+  return _old_version != NULL;
+}
 
 methodOop instanceKlass::method_with_idnum(int idnum) {
   methodOop m = NULL;
@@ -2854,153 +2637,3 @@ void instanceKlass::set_methods_annotations_of(int idnum, typeArrayOop anno, obj
   } // if no array and idnum isn't included there is nothing to do
 }
 
-// Construct a PreviousVersionNode entry for the array hung off
-// the instanceKlass.
-PreviousVersionNode::PreviousVersionNode(jobject prev_constant_pool,
-  bool prev_cp_is_weak, GrowableArray<jweak>* prev_EMCP_methods) {
-
-  _prev_constant_pool = prev_constant_pool;
-  _prev_cp_is_weak = prev_cp_is_weak;
-  _prev_EMCP_methods = prev_EMCP_methods;
-}
-
-
-// Destroy a PreviousVersionNode
-PreviousVersionNode::~PreviousVersionNode() {
-  if (_prev_constant_pool != NULL) {
-    if (_prev_cp_is_weak) {
-      JNIHandles::destroy_weak_global(_prev_constant_pool);
-    } else {
-      JNIHandles::destroy_global(_prev_constant_pool);
-    }
-  }
-
-  if (_prev_EMCP_methods != NULL) {
-    for (int i = _prev_EMCP_methods->length() - 1; i >= 0; i--) {
-      jweak method_ref = _prev_EMCP_methods->at(i);
-      if (method_ref != NULL) {
-        JNIHandles::destroy_weak_global(method_ref);
-      }
-    }
-    delete _prev_EMCP_methods;
-  }
-}
-
-
-// Construct a PreviousVersionInfo entry
-PreviousVersionInfo::PreviousVersionInfo(PreviousVersionNode *pv_node) {
-  _prev_constant_pool_handle = constantPoolHandle();  // NULL handle
-  _prev_EMCP_method_handles = NULL;
-
-  jobject cp_ref = pv_node->prev_constant_pool();
-  assert(cp_ref != NULL, "constant pool ref was unexpectedly cleared");
-  if (cp_ref == NULL) {
-    return;  // robustness
-  }
-
-  constantPoolOop cp = (constantPoolOop)JNIHandles::resolve(cp_ref);
-  if (cp == NULL) {
-    // Weak reference has been GC'ed. Since the constant pool has been
-    // GC'ed, the methods have also been GC'ed.
-    return;
-  }
-
-  // make the constantPoolOop safe to return
-  _prev_constant_pool_handle = constantPoolHandle(cp);
-
-  GrowableArray<jweak>* method_refs = pv_node->prev_EMCP_methods();
-  if (method_refs == NULL) {
-    // the instanceKlass did not have any EMCP methods
-    return;
-  }
-
-  _prev_EMCP_method_handles = new GrowableArray<methodHandle>(10);
-
-  int n_methods = method_refs->length();
-  for (int i = 0; i < n_methods; i++) {
-    jweak method_ref = method_refs->at(i);
-    assert(method_ref != NULL, "weak method ref was unexpectedly cleared");
-    if (method_ref == NULL) {
-      continue;  // robustness
-    }
-
-    methodOop method = (methodOop)JNIHandles::resolve(method_ref);
-    if (method == NULL) {
-      // this entry has been GC'ed so skip it
-      continue;
-    }
-
-    // make the methodOop safe to return
-    _prev_EMCP_method_handles->append(methodHandle(method));
-  }
-}
-
-
-// Destroy a PreviousVersionInfo
-PreviousVersionInfo::~PreviousVersionInfo() {
-  // Since _prev_EMCP_method_handles is not C-heap allocated, we
-  // don't have to delete it.
-}
-
-
-// Construct a helper for walking the previous versions array
-PreviousVersionWalker::PreviousVersionWalker(instanceKlass *ik) {
-  _previous_versions = ik->previous_versions();
-  _current_index = 0;
-  // _hm needs no initialization
-  _current_p = NULL;
-}
-
-
-// Destroy a PreviousVersionWalker
-PreviousVersionWalker::~PreviousVersionWalker() {
-  // Delete the current info just in case the caller didn't walk to
-  // the end of the previous versions list. No harm if _current_p is
-  // already NULL.
-  delete _current_p;
-
-  // When _hm is destroyed, all the Handles returned in
-  // PreviousVersionInfo objects will be destroyed.
-  // Also, after this destructor is finished it will be
-  // safe to delete the GrowableArray allocated in the
-  // PreviousVersionInfo objects.
-}
-
-
-// Return the interesting information for the next previous version
-// of the klass. Returns NULL if there are no more previous versions.
-PreviousVersionInfo* PreviousVersionWalker::next_previous_version() {
-  if (_previous_versions == NULL) {
-    // no previous versions so nothing to return
-    return NULL;
-  }
-
-  delete _current_p;  // cleanup the previous info for the caller
-  _current_p = NULL;  // reset to NULL so we don't delete same object twice
-
-  int length = _previous_versions->length();
-
-  while (_current_index < length) {
-    PreviousVersionNode * pv_node = _previous_versions->at(_current_index++);
-    PreviousVersionInfo * pv_info = new (ResourceObj::C_HEAP, mtClass)
-                                          PreviousVersionInfo(pv_node);
-
-    constantPoolHandle cp_h = pv_info->prev_constant_pool_handle();
-    if (cp_h.is_null()) {
-      delete pv_info;
-
-      // The underlying node's info has been GC'ed so try the next one.
-      // We don't have to check the methods. If the constant pool has
-      // GC'ed then so have the methods.
-      continue;
-    }
-
-    // Found a node with non GC'ed info so return it. The caller will
-    // need to delete pv_info when they are done with it.
-    _current_p = pv_info;
-    return pv_info;
-  }
-
-  // all of the underlying nodes' info has been GC'ed
-  return NULL;
-} // end next_previous_version()

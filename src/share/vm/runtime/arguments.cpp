@@ -54,8 +54,8 @@
 #include "gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp"
 #endif
 
-// Note: This is a special bug reporting site for the JVM
-#define DEFAULT_VENDOR_URL_BUG "http://bugreport.sun.com/bugreport/crash.jsp"
+// (tw) The DCE VM has its own JIRA bug tracking system.
+#define DEFAULT_VENDOR_URL_BUG "http://ssw.jku.at/dcevm/bugreport/"
 #define DEFAULT_JAVA_LAUNCHER  "generic"
 
 char**  Arguments::_jvm_flags_array             = NULL;
@@ -1792,6 +1792,16 @@ bool Arguments::check_gc_consistency() {
     status = false;
   }
 
+  // (tw) Must use serial GC. This limitation applies because the instance size changing GC modifications
+  // are only built into the mark and compact algorithm.
+  if (!UseSerialGC && i >= 1) {
+    //jio_fprintf(defaultStream::error_stream(),
+    //  "Must use the serial GC in the Dynamic Code Evolution VM\n");
+    //status = false;
+  } else {
+    UseSerialGC = true;
+  }
+
   return status;
 }
 
@@ -3208,7 +3218,7 @@ jint Arguments::parse(const JavaVMInitArgs* args) {
 
   // Set flags if Aggressive optimization flags (-XX:+AggressiveOpts) enabled.
   set_aggressive_opts_flags();
-
+#ifndef COMPILER2
   // Turn off biased locking for locking debug mode flags,
   // which are subtlely different from each other but neither works with
   // biased locking.
@@ -3225,6 +3235,7 @@ jint Arguments::parse(const JavaVMInitArgs* args) {
     }
     UseBiasedLocking = false;
   }
+#endif
 
 #ifdef CC_INTERP
   // Clear flags not supported by the C++ interpreter

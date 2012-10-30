@@ -2074,15 +2074,14 @@ bool nmethod::is_evol_dependent_on(klassOop dependee) {
       methodOop method = deps.method_argument(0);
       for (int j = 0; j < dependee_methods->length(); j++) {
         if ((methodOop) dependee_methods->obj_at(j) == method) {
-          // RC_TRACE macro has an embedded ResourceMark
-          RC_TRACE(0x01000000,
-            ("Found evol dependency of nmethod %s.%s(%s) compile_id=%d on method %s.%s(%s)",
+          ResourceMark rm(Thread::current());
+          TRACE_RC3("Found evol dependency of nmethod %s.%s(%s) compile_id=%d on method %s.%s(%s)",
             _method->method_holder()->klass_part()->external_name(),
             _method->name()->as_C_string(),
             _method->signature()->as_C_string(), compile_id(),
             method->method_holder()->klass_part()->external_name(),
             method->name()->as_C_string(),
-            method->signature()->as_C_string()));
+            method->signature()->as_C_string());
           if (TraceDependencies || LogCompilation)
             deps.log_dependency(dependee);
           return true;

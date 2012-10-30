@@ -92,7 +92,8 @@ void fieldDescriptor::initialize(klassOop k, int index) {
   instanceKlass* ik = instanceKlass::cast(k);
   _cp = ik->constants();
   FieldInfo* f = ik->field(index);
-  assert(!f->is_internal(), "regular Java fields only");
+  // (tw) do we need this?
+//  assert(!f->is_internal(), "regular Java fields only");
 
   _access_flags = accessFlags_from(f->access_flags());
   guarantee(f->name_index() != 0 && f->signature_index() != 0, "bad constant pool index for fieldDescriptor");

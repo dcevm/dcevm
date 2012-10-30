@@ -621,6 +621,10 @@ klassOop java_lang_Class::as_klassOop(oop java_class) {
   assert(java_lang_Class::is_instance(java_class), "must be a Class object");
   klassOop k = klassOop(java_class->obj_field(_klass_offset));
   assert(k == NULL || k->is_klass(), "type check");
+  // Necessary to make old verifier work.
+  if (Thread::current()->pretend_new_universe()) {
+    k = k->klass_part()->newest_version();
+  }
   return k;
 }
 
@@ -1541,6 +1545,7 @@ void java_lang_Throwable::fill_in_stack_trace(Handle throwable, methodHandle met
         skip_throwableInit_check = true;
       }
     }
+    method = method->newest_version();
     if (method->is_hidden()) {
       if (skip_hidden)  continue;
     }

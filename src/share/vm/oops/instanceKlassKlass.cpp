@@ -358,7 +358,7 @@ instanceKlassKlass::allocate_instance_klass(Symbol* name, int vtable_len, int it
                                             unsigned nonstatic_oop_map_count,
                                             AccessFlags access_flags,
                                             ReferenceType rt,
-                                            KlassHandle host_klass, TRAPS) {
+                                            KlassHandle host_klass, KlassHandle old_klass, TRAPS) {
 
   const int nonstatic_oop_map_size =
     instanceKlass::nonstatic_oop_map_size(nonstatic_oop_map_count);
@@ -435,7 +435,6 @@ instanceKlassKlass::allocate_instance_klass(Symbol* name, int vtable_len, int it
     ik->set_jni_ids(NULL);
     ik->set_osr_nmethods_head(NULL);
     ik->set_breakpoints(NULL);
-    ik->init_previous_versions();
     ik->set_generic_signature(NULL);
     ik->release_set_methods_jmethod_ids(NULL);
     ik->release_set_methods_cached_itable_indices(NULL);
@@ -480,6 +479,28 @@ void instanceKlassKlass::oop_print_on(oop obj, outputStream* st) {
   instanceKlass* ik = instanceKlass::cast(klassOop(obj));
   klassKlass::oop_print_on(obj, st);
 
+  // (tw) Output revision number and revision numbers of older / newer and oldest / newest version of this class.
+
+  st->print(BULLET"revision:          %d", ik->revision_number());                    
+  
+  if (ik->new_version() != NULL) {
+    st->print(" (newer=%d)", ik->new_version()->klass_part()->revision_number());
+  }
+
+  if (ik->newest_version() != ik->new_version() && ik->newest_version() != obj) {
+    st->print(" (newest=%d)", ik->newest_version()->klass_part()->revision_number());
+  }
+
+  if (ik->old_version() != NULL) {
+    st->print(" (old=%d)", ik->old_version()->klass_part()->revision_number());
+  }
+
+  if (ik->oldest_version() != ik->old_version() && ik->oldest_version() != obj) {
+    st->print(" (oldest=%d)", ik->oldest_version()->klass_part()->revision_number());
+  }
+
+  st->cr();
+  
   st->print(BULLET"instance size:     %d", ik->size_helper());                        st->cr();
   st->print(BULLET"klass size:        %d", ik->object_size());                        st->cr();
   st->print(BULLET"access:            "); ik->access_flags().print_on(st);            st->cr();
@@ -536,26 +557,6 @@ void instanceKlassKlass::oop_print_on(oop obj, outputStream* st) {
     st->print_cr("%s", ik->source_debug_extension());
     st->cr();
   }
-
-  {
-    ResourceMark rm;
-    // PreviousVersionInfo objects returned via PreviousVersionWalker
-    // contain a GrowableArray of handles. We have to clean up the
-    // GrowableArray _after_ the PreviousVersionWalker destructor
-    // has destroyed the handles.
-    {
-      bool have_pv = false;
-      PreviousVersionWalker pvw(ik);
-      for (PreviousVersionInfo * pv_info = pvw.next_previous_version();
-           pv_info != NULL; pv_info = pvw.next_previous_version()) {
-        if (!have_pv)
-          st->print(BULLET"previous version:  ");
-        have_pv = true;
-        pv_info->prev_constant_pool_handle()()->print_value_on(st);
-      }
-      if (have_pv)  st->cr();
-    } // pvw is cleaned up
-  } // rm is cleaned up
 
   if (ik->generic_signature() != NULL) {
     st->print(BULLET"generic signature: ");
@@ -663,7 +664,7 @@ void instanceKlassKlass::oop_verify_on(oop obj, outputStream* st) {
       }
       guarantee(sib->as_klassOop()->is_klass(), "should be klass");
       guarantee(sib->as_klassOop()->is_perm(),  "should be in permspace");
-      guarantee(sib->super() == super, "siblings should have same superklass");
+      guarantee(sib->super() == super || super->klass_part()->newest_version() == SystemDictionary::Object_klass(), "siblings should have same superklass");
       sib = sib->next_sibling();
     }
 

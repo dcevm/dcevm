@@ -80,7 +80,7 @@ class oopFactory: AllStatic {
                                            unsigned int nonstatic_oop_map_count,
                                            AccessFlags access_flags,
                                            ReferenceType rt,
-                                           KlassHandle host_klass, TRAPS);
+                                           KlassHandle host_klass, KlassHandle old_klass, TRAPS);
 
   // Methods
 private:

@@ -213,6 +213,7 @@ class java_lang_String : AllStatic {
 
 class java_lang_Class : AllStatic {
   friend class VMStructs;
+  friend class VM_RedefineClasses;
 
  private:
   // The fake offsets are added by the class loader when java.lang.Class is loaded
@@ -248,7 +249,7 @@ class java_lang_Class : AllStatic {
   static void print_signature(oop java_class, outputStream *st);
   // Testing
   static bool is_instance(oop obj) {
-    return obj != NULL && obj->klass() == SystemDictionary::Class_klass();
+    return obj != NULL && (obj->klass()->klass_part()->newest_version() == SystemDictionary::Class_klass()->klass_part()->newest_version());
   }
   static bool is_primitive(oop java_class);
   static BasicType primitive_type(oop java_class);

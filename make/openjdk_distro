@@ -27,6 +27,6 @@
 #
 
 # Don't put quotes (fail windows build).
-HOTSPOT_VM_DISTRO=OpenJDK
+HOTSPOT_VM_DISTRO=Dynamic Code Evolution
 COMPANY_NAME=
 PRODUCT_NAME=OpenJDK

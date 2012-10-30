@@ -100,6 +100,8 @@
 #include "gc_implementation/parallelScavenge/parallelScavengeHeap.hpp"
 #endif
 
+bool Universe::_is_redefining_gc_run = false;
+
 // Known objects
 klassOop Universe::_boolArrayKlassObj                 = NULL;
 klassOop Universe::_byteArrayKlassObj                 = NULL;
@@ -202,6 +204,42 @@ void Universe::system_classes_do(void f(klassOop)) {
   f(instanceKlassKlassObj());
   f(constantPoolKlassObj());
   f(systemObjArrayKlassObj());
+}
+
+// (tw) This method should iterate all pointers that are not within heap objects.
+void Universe::root_oops_do(OopClosure *oopClosure) {
+
+  class AlwaysTrueClosure: public BoolObjectClosure {
+  public:
+    void do_object(oop p) { ShouldNotReachHere(); }
+    bool do_object_b(oop p) { return true; }
+  };
+  AlwaysTrueClosure always_true;
+
+  Universe::oops_do(oopClosure);
+//  ReferenceProcessor::oops_do(oopClosure); (tw) check why no longer there
+  JNIHandles::oops_do(oopClosure);   // Global (strong) JNI handles
+  Threads::oops_do(oopClosure, NULL);
+  ObjectSynchronizer::oops_do(oopClosure);
+  FlatProfiler::oops_do(oopClosure);
+  JvmtiExport::oops_do(oopClosure);
+
+  // Now adjust pointers in remaining weak roots.  (All of which should
+  // have been cleared if they pointed to non-surviving objects.)
+  // Global (weak) JNI handles
+  JNIHandles::weak_oops_do(&always_true, oopClosure);
+
+  CodeCache::oops_do(oopClosure);
+  StringTable::oops_do(oopClosure);
+  
+  // (tw) TODO: Check if this is correct?
+  //CodeCache::scavenge_root_nmethods_oops_do(oopClosure);
+  //Management::oops_do(oopClosure);
+  //ref_processor()->weak_oops_do(&oopClosure);
+  //PSScavenge::reference_processor()->weak_oops_do(&oopClosure);
+
+  // SO_AllClasses
+  SystemDictionary::oops_do(oopClosure);
 }
 
 void Universe::oops_do(OopClosure* f, bool do_all) {
@@ -1590,10 +1628,9 @@ void ActiveMethodOopsCache::add_previous_version(const methodOop method) {
   }
 
   // RC_TRACE macro has an embedded ResourceMark
-  RC_TRACE(0x00000100,
-    ("add: %s(%s): adding prev version ref for cached method @%d",
+  TRACE_RC2("add: %s(%s): adding prev version ref for cached method @%d",
     method->name()->as_C_string(), method->signature()->as_C_string(),
-    _prev_methods->length()));
+    _prev_methods->length());
 
   methodHandle method_h(method);
   jweak method_ref = JNIHandles::make_weak_global(method_h);
@@ -1620,9 +1657,8 @@ void ActiveMethodOopsCache::add_previous_version(const methodOop method) {
       JNIHandles::destroy_weak_global(method_ref);
       _prev_methods->remove_at(i);
     } else {
-      // RC_TRACE macro has an embedded ResourceMark
-      RC_TRACE(0x00000400, ("add: %s(%s): previous cached method @%d is alive",
-        m->name()->as_C_string(), m->signature()->as_C_string(), i));
+      TRACE_RC2("add: %s(%s): previous cached method @%d is alive",
+        m->name()->as_C_string(), m->signature()->as_C_string(), i);
     }
   }
 } // end add_previous_version()

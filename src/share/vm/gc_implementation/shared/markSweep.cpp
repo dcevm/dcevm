@@ -32,6 +32,8 @@
 #include "oops/objArrayKlass.inline.hpp"
 #include "oops/oop.inline.hpp"
 
+GrowableArray<oop>*     MarkSweep::_rescued_oops       = NULL;
+
 Stack<oop, mtGC>              MarkSweep::_marking_stack;
 Stack<DataLayout*, mtGC>      MarkSweep::_revisit_mdo_stack;
 Stack<Klass*, mtGC>           MarkSweep::_revisit_klass_stack;
@@ -357,3 +359,97 @@ void MarkSweep::trace(const char* msg) {
 }
 
 #endif
+
+// (tw) Copy the rescued objects to their destination address after compaction.
+void MarkSweep::copy_rescued_objects_back() {
+
+  if (_rescued_oops != NULL) {
+
+    for (int i=0; i<_rescued_oops->length(); i++) {
+      oop rescued_obj = _rescued_oops->at(i);
+
+      int size = rescued_obj->size();
+      oop new_obj = rescued_obj->forwardee();
+
+      assert(rescued_obj->blueprint()->new_version() != NULL, "just checking");
+
+      if (rescued_obj->blueprint()->new_version()->klass_part()->update_information() != NULL) {
+        MarkSweep::update_fields(rescued_obj, new_obj);
+      } else {
+        rescued_obj->set_klass_no_check(rescued_obj->blueprint()->new_version());
+        Copy::aligned_disjoint_words((HeapWord*)rescued_obj, (HeapWord*)new_obj, size);
+      }
+
+      FREE_RESOURCE_ARRAY(HeapWord, rescued_obj, size);
+
+      new_obj->init_mark();
+      assert(new_obj->is_oop(), "must be a valid oop");
+    }
+    _rescued_oops->clear();
+    _rescued_oops = NULL;
+  }
+}
+
+// (tw) Update instances of a class whose fields changed.
+void MarkSweep::update_fields(oop q, oop new_location) {
+
+  assert(q->blueprint()->new_version() != NULL, "class of old object must have new version");
+
+  klassOop old_klass_oop = q->klass();
+  klassOop new_klass_oop = q->blueprint()->new_version();
+
+  instanceKlass *old_klass = instanceKlass::cast(old_klass_oop);
+  instanceKlass *new_klass = instanceKlass::cast(new_klass_oop);
+
+  int size = q->size_given_klass(old_klass);
+  int new_size = q->size_given_klass(new_klass);
+  
+  oop tmp_obj = q;
+
+  // Save object somewhere, there is an overlap in fields
+  if (new_klass_oop->klass_part()->is_copying_backwards()) {
+    if (((HeapWord *)q >= (HeapWord *)new_location && (HeapWord *)q < (HeapWord *)new_location + new_size) || 
+        ((HeapWord *)new_location >= (HeapWord *)q && (HeapWord *)new_location < (HeapWord *)q + size)) {
+       tmp_obj = (oop)resource_allocate_bytes(size * HeapWordSize);
+       Copy::aligned_disjoint_words((HeapWord*)q, (HeapWord*)tmp_obj, size);
+    }
+  }
+
+  tmp_obj->set_klass_no_check(new_klass_oop);
+  int *cur = new_klass_oop->klass_part()->update_information();
+  assert(cur != NULL, "just checking");
+  MarkSweep::update_fields(new_location, tmp_obj, cur);
+  
+  if (tmp_obj != q) {
+    FREE_RESOURCE_ARRAY(HeapWord, tmp_obj, size);
+  }
+}
+ 
+void MarkSweep::update_fields(oop new_location, oop tmp_obj, int *cur) {
+  assert(cur != NULL, "just checking");
+  char* to = (char*)new_location;
+  while (*cur != 0) {
+    int size = *cur;
+    if (size > 0) {
+      cur++;
+      int offset = *cur;
+      HeapWord* from = (HeapWord*)(((char *)tmp_obj) + offset);
+      if (size == HeapWordSize) {
+        *((HeapWord*)to) = *from;
+      } else if (size == HeapWordSize * 2) {
+        *((HeapWord*)to) = *from;
+        *(((HeapWord*)to) + 1) = *(from + 1);
+      } else {
+        Copy::conjoint_jbytes(from, to, size);
+      }
+      to += size;
+      cur++;
+    } else {
+      assert(size < 0, "");
+      int skip = -*cur;
+      Copy::fill_to_bytes(to, skip, 0);
+      to += skip;
+      cur++;
+    }
+  }
+}

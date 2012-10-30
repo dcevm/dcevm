@@ -40,6 +40,11 @@
 void ConstantPoolCacheEntry::initialize_entry(int index) {
   assert(0 < index && index < 0x10000, "sanity check");
   _indices = index;
+// (DCEVM) Should put something else to force JVM to fail if these invalid entries are accessed!
+//#ifdef ASSERT
+  _f1 = NULL;
+  _f2 = 0;
+//#endif
   assert(constant_pool_index() == index, "");
 }
 
@@ -162,7 +167,8 @@ void ConstantPoolCacheEntry::set_method(Bytecodes::Code invoke_code,
                                         int vtable_index) {
   assert(!is_secondary_entry(), "");
   assert(method->interpreter_entry() != NULL, "should have been set at this point");
-  assert(!method->is_obsolete(),  "attempt to write obsolete method to cpCache");
+  // (tw) No longer valid assert
+  //assert(!method->is_obsolete(),  "attempt to write obsolete method to cpCache");
 
   int byte_no = -1;
   bool change_to_virtual = false;
@@ -516,116 +522,6 @@ void ConstantPoolCacheEntry::update_pointers() {
 }
 #endif // SERIALGC
 
-// RedefineClasses() API support:
-// If this constantPoolCacheEntry refers to old_method then update it
-// to refer to new_method.
-bool ConstantPoolCacheEntry::adjust_method_entry(methodOop old_method,
-       methodOop new_method, bool * trace_name_printed) {
-
-  if (is_vfinal()) {
-    // virtual and final so _f2 contains method ptr instead of vtable index
-    if (f2_as_vfinal_method() == old_method) {
-      // match old_method so need an update
-      // NOTE: can't use set_f2_as_vfinal_method as it asserts on different values
-      _f2 = (intptr_t)new_method;
-      if (RC_TRACE_IN_RANGE(0x00100000, 0x00400000)) {
-        if (!(*trace_name_printed)) {
-          // RC_TRACE_MESG macro has an embedded ResourceMark
-          RC_TRACE_MESG(("adjust: name=%s",
-            Klass::cast(old_method->method_holder())->external_name()));
-          *trace_name_printed = true;
-        }
-        // RC_TRACE macro has an embedded ResourceMark
-        RC_TRACE(0x00400000, ("cpc vf-entry update: %s(%s)",
-          new_method->name()->as_C_string(),
-          new_method->signature()->as_C_string()));
-      }
-
-      return true;
-    }
-
-    // f1() is not used with virtual entries so bail out
-    return false;
-  }
-
-  if ((oop)_f1 == NULL) {
-    // NULL f1() means this is a virtual entry so bail out
-    // We are assuming that the vtable index does not need change.
-    return false;
-  }
-
-  if ((oop)_f1 == old_method) {
-    _f1 = new_method;
-    if (RC_TRACE_IN_RANGE(0x00100000, 0x00400000)) {
-      if (!(*trace_name_printed)) {
-        // RC_TRACE_MESG macro has an embedded ResourceMark
-        RC_TRACE_MESG(("adjust: name=%s",
-          Klass::cast(old_method->method_holder())->external_name()));
-        *trace_name_printed = true;
-      }
-      // RC_TRACE macro has an embedded ResourceMark
-      RC_TRACE(0x00400000, ("cpc entry update: %s(%s)",
-        new_method->name()->as_C_string(),
-        new_method->signature()->as_C_string()));
-    }
-
-    return true;
-  }
-
-  return false;
-}
-
-// a constant pool cache entry should never contain old or obsolete methods
-bool ConstantPoolCacheEntry::check_no_old_or_obsolete_entries() {
-  if (is_vfinal()) {
-    // virtual and final so _f2 contains method ptr instead of vtable index
-    methodOop m = (methodOop)_f2;
-    // Return false if _f2 refers to an old or an obsolete method.
-    // _f2 == NULL || !m->is_method() are just as unexpected here.
-    return (m != NULL && m->is_method() && !m->is_old() && !m->is_obsolete());
-  } else if ((oop)_f1 == NULL || !((oop)_f1)->is_method()) {
-    // _f1 == NULL || !_f1->is_method() are OK here
-    return true;
-  }
-
-  methodOop m = (methodOop)_f1;
-  // return false if _f1 refers to an old or an obsolete method
-  return (!m->is_old() && !m->is_obsolete());
-}
-
-bool ConstantPoolCacheEntry::is_interesting_method_entry(klassOop k) {
-  if (!is_method_entry()) {
-    // not a method entry so not interesting by default
-    return false;
-  }
-
-  methodOop m = NULL;
-  if (is_vfinal()) {
-    // virtual and final so _f2 contains method ptr instead of vtable index
-    m = f2_as_vfinal_method();
-  } else if (is_f1_null()) {
-    // NULL _f1 means this is a virtual entry so also not interesting
-    return false;
-  } else {
-    oop f1 = _f1;  // _f1 is volatile
-    if (!f1->is_method()) {
-      // _f1 can also contain a klassOop for an interface
-      return false;
-    }
-    m = f1_as_method();
-  }
-
-  assert(m != NULL && m->is_method(), "sanity check");
-  if (m == NULL || !m->is_method() || (k != NULL && m->method_holder() != k)) {
-    // robustness for above sanity checks or method is not in
-    // the interesting class
-    return false;
-  }
-
-  // the method is in the interesting class so the entry is interesting
-  return true;
-}
-
 void ConstantPoolCacheEntry::print(outputStream* st, int index) const {
   // print separator
   if (index == 0) st->print_cr("                 -------------");
@@ -663,60 +559,10 @@ void constantPoolCacheOopDesc::initialize(intArray& inverse_index_map) {
   }
 }
 
-// RedefineClasses() API support:
-// If any entry of this constantPoolCache points to any of
-// old_methods, replace it with the corresponding new_method.
-void constantPoolCacheOopDesc::adjust_method_entries(methodOop* old_methods, methodOop* new_methods,
-                                                     int methods_length, bool * trace_name_printed) {
-
-  if (methods_length == 0) {
-    // nothing to do if there are no methods
-    return;
-  }
-
-  // get shorthand for the interesting class
-  klassOop old_holder = old_methods[0]->method_holder();
+void constantPoolCacheOopDesc::adjust_entries() {
 
   for (int i = 0; i < length(); i++) {
-    if (!entry_at(i)->is_interesting_method_entry(old_holder)) {
-      // skip uninteresting methods
-      continue;
-    }
-
-    // The constantPoolCache contains entries for several different
-    // things, but we only care about methods. In fact, we only care
-    // about methods in the same class as the one that contains the
-    // old_methods. At this point, we have an interesting entry.
-
-    for (int j = 0; j < methods_length; j++) {
-      methodOop old_method = old_methods[j];
-      methodOop new_method = new_methods[j];
-
-      if (entry_at(i)->adjust_method_entry(old_method, new_method,
-          trace_name_printed)) {
-        // current old_method matched this entry and we updated it so
-        // break out and get to the next interesting entry if there one
-        break;
-      }
-    }
+     entry_at(i)->initialize_entry(entry_at(i)->constant_pool_index());
   }
 }
 
-// the constant pool cache should never contain old or obsolete methods
-bool constantPoolCacheOopDesc::check_no_old_or_obsolete_entries() {
-  for (int i = 1; i < length(); i++) {
-    if (entry_at(i)->is_interesting_method_entry(NULL) &&
-        !entry_at(i)->check_no_old_or_obsolete_entries()) {
-      return false;
-    }
-  }
-  return true;
-}
-
-void constantPoolCacheOopDesc::dump_cache() {
-  for (int i = 1; i < length(); i++) {
-    if (entry_at(i)->is_interesting_method_entry(NULL)) {
-      entry_at(i)->print(tty, i);
-    }
-  }
-}

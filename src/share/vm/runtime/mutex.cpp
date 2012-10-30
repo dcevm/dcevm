@@ -1227,7 +1227,7 @@ Monitor * Monitor::get_least_ranked_lock(Monitor * locks) {
     // in increasing rank order (modulo any native ranks)
     for (tmp = locks; tmp != NULL; tmp = tmp->next()) {
       if (tmp->next() != NULL) {
-        assert(tmp->rank() == Mutex::native ||
+        assert(tmp->rank() == Mutex::native || tmp->rank() == Mutex::redefine_classes ||
                tmp->rank() <= tmp->next()->rank(), "mutex rank anomaly?");
       }
     }
@@ -1247,7 +1247,7 @@ Monitor* Monitor::get_least_ranked_lock_besides_this(Monitor* locks) {
     // in increasing rank order (modulo any native ranks)
     for (tmp = locks; tmp != NULL; tmp = tmp->next()) {
       if (tmp->next() != NULL) {
-        assert(tmp->rank() == Mutex::native ||
+        assert(tmp->rank() == Mutex::native || tmp->rank() == Mutex::redefine_classes ||
                tmp->rank() <= tmp->next()->rank(), "mutex rank anomaly?");
       }
     }
@@ -1310,6 +1310,7 @@ void Monitor::set_owner_implementation(Thread *new_owner) {
       //   already hold Terminator_lock - may happen because of periodic safepoints
       if (this->rank() != Mutex::native &&
           this->rank() != Mutex::suspend_resume &&
+          this->rank() != Mutex::redefine_classes && 
           locks != NULL && locks->rank() <= this->rank() &&
           !SafepointSynchronize::is_at_safepoint() &&
           this != Interrupt_lock &&

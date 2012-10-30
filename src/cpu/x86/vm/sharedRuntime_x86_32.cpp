@@ -1976,7 +1976,7 @@ nmethod* SharedRuntime::generate_native_wrapper(MacroAssembler* masm,
   }
 
   // RedefineClasses() tracing support for obsolete method entry
-  if (RC_TRACE_IN_RANGE(0x00001000, 0x00002000)) {
+  IF_TRACE_RC4 {
     __ movoop(rax, JNIHandles::make_local(method()));
     __ call_VM_leaf(
          CAST_FROM_FN_PTR(address, SharedRuntime::rc_trace_method_entry),

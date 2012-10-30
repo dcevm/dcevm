@@ -50,6 +50,7 @@ class instanceKlassKlass : public klassKlass {
                                    AccessFlags access_flags,
                                    ReferenceType rt,
                                    KlassHandle host_klass,
+                                   KlassHandle old_klass,
                                    TRAPS);
 
   // Casting from klassOop

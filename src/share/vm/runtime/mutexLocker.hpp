@@ -43,6 +43,7 @@
 // Mutexes used in the VM.
 
 extern Mutex*   Patching_lock;                   // a lock used to guard code patching of compiled code
+extern Mutex*   RedefineClasses_lock;            // a lock on class redefinition
 extern Monitor* SystemDictionary_lock;           // a lock on the system dictonary
 extern Mutex*   PackageTable_lock;               // a lock on the class loader package table
 extern Mutex*   CompiledIC_lock;                 // a lock used to guard compiled IC patching and access

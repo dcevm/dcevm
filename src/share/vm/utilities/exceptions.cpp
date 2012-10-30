@@ -254,6 +254,8 @@ Handle Exceptions::new_exception(Thread *thread, Symbol* name,
   assert(thread->is_Java_thread(), "can only be called by a Java thread");
   assert(!thread->has_pending_exception(), "already has exception");
 
+  bool old_pretend_value = Thread::current()->pretend_new_universe();
+  Thread::current()->set_pretend_new_universe(false);
   Handle h_exception;
 
   // Resolve exception klass
@@ -285,6 +287,7 @@ Handle Exceptions::new_exception(Thread *thread, Symbol* name,
     h_exception = Handle(thread, thread->pending_exception());
     thread->clear_pending_exception();
   }
+  Thread::current()->set_pretend_new_universe(old_pretend_value);
   return h_exception;
 }
 

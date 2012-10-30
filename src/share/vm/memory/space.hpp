@@ -445,6 +445,9 @@ public:
   // indicates when the next such action should be taken.
   virtual void prepare_for_compaction(CompactPoint* cp);
   // MarkSweep support phase3
+  DEBUG_ONLY(int space_index(oop obj));
+  bool must_rescue(oop old_obj, oop new_obj);
+  oop rescue(oop old_obj);
   virtual void adjust_pointers();
   // MarkSweep support phase4
   virtual void compact();
@@ -474,6 +477,15 @@ public:
   // accordingly".
   virtual HeapWord* forward(oop q, size_t size, CompactPoint* cp,
                     HeapWord* compact_top);
+  // (DCEVM) same as forwad, but can rescue objects. Invoked only during
+  // redefinition runs
+  HeapWord* forward_with_rescue(oop q, size_t size, CompactPoint* cp,
+                                        HeapWord* compact_top);
+
+  HeapWord* forward_rescued(CompactPoint* cp, HeapWord* compact_top);
+
+  // (tw) Compute new compact top without actually forwarding the object.
+  virtual HeapWord* forward_compact_top(size_t size, CompactPoint* cp, HeapWord* compact_top);
 
   // Return a size with adjusments as required of the space.
   virtual size_t adjust_object_size_v(size_t size) const { return size; }
@@ -504,7 +516,7 @@ protected:
                         size_t word_len);
 };
 
-#define SCAN_AND_FORWARD(cp,scan_limit,block_is_obj,block_size) {            \
+#define SCAN_AND_FORWARD(cp,scan_limit,block_is_obj,block_size,redefinition_run) {            \
   /* Compute the new addresses for the live objects and store it in the mark \
    * Used by universe::mark_sweep_phase2()                                   \
    */                                                                        \
@@ -564,7 +576,17 @@ protected:
       Prefetch::write(q, interval);                                          \
       /* size_t size = oop(q)->size();  changing this for cms for perm gen */\
       size_t size = block_size(q);                                           \
-      compact_top = cp->space->forward(oop(q), size, cp, compact_top);       \
+      if (redefinition_run) {                                                \
+        compact_top = cp->space->forward_with_rescue(oop(q), size,           \
+                                                     cp, compact_top);       \
+        if (q < first_dead && oop(q)->is_gc_marked()) {                      \
+          /* Was moved (otherwise, forward would reset mark),                \
+             set first_dead to here */                                       \
+          first_dead = q;                                                    \
+        }                                                                    \
+      } else {                                                               \
+        compact_top = cp->space->forward(oop(q), size, cp, compact_top);     \
+      }                                                                      \
       q += size;                                                             \
       end_of_live = q;                                                       \
     } else {                                                                 \
@@ -612,6 +634,8 @@ protected:
       q = end;                                                               \
     }                                                                        \
   }                                                                          \
+                                                                             \
+  if (redefinition_run) { compact_top = forward_rescued(cp, compact_top); }  \
                                                                              \
   assert(q == t, "just checking");                                           \
   if (liveRange != NULL) {                                                   \
@@ -665,13 +689,8 @@ protected:
       q += size;                                                                \
     }                                                                           \
                                                                                 \
-    if (_first_dead == t) {                                                     \
-      q = t;                                                                    \
-    } else {                                                                    \
-      /* $$$ This is funky.  Using this to read the previously written          \
-       * LiveRange.  See also use below. */                                     \
-      q = (HeapWord*)oop(_first_dead)->mark()->decode_pointer();                \
-    }                                                                           \
+    /* (DCEVM) first_dead can be live object if we move/rescue resized objects */ \
+    q = _first_dead;                                                            \
   }                                                                             \
                                                                                 \
   const intx interval = PrefetchScanIntervalInBytes;                            \
@@ -702,7 +721,7 @@ protected:
   assert(q == t, "just checking");                                              \
 }
 
-#define SCAN_AND_COMPACT(obj_size) {                                            \
+#define SCAN_AND_COMPACT(obj_size, redefinition_run) {                          \
   /* Copy all live objects to their new location                                \
    * Used by MarkSweep::mark_sweep_phase4() */                                  \
                                                                                 \
@@ -728,12 +747,8 @@ protected:
     }                                                                           \
     )  /* debug_only */                                                         \
                                                                                 \
-    if (_first_dead == t) {                                                     \
-      q = t;                                                                    \
-    } else {                                                                    \
-      /* $$$ Funky */                                                           \
-      q = (HeapWord*) oop(_first_dead)->mark()->decode_pointer();               \
-    }                                                                           \
+    /* (DCEVM) first_dead can be live object if we move/rescue resized objects */ \
+    q = _first_dead;                                                            \
   }                                                                             \
                                                                                 \
   const intx scan_interval = PrefetchScanIntervalInBytes;                       \
@@ -752,13 +767,36 @@ protected:
       size_t size = obj_size(q);                                                \
       HeapWord* compaction_top = (HeapWord*)oop(q)->forwardee();                \
                                                                                 \
+      if (redefinition_run && must_rescue(oop(q), oop(q)->forwardee())) {       \
+        oop dest_obj = rescue(oop(q));                                          \
+        debug_only(Copy::fill_to_words(q, size, 0));                            \
+        q += size;                                                              \
+        continue;                                                               \
+      }                                                                         \
+                                                                                \
       /* prefetch beyond compaction_top */                                      \
       Prefetch::write(compaction_top, copy_interval);                           \
                                                                                 \
       /* copy object and reinit its mark */                                     \
       VALIDATE_MARK_SWEEP_ONLY(MarkSweep::live_oop_moved_to(q, size,            \
                                                             compaction_top));   \
-      assert(q != compaction_top, "everything in this pass should be moving");  \
+      assert(q != compaction_top || oop(q)->blueprint()->new_version() != NULL, \
+             "everything in this pass should be moving");                       \
+      if (redefinition_run && oop(q)->blueprint()->new_version() != NULL) {     \
+        klassOop new_version = oop(q)->blueprint()->new_version();              \
+        if (new_version->klass_part()->update_information() == NULL) {          \
+          Copy::aligned_conjoint_words(q, compaction_top, size);                \
+          oop(compaction_top)->set_klass_no_check(new_version);                 \
+        } else {                                                                \
+          MarkSweep::update_fields(oop(q), oop(compaction_top));                \
+        }                                                                       \
+        oop(compaction_top)->init_mark();                                       \
+        assert(oop(compaction_top)->klass() != NULL, "should have a class");    \
+                                                                                \
+        debug_only(prev_q = q);                                                 \
+        q += size;                                                              \
+        continue;                                                               \
+      }                                                                         \
       Copy::aligned_conjoint_words(q, compaction_top, size);                    \
       oop(compaction_top)->init_mark();                                         \
       assert(oop(compaction_top)->klass() != NULL, "should have a class");      \

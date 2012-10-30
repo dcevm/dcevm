@@ -242,8 +242,9 @@ class Compilation: public StackObj {
 #define BAILOUT(msg)               { bailout(msg); return;              }
 #define BAILOUT_(msg, res)         { bailout(msg); return res;          }
 
-#define CHECK_BAILOUT()            { if (bailed_out()) return;          }
-#define CHECK_BAILOUT_(res)        { if (bailed_out()) return res;      }
+// (tw) Also checks a thread local flag that can be set to trigger compiler bailout from another thread.
+#define CHECK_BAILOUT()            { if (((CompilerThread *)Thread::current())->should_bailout()) bailout("Aborted externally"); if (bailed_out()) return;          }
+#define CHECK_BAILOUT_(res)        { if (((CompilerThread *)Thread::current())->should_bailout()) bailout("Aborted externally"); if (bailed_out()) return res;      }
 
 
 class InstructionMark: public StackObj {

@@ -101,6 +101,12 @@ class OopClosure : public Closure {
 #endif
 };
 
+class OopClosureNoHeader : public OopClosure {
+public:
+  // If "true", invoke on header klass field.
+  bool do_header() { return false; } // Note that this is non-virtual.
+};
+
 // ObjectClosure is used for iterating through an object space
 
 class ObjectClosure : public Closure {

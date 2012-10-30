@@ -2136,11 +2136,23 @@ class StubGenerator: public StubCodeGenerator {
       __ trigfunc('t');
       __ ret(0);
     }
+    {
+      StubCodeMark mark(this, "StubRoutines", "exp");
+      StubRoutines::_intrinsic_exp = (double (*)(double)) __ pc();
 
-    // The intrinsic version of these seem to return the same value as
-    // the strict version.
-    StubRoutines::_intrinsic_exp = SharedRuntime::dexp;
-    StubRoutines::_intrinsic_pow = SharedRuntime::dpow;
+      __ fld_d(Address(rsp, 4));
+      __ exp_with_fallback(0);
+      __ ret(0);
+    }
+    {
+      StubCodeMark mark(this, "StubRoutines", "pow");
+      StubRoutines::_intrinsic_pow = (double (*)(double,double)) __ pc();
+
+      __ fld_d(Address(rsp, 12));
+      __ fld_d(Address(rsp, 4));
+      __ pow_with_fallback(0);
+      __ ret(0);
+    }
   }
 
  public:
@@ -2313,12 +2325,6 @@ class StubGenerator: public StubCodeGenerator {
                                                                                    CAST_FROM_FN_PTR(address, SharedRuntime::d2i));
     StubRoutines::_d2l_wrapper                              = generate_d2i_wrapper(T_LONG,
                                                                                    CAST_FROM_FN_PTR(address, SharedRuntime::d2l));
-
-    // Build this early so it's available for the interpreter
-    StubRoutines::_throw_WrongMethodTypeException_entry =
-      generate_throw_exception("WrongMethodTypeException throw_exception",
-                               CAST_FROM_FN_PTR(address, SharedRuntime::throw_WrongMethodTypeException),
-                               rax, rcx);
 
     // Build this early so it's available for the interpreter
     StubRoutines::_throw_StackOverflowError_entry          = generate_throw_exception("StackOverflowError throw_exception",           CAST_FROM_FN_PTR(address, SharedRuntime::throw_StackOverflowError));

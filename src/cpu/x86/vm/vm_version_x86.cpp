@@ -363,6 +363,11 @@ void VM_Version::get_processor_features() {
   }
 
   _supports_cx8 = supports_cmpxchg8();
+  // xchg and xadd instructions
+  _supports_atomic_getset4 = true;
+  _supports_atomic_getadd4 = true;
+  LP64_ONLY(_supports_atomic_getset8 = true);
+  LP64_ONLY(_supports_atomic_getadd8 = true);
 
 #ifdef _LP64
   // OS should support SSE for x64 and hardware should support at least SSE2.
@@ -467,6 +472,32 @@ void VM_Version::get_processor_features() {
   if (!supports_avx ()) // Drop to 0 if no AVX  support
     UseAVX = 0;
 
+#ifdef COMPILER2
+  if (UseFPUForSpilling) {
+    if (UseSSE < 2) {
+      // Only supported with SSE2+
+      FLAG_SET_DEFAULT(UseFPUForSpilling, false);
+    }
+  }
+  if (MaxVectorSize > 0) {
+    if (!is_power_of_2(MaxVectorSize)) {
+      warning("MaxVectorSize must be a power of 2");
+      FLAG_SET_DEFAULT(MaxVectorSize, 32);
+    }
+    if (MaxVectorSize > 32) {
+      FLAG_SET_DEFAULT(MaxVectorSize, 32);
+    }
+    if (MaxVectorSize > 16 && UseAVX == 0) {
+      // Only supported with AVX+
+      FLAG_SET_DEFAULT(MaxVectorSize, 16);
+    }
+    if (UseSSE < 2) {
+      // Only supported with SSE2+
+      FLAG_SET_DEFAULT(MaxVectorSize, 0);
+    }
+  }
+#endif
+
   // On new cpus instructions which update whole XMM register should be used
   // to prevent partial register stall due to dependencies on high half.
   //
@@ -536,14 +567,20 @@ void VM_Version::get_processor_features() {
         AllocatePrefetchInstr = 3;
       }
       // On family 15h processors use XMM and UnalignedLoadStores for Array Copy
-      if( FLAG_IS_DEFAULT(UseXMMForArrayCopy) ) {
+      if (supports_sse2() && FLAG_IS_DEFAULT(UseXMMForArrayCopy)) {
         UseXMMForArrayCopy = true;
       }
-      if( FLAG_IS_DEFAULT(UseUnalignedLoadStores) && UseXMMForArrayCopy ) {
+      if (supports_sse2() && FLAG_IS_DEFAULT(UseUnalignedLoadStores)) {
         UseUnalignedLoadStores = true;
       }
     }
 
+#ifdef COMPILER2
+    if (MaxVectorSize > 16) {
+      // Limit vectors size to 16 bytes on current AMD cpus.
+      FLAG_SET_DEFAULT(MaxVectorSize, 16);
+    }
+#endif // COMPILER2
   }
 
   if( is_intel() ) { // Intel cpus specific settings
@@ -580,16 +617,16 @@ void VM_Version::get_processor_features() {
         MaxLoopPad = 11;
       }
 #endif // COMPILER2
-      if( FLAG_IS_DEFAULT(UseXMMForArrayCopy) ) {
+      if (FLAG_IS_DEFAULT(UseXMMForArrayCopy)) {
         UseXMMForArrayCopy = true; // use SSE2 movq on new Intel cpus
       }
-      if( supports_sse4_2() && supports_ht() ) { // Newest Intel cpus
-        if( FLAG_IS_DEFAULT(UseUnalignedLoadStores) && UseXMMForArrayCopy ) {
+      if (supports_sse4_2() && supports_ht()) { // Newest Intel cpus
+        if (FLAG_IS_DEFAULT(UseUnalignedLoadStores)) {
           UseUnalignedLoadStores = true; // use movdqu on newest Intel cpus
         }
       }
-      if( supports_sse4_2() && UseSSE >= 4 ) {
-        if( FLAG_IS_DEFAULT(UseSSE42Intrinsics)) {
+      if (supports_sse4_2() && UseSSE >= 4) {
+        if (FLAG_IS_DEFAULT(UseSSE42Intrinsics)) {
           UseSSE42Intrinsics = true;
         }
       }
@@ -607,13 +644,11 @@ void VM_Version::get_processor_features() {
   }
 
 #ifdef COMPILER2
-  if (UseFPUForSpilling) {
-    if (UseSSE < 2) {
-      // Only supported with SSE2+
-      FLAG_SET_DEFAULT(UseFPUForSpilling, false);
-    }
+  if (FLAG_IS_DEFAULT(AlignVector)) {
+    // Modern processors allow misaligned memory operations for vectors.
+    AlignVector = !UseUnalignedLoadStores;
   }
-#endif
+#endif // COMPILER2
 
   assert(0 <= ReadPrefetchInstr && ReadPrefetchInstr <= 3, "invalid value");
   assert(0 <= AllocatePrefetchInstr && AllocatePrefetchInstr <= 3, "invalid value");

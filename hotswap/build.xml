@@ -1,0 +1,149 @@
+<project name="DCEVM HotSwap tool" default="compile" basedir=".">
+
+    <property environment="env"/>
+    <fail unless="env.JRE" message="JRE environmental variable must point to JRE to use for the testing"/>
+    <fail unless="env.ARCH" message="ARCH environmental variable must specify JVM architecture (amd64 or i486)"/>
+
+    <!-- Detect OS name -->
+    <condition property="dcevm.os" value="windows">
+        <os family="windows"/>
+    </condition>
+    <condition property="dcevm.os" value="bsd">
+        <os family="mac"/>
+    </condition>
+    <condition property="dcevm.os" value="linux">
+        <os family="unix"/>
+    </condition>
+    <fail unless="dcevm.os">This OS is not supported!</fail>
+
+    <path id="libs">
+        <pathelement path="lib/asm-all-3.3.1.jar"/>
+        <pathelement path="lib/junit-4.10.jar"/>
+        <pathelement path="lib/agent.jar" />
+        <pathelement path="${java.home}/../lib/tools.jar"/>
+    </path>
+
+    <target name="clean">
+        <delete dir="target"/>
+    </target>
+
+    <target name="compile" depends="download-libraries,build-agent" description="Compile sources">
+        <mkdir dir="target/classes"/>
+        <mkdir dir="target/test-classes"/>
+        <javac srcdir="src"
+               destdir="target/classes"
+               target="1.6"
+               source="1.6"
+               debug="true"
+               includeantruntime="false"
+               classpathref="libs"/>
+
+        <javac srcdir="tests"
+               destdir="target/test-classes"
+               target="1.6"
+               source="1.6"
+               debug="true"
+               includeantruntime="false"
+               classpathref="libs"
+               classpath="target/classes"/>
+    </target>
+
+    <target name="build-agent" description="Build instrumentation agent">
+        <mkdir dir="target/agent-classes" />
+        <javac srcdir="agent/src"
+               destdir="target/agent-classes"
+               target="1.6"
+               source="1.6"
+               debug="true"
+               includeantruntime="false"/>
+        <jar destfile="lib/agent.jar"
+             basedir="target/agent-classes"
+             manifest="agent/src/META-INF/MANIFEST.MF" />
+    </target>
+
+    <target name="test-fastdebug" depends="compile,prepare-jvm">
+        <install-dcevm kind="fastdebug"/>
+        <test-dcevm kind="fastdebug"/>
+    </target>
+
+    <target name="test-product" depends="compile,prepare-jvm">
+        <install-dcevm kind="product"/>
+        <test-dcevm kind="product"/>
+    </target>
+
+    <target name="prepare-jvm" description="Prepare private installation of JVM with DCEVM installed.">
+        <mkdir dir="target/jre"/>
+        <copy todir="target/jre">
+            <fileset dir="${env.JRE}"/>
+        </copy>
+        <chmod file="target/jre/bin/java" perm="0755"/>
+    </target>
+
+    <target name="download-libraries" description="Download 3rd-party libraries from remote repositories">
+        <mkdir dir="${basedir}/lib"/>
+        <get src="http://repo1.maven.org/maven2/asm/asm-all/3.3.1/asm-all-3.3.1.jar"
+             dest="${basedir}/lib/"
+             skipexisting="true"/>
+        <get src="http://repo1.maven.org/maven2/junit/junit/4.10/junit-4.10.jar"
+             dest="${basedir}/lib/"
+             skipexisting="true"/>
+    </target>
+
+    <macrodef name="install-dcevm">
+        <attribute name="compiler" default="compiler2"/>
+        <!-- product or fastdebug -->
+        <attribute name="kind"/>
+        <!-- Name of the JVM to use -->
+        <attribute name="jvmname" default="dcevm-@{compiler}-@{kind}"/>
+
+        <sequential>
+            <condition property="jvm.arch" value="i386">
+                <equals arg1="${env.ARCH}" arg2="i486"/>
+            </condition>
+            <condition property="jvm.arch" value="amd64">
+                <equals arg1="${env.ARCH}" arg2="amd64"/>
+            </condition>
+            <condition property="path" value="lib/@{jvmname}">
+                <os family="mac"/>
+            </condition>
+            <condition property="path" value="bin/@{jvmname}">
+                <os family="windows"/>
+            </condition>
+            <condition property="path" value="lib/${jvm.arch}/@{jvmname}">
+                <os family="unix"/>
+            </condition>
+
+            <echo message="Installing DCEVM runtime into JRE with JVM name @{jvmname}"/>
+            <copy todir="target/jre/${path}">
+                <fileset dir="../build/${dcevm.os}/${dcevm.os}_${env.ARCH}_@{compiler}/@{kind}"
+                         includes="libjvm.so,libjsig.so,jvm.dll,jsig.dll,libjvm.dylib,libjsig.dylib"/>
+            </copy>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="test-dcevm">
+        <attribute name="compiler" default="compiler2"/>
+        <!-- product or fastdebug -->
+        <attribute name="kind"/>
+        <!-- Name of the JVM to use -->
+        <attribute name="jvmname" default="dcevm-@{compiler}-@{kind}"/>
+        <sequential>
+            <mkdir dir="target/junit-reports"/>
+            <junit jvm="${basedir}/target/jre/bin/java"
+                   fork="true"
+                   forkmode="once"
+                   dir="${basedir}/target">
+                <jvmarg value="-XXaltjvm=@{jvmname}"/>
+                <jvmarg value="-javaagent:../lib/agent.jar"/>
+                <classpath>
+                    <path refid="libs"/>
+                    <pathelement path="target/classes"/>
+                    <pathelement path="target/test-classes"/>
+                </classpath>
+                <test name="org.dcevm.test.LightTestSuite" todir="${basedir}/target/junit-reports"/>
+                <formatter type="plain"/>
+                <formatter type="xml"/>
+            </junit>
+        </sequential>
+    </macrodef>
+</project>

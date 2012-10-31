@@ -1,0 +1,160 @@
+/*
+ * Copyright (c) 2010, Oracle and/or its affiliates. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
+ * or visit www.oracle.com if you need additional information or have any
+ * questions.
+ *
+ */
+
+package org.dcevm.test.methods;
+
+import junit.framework.Assert;
+import org.dcevm.test.TestUtil;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.lang.ref.SoftReference;
+import java.lang.reflect.Method;
+
+import static org.dcevm.test.util.HotSwapTestHelper.__toVersion__;
+import static org.dcevm.test.util.HotSwapTestHelper.__version__;
+import static org.junit.Assert.assertEquals;
+
+/**
+ * Testing correct reflection functionality after class redefinition.
+ *
+ * @author Thomas Wuerthinger
+ */
+public class ClassReflectionTest {
+
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
+
+    // Version 0
+    public static class A {
+
+        public int value() {
+            return 1;
+        }
+    }
+
+    public static class B extends A {
+
+        @Override
+        public int value() {
+            return 2;
+        }
+    }
+
+    public static class C extends A {
+
+        @Override
+        public int value() {
+            return 3;
+        }
+    }
+
+    // Version 1
+    public static class A___1 {
+
+        public int value() {
+            return 1;
+        }
+
+        public int value2() {
+            return 2;
+        }
+    }
+
+    // Version 2
+    public static class C___2 extends B {
+
+        @Override
+        public int value() {
+            return super.value();
+        }
+    }
+
+    private void assertIsSuper(Class<?> s, Class<?> c) {
+        assertEquals(s, c.getSuperclass());
+    }
+
+    private void assertIsNotSuper(Class<?> s, Class<?> c) {
+        Assert.assertFalse(s.equals(c.getSuperclass()));
+    }
+
+    @Test
+    public void testClassReflection() {
+
+        checkWeakReference();
+        assert __version__() == 0;
+
+        final A a = new A();
+        final B b = new B();
+        final C c = new C();
+
+        assertIsSuper(A.class, B.class);
+        assertIsSuper(A.class, C.class);
+        assertIsNotSuper(B.class, C.class);
+
+        assertEquals(1, a.value());
+        assertEquals(2, b.value());
+        assertEquals(3, c.value());
+
+        __toVersion__(2);
+
+        assertIsSuper(A.class, B.class);
+        assertIsSuper(B.class, C.class);
+        assertIsNotSuper(A.class, C.class);
+
+        assertEquals(1, a.value());
+        assertEquals(2, b.value());
+        assertEquals(2, c.value());
+
+        TestUtil.assertUnsupportedWithLight(new Runnable() {
+            @Override
+            public void run() {
+                __toVersion__(0);
+
+                assertIsSuper(A.class, B.class);
+                assertIsSuper(A.class, C.class);
+                assertIsNotSuper(B.class, C.class);
+
+                assertEquals(1, a.value());
+                assertEquals(2, b.value());
+                assertEquals(3, c.value());
+            }
+        });
+    }
+
+    public void checkWeakReference() {
+        A a = new A();
+        Class<?> strongRef = a.getClass();
+        SoftReference<Class<?>> softRef = new SoftReference<Class<?>>(a.getClass());
+
+        assertEquals(1, a.value());
+        __toVersion__(1);
+        assertEquals(1, a.value());
+        Assert.assertTrue(strongRef == softRef.get());
+
+        __toVersion__(0);
+    }
+}

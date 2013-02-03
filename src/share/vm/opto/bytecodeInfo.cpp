@@ -45,7 +45,8 @@ InlineTree::InlineTree(Compile* c,
   _method(callee),
   _site_invoke_ratio(site_invoke_ratio),
   _max_inline_level(max_inline_level),
-  _count_inline_bcs(method()->code_size_for_inlining())
+  _count_inline_bcs(method()->code_size_for_inlining()),
+  _subtrees(c->comp_arena(), 2, 0, NULL)
 {
   NOT_PRODUCT(_count_inlines = 0;)
   if (_caller_jvms != NULL) {
@@ -93,7 +94,7 @@ static bool is_init_with_ea(ciMethod* callee_method,
          );
 }
 
-// positive filter: should send be inlined?  returns NULL, if yes, or rejection msg
+// positive filter: should callee be inlined?  returns NULL, if yes, or rejection msg
 const char* InlineTree::should_inline(ciMethod* callee_method, ciMethod* caller_method, int caller_bci, ciCallProfile& profile, WarmCallInfo* wci_result) const {
   // Allows targeted inlining
   if(callee_method->should_inline()) {
@@ -131,33 +132,6 @@ const char* InlineTree::should_inline(ciMethod* callee_method, ciMethod* caller_
   int call_site_count  = method()->scale_count(profile.count());
   int invoke_count     = method()->interpreter_invocation_count();
 
-  // Bytecoded method handle adapters do not have interpreter
-  // profiling data but only made up MDO data.  Get the counter from
-  // there.
-  if (caller_method->is_method_handle_adapter()) {
-    assert(method()->method_data_or_null(), "must have an MDO");
-    ciMethodData* mdo = method()->method_data();
-    ciProfileData* mha_profile = mdo->bci_to_data(caller_bci);
-    assert(mha_profile, "must exist");
-    CounterData* cd = mha_profile->as_CounterData();
-    invoke_count = cd->count();
-    if (invoke_count == 0) {
-      return "method handle not reached";
-    }
-
-    if (_caller_jvms != NULL && _caller_jvms->method() != NULL &&
-        _caller_jvms->method()->method_data() != NULL &&
-        !_caller_jvms->method()->method_data()->is_empty()) {
-      ciMethodData* mdo = _caller_jvms->method()->method_data();
-      ciProfileData* mha_profile = mdo->bci_to_data(_caller_jvms->bci());
-      assert(mha_profile, "must exist");
-      CounterData* cd = mha_profile->as_CounterData();
-      call_site_count = cd->count();
-    } else {
-      call_site_count = invoke_count;  // use the same value
-    }
-  }
-
   assert(invoke_count != 0, "require invocation count greater than zero");
   int freq = call_site_count / invoke_count;
 
@@ -189,15 +163,16 @@ const char* InlineTree::should_inline(ciMethod* callee_method, ciMethod* caller_
 }
 
 
-// negative filter: should send NOT be inlined?  returns NULL, ok to inline, or rejection msg
+// negative filter: should callee NOT be inlined?  returns NULL, ok to inline, or rejection msg
 const char* InlineTree::should_not_inline(ciMethod *callee_method, ciMethod* caller_method, WarmCallInfo* wci_result) const {
   // negative filter: should send NOT be inlined?  returns NULL (--> inline) or rejection msg
   if (!UseOldInlining) {
     const char* fail = NULL;
-    if (callee_method->is_abstract())               fail = "abstract method";
+    if ( callee_method->is_abstract())               fail = "abstract method";
     // note: we allow ik->is_abstract()
-    if (!callee_method->holder()->is_initialized()) fail = "method holder not initialized";
-    if (callee_method->is_native())                 fail = "native method";
+    if (!callee_method->holder()->is_initialized())  fail = "method holder not initialized";
+    if ( callee_method->is_native())                 fail = "native method";
+    if ( callee_method->dont_inline())               fail = "don't inline by annotation";
 
     if (fail) {
       *wci_result = *(WarmCallInfo::always_cold());
@@ -217,7 +192,8 @@ const char* InlineTree::should_not_inline(ciMethod *callee_method, ciMethod* cal
       }
     }
 
-    if (callee_method->has_compiled_code() && callee_method->instructions_size(CompLevel_full_optimization) > InlineSmallCode) {
+    if (callee_method->has_compiled_code() &&
+        callee_method->instructions_size(CompLevel_full_optimization) > InlineSmallCode) {
       wci_result->set_profit(wci_result->profit() * 0.1);
       // %%% adjust wci_result->size()?
     }
@@ -225,16 +201,13 @@ const char* InlineTree::should_not_inline(ciMethod *callee_method, ciMethod* cal
     return NULL;
   }
 
-  // Always inline MethodHandle methods and generated MethodHandle adapters.
-  if (callee_method->is_method_handle_invoke() || callee_method->is_method_handle_adapter())
-    return NULL;
-
   // First check all inlining restrictions which are required for correctness
-  if (callee_method->is_abstract())               return "abstract method";
+  if ( callee_method->is_abstract())                        return "abstract method";
   // note: we allow ik->is_abstract()
-  if (!callee_method->holder()->is_initialized()) return "method holder not initialized";
-  if (callee_method->is_native())                 return "native method";
-  if (callee_method->has_unloaded_classes_in_signature()) return "unloaded signature classes";
+  if (!callee_method->holder()->is_initialized())           return "method holder not initialized";
+  if ( callee_method->is_native())                          return "native method";
+  if ( callee_method->dont_inline())                        return "don't inline by annotation";
+  if ( callee_method->has_unloaded_classes_in_signature())  return "unloaded signature classes";
 
   if (callee_method->should_inline()) {
     // ignore heuristic controls on inlining
@@ -243,8 +216,12 @@ const char* InlineTree::should_not_inline(ciMethod *callee_method, ciMethod* cal
 
   // Now perform checks which are heuristic
 
-  if( callee_method->has_compiled_code() && callee_method->instructions_size(CompLevel_full_optimization) > InlineSmallCode )
+  if (!callee_method->force_inline()) {
+    if (callee_method->has_compiled_code() &&
+        callee_method->instructions_size(CompLevel_full_optimization) > InlineSmallCode) {
     return "already compiled into a big method";
+    }
+  }
 
   // don't inline exception code unless the top method belongs to an
   // exception class
@@ -257,8 +234,20 @@ const char* InlineTree::should_not_inline(ciMethod *callee_method, ciMethod* cal
       return "exception method";
   }
 
+  if (callee_method->should_not_inline()) {
+    return "disallowed by CompilerOracle";
+  }
+
+  if (UseStringCache) {
+    // Do not inline StringCache::profile() method used only at the beginning.
+    if (callee_method->name() == ciSymbol::profile_name() &&
+        callee_method->holder()->name() == ciSymbol::java_lang_StringCache()) {
+      return "profiling method";
+    }
+  }
+
   // use frequency-based objections only for non-trivial methods
-  if (callee_method->code_size_for_inlining() <= MaxTrivialSize) return NULL;
+  if (callee_method->code_size() <= MaxTrivialSize) return NULL;
 
   // don't use counts with -Xcomp or CTW
   if (UseInterpreter && !CompileTheWorld) {
@@ -278,30 +267,21 @@ const char* InlineTree::should_not_inline(ciMethod *callee_method, ciMethod* cal
     }
   }
 
-  if (callee_method->should_not_inline()) {
-    return "disallowed by CompilerOracle";
-  }
-
-  if (UseStringCache) {
-    // Do not inline StringCache::profile() method used only at the beginning.
-    if (callee_method->name() == ciSymbol::profile_name() &&
-        callee_method->holder()->name() == ciSymbol::java_lang_StringCache()) {
-      return "profiling method";
-    }
-  }
-
   return NULL;
 }
 
 //-----------------------------try_to_inline-----------------------------------
 // return NULL if ok, reason for not inlining otherwise
 // Relocated from "InliningClosure::try_to_inline"
-const char* InlineTree::try_to_inline(ciMethod* callee_method, ciMethod* caller_method, int caller_bci, ciCallProfile& profile, WarmCallInfo* wci_result) {
-
+const char* InlineTree::try_to_inline(ciMethod* callee_method, ciMethod* caller_method, int caller_bci, ciCallProfile& profile, WarmCallInfo* wci_result, bool& should_delay) {
   // Old algorithm had funny accumulating BC-size counters
   if (UseOldInlining && ClipInlining
       && (int)count_inline_bcs() >= DesiredMethodLimit) {
-    return "size > DesiredMethodLimit";
+    if (!callee_method->force_inline() || !IncrementalInline) {
+      return "size > DesiredMethodLimit";
+    } else if (!C->inlining_incrementally()) {
+      should_delay = true;
+    }
   }
 
   const char *msg = NULL;
@@ -319,11 +299,16 @@ const char* InlineTree::try_to_inline(ciMethod* callee_method, ciMethod* caller_
   }
 
   // suppress a few checks for accessors and trivial methods
-  if (callee_method->code_size_for_inlining() > MaxTrivialSize) {
+  if (callee_method->code_size() > MaxTrivialSize) {
 
     // don't inline into giant methods
-    if (C->unique() > (uint)NodeCountInliningCutoff) {
-      return "NodeCountInliningCutoff";
+    if (C->over_inlining_cutoff()) {
+      if ((!callee_method->force_inline() && !caller_method->is_compiled_lambda_form())
+          || !IncrementalInline) {
+        return "NodeCountInliningCutoff";
+      } else {
+        should_delay = true;
+      }
     }
 
     if ((!UseInterpreter || CompileTheWorld) &&
@@ -342,11 +327,15 @@ const char* InlineTree::try_to_inline(ciMethod* callee_method, ciMethod* caller_
     return "not an accessor";
   }
   if (inline_level() > _max_inline_level) {
-    return "inlining too deep";
+    if (!callee_method->force_inline() || !IncrementalInline) {
+      return "inlining too deep";
+    } else if (!C->inlining_incrementally()) {
+      should_delay = true;
+    }
   }
 
   // detect direct and indirect recursive inlining
-  {
+  if (!callee_method->is_compiled_lambda_form()) {
     // count the current method and the callee
     int inline_level = (method() == callee_method) ? 1 : 0;
     if (inline_level > MaxRecursiveInlineLevel)
@@ -367,7 +356,11 @@ const char* InlineTree::try_to_inline(ciMethod* callee_method, ciMethod* caller_
 
   if (UseOldInlining && ClipInlining
       && (int)count_inline_bcs() + size >= DesiredMethodLimit) {
-    return "size > DesiredMethodLimit";
+    if (!callee_method->force_inline() || !IncrementalInline) {
+      return "size > DesiredMethodLimit";
+    } else if (!C->inlining_incrementally()) {
+      should_delay = true;
+    }
   }
 
   // ok, inline this method
@@ -412,6 +405,7 @@ bool pass_initial_checks(ciMethod* caller_method, int caller_bci, ciMethod* call
 const char* InlineTree::check_can_parse(ciMethod* callee) {
   // Certain methods cannot be parsed at all:
   if ( callee->is_native())                     return "native method";
+  if ( callee->is_abstract())                   return "abstract method";
   if (!callee->can_be_compiled())               return "not compilable (disabled)";
   if (!callee->has_balanced_monitors())         return "not compilable (unbalanced monitors)";
   if ( callee->get_flow_analysis()->failing())  return "not compilable (flow analysis failed)";
@@ -421,18 +415,19 @@ const char* InlineTree::check_can_parse(ciMethod* callee) {
 //------------------------------print_inlining---------------------------------
 // Really, the failure_msg can be a success message also.
 void InlineTree::print_inlining(ciMethod* callee_method, int caller_bci, const char* failure_msg) const {
-  CompileTask::print_inlining(callee_method, inline_level(), caller_bci, failure_msg ? failure_msg : "inline");
+  C->print_inlining(callee_method, inline_level(), caller_bci, failure_msg ? failure_msg : "inline");
   if (callee_method == NULL)  tty->print(" callee not monotonic or profiled");
   if (Verbose && callee_method) {
     const InlineTree *top = this;
     while( top->caller_tree() != NULL ) { top = top->caller_tree(); }
-    tty->print("  bcs: %d+%d  invoked: %d", top->count_inline_bcs(), callee_method->code_size(), callee_method->interpreter_invocation_count());
+    //tty->print("  bcs: %d+%d  invoked: %d", top->count_inline_bcs(), callee_method->code_size(), callee_method->interpreter_invocation_count());
   }
 }
 
 //------------------------------ok_to_inline-----------------------------------
-WarmCallInfo* InlineTree::ok_to_inline(ciMethod* callee_method, JVMState* jvms, ciCallProfile& profile, WarmCallInfo* initial_wci) {
+WarmCallInfo* InlineTree::ok_to_inline(ciMethod* callee_method, JVMState* jvms, ciCallProfile& profile, WarmCallInfo* initial_wci, bool& should_delay) {
   assert(callee_method != NULL, "caller checks for optimized virtual!");
+  assert(!should_delay, "should be initialized to false");
 #ifdef ASSERT
   // Make sure the incoming jvms has the same information content as me.
   // This means that we can eventually make this whole class AllStatic.
@@ -449,10 +444,7 @@ WarmCallInfo* InlineTree::ok_to_inline(ciMethod* callee_method, JVMState* jvms, 
 
   // Do some initial checks.
   if (!pass_initial_checks(caller_method, caller_bci, callee_method)) {
-    if (PrintInlining) {
-      failure_msg = "failed_initial_checks";
-      print_inlining(callee_method, caller_bci, failure_msg);
-    }
+    if (PrintInlining)  print_inlining(callee_method, caller_bci, "failed initial checks");
     return NULL;
   }
 
@@ -465,11 +457,9 @@ WarmCallInfo* InlineTree::ok_to_inline(ciMethod* callee_method, JVMState* jvms, 
 
   // Check if inlining policy says no.
   WarmCallInfo wci = *(initial_wci);
-  failure_msg = try_to_inline(callee_method, caller_method, caller_bci, profile, &wci);
+  failure_msg = try_to_inline(callee_method, caller_method, caller_bci, profile, &wci, should_delay);
   if (failure_msg != NULL && C->log() != NULL) {
-    C->log()->begin_elem("inline_fail reason='");
-    C->log()->text("%s", failure_msg);
-    C->log()->end_elem("'");
+    C->log()->inline_fail(failure_msg);
   }
 
 #ifndef PRODUCT
@@ -539,9 +529,10 @@ InlineTree *InlineTree::build_inline_tree_for_callee( ciMethod* callee_method, J
   }
   int max_inline_level_adjust = 0;
   if (caller_jvms->method() != NULL) {
-    if (caller_jvms->method()->is_method_handle_adapter())
+    if (caller_jvms->method()->is_compiled_lambda_form())
       max_inline_level_adjust += 1;  // don't count actions in MH or indy adapter frames
-    else if (callee_method->is_method_handle_invoke()) {
+    else if (callee_method->is_method_handle_intrinsic() ||
+             callee_method->is_compiled_lambda_form()) {
       max_inline_level_adjust += 1;  // don't count method handle calls from java.lang.invoke implem
     }
     if (max_inline_level_adjust != 0 && PrintInlining && (Verbose || WizardMode)) {
@@ -590,7 +581,7 @@ InlineTree *InlineTree::build_inline_tree_root() {
 // Given a jvms, which determines a call chain from the root method,
 // find the corresponding inline tree.
 // Note: This method will be removed or replaced as InlineTree goes away.
-InlineTree* InlineTree::find_subtree_from_root(InlineTree* root, JVMState* jvms, ciMethod* callee, bool create_if_not_found) {
+InlineTree* InlineTree::find_subtree_from_root(InlineTree* root, JVMState* jvms, ciMethod* callee) {
   InlineTree* iltp = root;
   uint depth = jvms && jvms->has_method() ? jvms->depth() : 0;
   for (uint d = 1; d <= depth; d++) {
@@ -599,12 +590,12 @@ InlineTree* InlineTree::find_subtree_from_root(InlineTree* root, JVMState* jvms,
     assert(jvmsp->method() == iltp->method(), "tree still in sync");
     ciMethod* d_callee = (d == depth) ? callee : jvms->of_depth(d+1)->method();
     InlineTree* sub = iltp->callee_at(jvmsp->bci(), d_callee);
-    if (!sub) {
-      if (create_if_not_found && d == depth) {
-        return iltp->build_inline_tree_for_callee(d_callee, jvmsp, jvmsp->bci());
+    if (sub == NULL) {
+      if (d == depth) {
+        sub = iltp->build_inline_tree_for_callee(d_callee, jvmsp, jvmsp->bci());
       }
-      assert(sub != NULL, "should be a sub-ilt here");
-      return NULL;
+      guarantee(sub != NULL, "should be a sub-ilt here");
+      return sub;
     }
     iltp = sub;
   }

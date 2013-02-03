@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2011, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2012, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -57,7 +57,7 @@ void Node::verify_construction() {
   int new_debug_idx = old_debug_idx+1;
   if (new_debug_idx > 0) {
     // Arrange that the lowest five decimal digits of _debug_idx
-    // will repeat thos of _idx.  In case this is somehow pathological,
+    // will repeat those of _idx. In case this is somehow pathological,
     // we continue to assign negative numbers (!) consecutively.
     const int mod = 100000;
     int bump = (int)(_idx - new_debug_idx) % mod;
@@ -67,7 +67,7 @@ void Node::verify_construction() {
   }
   Compile::set_debug_idx(new_debug_idx);
   set_debug_idx( new_debug_idx );
-  assert(Compile::current()->unique() < (uint)MaxNodeLimit, "Node limit exceeded");
+  assert(Compile::current()->unique() < (UINT_MAX - 1), "Node limit exceeded UINT_MAX");
   if (BreakAtNode != 0 && (_debug_idx == BreakAtNode || (int)_idx == BreakAtNode)) {
     tty->print_cr("BreakAtNode: _idx=%d _debug_idx=%d", _idx, _debug_idx);
     BREAKPOINT;
@@ -296,6 +296,14 @@ inline int Node::Init(int req, Compile* C) {
   assert(Compile::current() == C, "must use operator new(Compile*)");
   int idx = C->next_unique();
 
+  // Allocate memory for the necessary number of edges.
+  if (req > 0) {
+    // Allocate space for _in array to have double alignment.
+    _in = (Node **) ((char *) (C->node_arena()->Amalloc_D(req * sizeof(void*))));
+#ifdef ASSERT
+    _in[req-1] = this; // magic cookie for assertion check
+#endif
+  }
   // If there are default notes floating around, capture them:
   Node_Notes* nn = C->default_node_notes();
   if (nn != NULL)  init_node_notes(C, idx, nn);
@@ -794,7 +802,7 @@ int Node::replace_edge(Node* old, Node* neww) {
 //-------------------------disconnect_inputs-----------------------------------
 // NULL out all inputs to eliminate incoming Def-Use edges.
 // Return the number of edges between 'n' and 'this'
-int Node::disconnect_inputs(Node *n) {
+int Node::disconnect_inputs(Node *n, Compile* C) {
   int edges_to_n = 0;
 
   uint cnt = req();
@@ -816,6 +824,9 @@ int Node::disconnect_inputs(Node *n) {
 
   // Node::destruct requires all out edges be deleted first
   // debug_only(destruct();)   // no reuse benefit expected
+  if (edges_to_n == 0) {
+    C->record_dead_node(_idx);
+  }
   return edges_to_n;
 }
 
@@ -1004,15 +1015,15 @@ const Type *Node::Value( PhaseTransform * ) const {
 //    set_req(2, phase->intcon(7));
 //    return this;
 // Example: reshape "X*4" into "X<<2"
-//    return new (C,3) LShiftINode(in(1), phase->intcon(2));
+//    return new (C) LShiftINode(in(1), phase->intcon(2));
 //
 // You must call 'phase->transform(X)' on any new Nodes X you make, except
 // for the returned root node.  Example: reshape "X*31" with "(X<<5)-X".
-//    Node *shift=phase->transform(new(C,3)LShiftINode(in(1),phase->intcon(5)));
-//    return new (C,3) AddINode(shift, in(1));
+//    Node *shift=phase->transform(new(C)LShiftINode(in(1),phase->intcon(5)));
+//    return new (C) AddINode(shift, in(1));
 //
 // When making a Node for a constant use 'phase->makecon' or 'phase->intcon'.
-// These forms are faster than 'phase->transform(new (C,1) ConNode())' and Do
+// These forms are faster than 'phase->transform(new (C) ConNode())' and Do
 // The Right Thing with def-use info.
 //
 // You cannot bury the 'this' Node inside of a graph reshape.  If the reshaped
@@ -1576,6 +1587,9 @@ void Node::dump() const {
     } else {
       tty->print("no type");
     }
+  } else if (t->isa_vect() && this->is_MachSpillCopy()) {
+    // Dump MachSpillcopy vector type.
+    t->dump();
   }
   if (is_new) {
     debug_only(dump_orig(debug_orig()));

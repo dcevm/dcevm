@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -19,24 +19,32 @@
  * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
  * or visit www.oracle.com if you need additional information or have any
  * questions.
- *
  */
 
-#include "precompiled.hpp"
-#include "services/memPtr.hpp"
-#include "services/memTracker.hpp"
+package com.oracle.java.testlibrary;
 
-volatile jint SequenceGenerator::_seq_number = 1;
-volatile unsigned long SequenceGenerator::_generation = 1;
-NOT_PRODUCT(jint SequenceGenerator::_max_seq_number = 1;)
+import java.io.File;
 
-jint SequenceGenerator::next() {
-  jint seq = Atomic::add(1, &_seq_number);
-  if (seq < 0) {
-    MemTracker::shutdown(MemTracker::NMT_sequence_overflow);
+public final class JDKToolFinder {
+
+  private JDKToolFinder() {
   }
-  assert(seq > 0, "counter overflow");
-  NOT_PRODUCT(_max_seq_number = (seq > _max_seq_number) ? seq : _max_seq_number;)
-  return seq;
-}
 
+  /**
+   * Returns the full path to an executable in jdk/bin based on System property
+   * test.jdk (set by jtreg test suite)
+   *
+   * @return Full path to an executable in jdk/bin
+   */
+  public static String getJDKTool(String tool) {
+    String binPath = System.getProperty("test.jdk");
+    if (binPath == null) {
+      throw new RuntimeException("System property 'test.jdk' not set. This property is normally set by jtreg. "
+          + "When running test separately, set this property using '-Dtest.jdk=/path/to/jdk'.");
+    }
+
+    binPath += File.separatorChar + "bin" + File.separatorChar + tool;
+
+    return binPath;
+  }
+}

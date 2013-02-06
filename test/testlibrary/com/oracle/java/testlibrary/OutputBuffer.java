@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -19,24 +19,41 @@
  * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
  * or visit www.oracle.com if you need additional information or have any
  * questions.
- *
  */
 
-#include "precompiled.hpp"
-#include "services/memPtr.hpp"
-#include "services/memTracker.hpp"
+package com.oracle.java.testlibrary;
 
-volatile jint SequenceGenerator::_seq_number = 1;
-volatile unsigned long SequenceGenerator::_generation = 1;
-NOT_PRODUCT(jint SequenceGenerator::_max_seq_number = 1;)
+public class OutputBuffer {
+  private final String stdout;
+  private final String stderr;
 
-jint SequenceGenerator::next() {
-  jint seq = Atomic::add(1, &_seq_number);
-  if (seq < 0) {
-    MemTracker::shutdown(MemTracker::NMT_sequence_overflow);
+  /**
+   * Create an OutputBuffer, a class for storing and managing stdout and stderr
+   * results separately
+   *
+   * @param stdout stdout result
+   * @param stderr stderr result
+   */
+  public OutputBuffer(String stdout, String stderr) {
+    this.stdout = stdout;
+    this.stderr = stderr;
   }
-  assert(seq > 0, "counter overflow");
-  NOT_PRODUCT(_max_seq_number = (seq > _max_seq_number) ? seq : _max_seq_number;)
-  return seq;
-}
 
+  /**
+   * Returns the stdout result
+   *
+   * @return stdout result
+   */
+  public String getStdout() {
+    return stdout;
+  }
+
+  /**
+   * Returns the stderr result
+   *
+   * @return stderr result
+   */
+  public String getStderr() {
+    return stderr;
+  }
+}

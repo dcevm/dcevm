@@ -332,7 +332,6 @@ bool PSScavenge::invoke_no_policy() {
   {
     ResourceMark rm;
     HandleMark hm;
-    PromotionFailedInfo promotion_failed_info;
 
     gclog_or_tty->date_stamp(PrintGC && PrintGCDateStamps);
     TraceCPUTime tcpu(PrintGCDetails, true, gclog_or_tty);
@@ -449,17 +448,18 @@ bool PSScavenge::invoke_no_policy() {
       reference_processor()->set_active_mt_degree(active_workers);
       PSKeepAliveClosure keep_alive(promotion_manager);
       PSEvacuateFollowersClosure evac_followers(promotion_manager);
+      ReferenceProcessorStats stats;
       if (reference_processor()->processing_is_mt()) {
         PSRefProcTaskExecutor task_executor;
-        reference_processor()->process_discovered_references(
+        stats = reference_processor()->process_discovered_references(
           &_is_alive_closure, &keep_alive, &evac_followers, &task_executor,
           &_gc_timer);
       } else {
-        reference_processor()->process_discovered_references(
+        stats = reference_processor()->process_discovered_references(
           &_is_alive_closure, &keep_alive, &evac_followers, NULL, &_gc_timer);
       }
 
-      _gc_tracer.report_gc_reference_processing(reference_processor()->collect_statistics());
+      _gc_tracer.report_gc_reference_stats(stats);
 
       // Enqueue reference objects discovered during scavenge.
       if (reference_processor()->processing_is_mt()) {
@@ -480,12 +480,8 @@ bool PSScavenge::invoke_no_policy() {
     }
 
     // Finally, flush the promotion_manager's labs, and deallocate its stacks.
-    promotion_failed_info = PSPromotionManager::post_scavenge();
-
-    promotion_failure_occurred = promotion_failed_info.promotion_failed();
+    promotion_failure_occurred = PSPromotionManager::post_scavenge(_gc_tracer);
     if (promotion_failure_occurred) {
-      _gc_tracer.report_promotion_failed(promotion_failed_info.promotion_failed_size(),
-                                         promotion_failed_info.promotion_failed_count());
       clean_up_failed_promotion();
       if (PrintGC) {
         gclog_or_tty->print("--");
@@ -499,8 +495,6 @@ bool PSScavenge::invoke_no_policy() {
 
     if (!promotion_failure_occurred) {
       // Swap the survivor spaces.
-
-
       young_gen->eden_space()->clear(SpaceDecorator::Mangle);
       young_gen->from_space()->clear(SpaceDecorator::Mangle);
       young_gen->swap_spaces();

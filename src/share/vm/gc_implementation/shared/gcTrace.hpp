@@ -28,6 +28,7 @@
 #include "gc_interface/gcCause.hpp"
 #include "gc_interface/gcName.hpp"
 #include "gc_implementation/shared/gcWhen.hpp"
+#include "gc_implementation/shared/promotionFailedInfo.hpp"
 #include "memory/allocation.hpp"
 #include "memory/referenceType.hpp"
 #ifndef SERIALGC
@@ -93,16 +94,6 @@ class ParallelOldGCInfo VALUE_OBJ_CLASS_SPEC {
   void* dense_prefix() const { return _dense_prefix; }
 };
 
-class YoungGCInfo VALUE_OBJ_CLASS_SPEC {
-  bool _promotion_failed;
- public:
-  YoungGCInfo() : _promotion_failed(false) {}
-  void register_promotion_failed() {
-    _promotion_failed = true;
-  }
-  bool promotion_failed() const { return _promotion_failed; }
-};
-
 #ifndef SERIALGC
 
 class G1YoungGCInfo VALUE_OBJ_CLASS_SPEC {
@@ -125,7 +116,7 @@ class GCTracer : public ResourceObj {
   void report_gc_start(GCCause::Cause cause, jlong timestamp);
   void report_gc_end(jlong timestamp, TimePartitions* time_partitions);
   void report_gc_heap_summary(GCWhen::Type when, const GCHeapSummary& heap_summary, const PermGenSummary& perm_gen_summary) const;
-  void report_gc_reference_processing(const ReferenceProcessorStats& rp) const;
+  void report_gc_reference_stats(const ReferenceProcessorStats& rp) const;
 
   bool has_reported_gc_start() const;
 
@@ -138,26 +129,23 @@ class GCTracer : public ResourceObj {
   void send_garbage_collection_event() const;
   void send_gc_heap_summary_event(GCWhen::Type when, const GCHeapSummary& heap_summary) const;
   void send_perm_gen_summary_event(GCWhen::Type when, const PermGenSummary& perm_gen_summary) const;
-  void send_reference_processing_event(ReferenceType type, size_t count) const;
+  void send_reference_stats_event(ReferenceType type, size_t count) const;
   void send_phase_events(TimePartitions* time_partitions) const;
 };
 
 class YoungGCTracer : public GCTracer {
-  YoungGCInfo _young_gc_info;
-
  protected:
   YoungGCTracer(GCName name) : GCTracer(name) {}
-  virtual YoungGCInfo& young_gc_info() { return _young_gc_info; }
 
  public:
-  virtual void report_promotion_failed(size_t size, uint count);
+  virtual void report_promotion_failed(const PromotionFailedInfo& pf_info);
 
  protected:
   virtual void report_gc_end_impl(jlong timestamp, TimePartitions* time_partitions);
 
  private:
   void send_young_gc_event() const;
-  void send_promotion_failed_event(size_t size, uint count) const;
+  void send_promotion_failed_event(const PromotionFailedInfo& pf_info) const;
 };
 
 class OldGCTracer : public GCTracer {

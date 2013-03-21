@@ -26,6 +26,7 @@
 #include "gc_implementation/shared/gcHeapSummary.hpp"
 #include "gc_implementation/shared/gcTimer.hpp"
 #include "gc_implementation/shared/gcTrace.hpp"
+#include "gc_implementation/shared/promotionFailedInfo.hpp"
 #include "memory/referenceProcessorStats.hpp"
 #include "utilities/globalDefinitions.hpp"
 
@@ -75,13 +76,13 @@ void GCTracer::report_gc_end(jlong timestamp, TimePartitions* time_partitions) {
   _shared_gc_info.set_id(SharedGCInfo::UNSET_GCID);
 }
 
-void GCTracer::report_gc_reference_processing(const ReferenceProcessorStats& rps) const {
+void GCTracer::report_gc_reference_stats(const ReferenceProcessorStats& rps) const {
   assert_set_gc_id();
 
-  send_reference_processing_event(REF_SOFT, rps.soft_count());
-  send_reference_processing_event(REF_WEAK, rps.weak_count());
-  send_reference_processing_event(REF_FINAL, rps.final_count());
-  send_reference_processing_event(REF_PHANTOM, rps.phantom_count());
+  send_reference_stats_event(REF_SOFT, rps.soft_count());
+  send_reference_stats_event(REF_WEAK, rps.weak_count());
+  send_reference_stats_event(REF_FINAL, rps.final_count());
+  send_reference_stats_event(REF_PHANTOM, rps.phantom_count());
 }
 
 void GCTracer::report_gc_heap_summary(GCWhen::Type when, const GCHeapSummary& heap_summary, const PermGenSummary& perm_gen_summary) const {
@@ -98,11 +99,10 @@ void YoungGCTracer::report_gc_end_impl(jlong timestamp, TimePartitions* time_par
   send_young_gc_event();
 }
 
-void YoungGCTracer::report_promotion_failed(size_t size, uint count) {
+void YoungGCTracer::report_promotion_failed(const PromotionFailedInfo& pf_info) {
   assert_set_gc_id();
 
-  young_gc_info().register_promotion_failed();
-  send_promotion_failed_event(size, count);
+  send_promotion_failed_event(pf_info);
 }
 
 

@@ -168,8 +168,6 @@ Declares a structure type that can be used in other events.
     <event id="GCYoungGarbageCollection" path="vm/gc/collector/young_garbage_collection" label="Young Garbage Collection"
            description="Extra information specific to Young Garbage Collections">
       <value type="ULONG" field="gcId"  label="GC ID" relation="GC_ID" />
-      <!-- This information can also be found by looking for PromotionFailed events. It's here for convenience. -->
-      <value type="BOOLEAN" field="promotionFailed" label="Promotion Failed" description="Tells if we failed to promote some objects to the old gen" />
     </event>
 
     <event id="GCOldGarbageCollection" path="vm/gc/collector/old_garbage_collection" label="Old Garbage Collection"
@@ -183,7 +181,7 @@ Declares a structure type that can be used in other events.
       <value type="G1YCTYPE" field="type" label="Type" />
     </event>
 
-    <event id="GCReferenceProcessing" path="vm/gc/reference/statistics"
+    <event id="GCReferenceStatistics" path="vm/gc/reference/statistics"
            label="GC Reference Processing" is_instant="true"
            description="Total count of processed references during GC">
       <value type="ULONG" field="gcId" label="GC ID" relation="GC_ID"/>
@@ -195,7 +193,10 @@ Declares a structure type that can be used in other events.
            description="Promotion of an object failed">
       <value type="ULONG" field="gcId" label="GC ID" relation="GC_ID"/>
       <value type="BYTES64" field="objectCount" label="Object Count"/>
+      <value type="BYTES64" field="firstSize" label="First Failed Object Size"/>
+      <value type="BYTES64" field="smallestSize" label="Smallest Failed Object Size"/>
       <value type="BYTES64" field="totalSize" label="Total Object Size"/>
+      <value type="OSTHREAD" field="thread" label="Running thread"/>
     </event>
 
     <event id="GCPhasePause" path="vm/gc/phases/pause" label="GC Phase Pause">

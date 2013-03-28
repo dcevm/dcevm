@@ -425,6 +425,7 @@ Deoptimization::UnrollBlock* Deoptimization::fetch_unroll_info_helper(JavaThread
                                                                                                     callee_parameters,
                                                                                                     callee_locals,
                                                                                                     index == 0,
+                                                                                                    index == array->frames() - 1,
                                                                                                     popframe_extra_args);
     // This pc doesn't have to be perfect just good enough to identify the frame
     // as interpreted so the skeleton frame will be walkable
@@ -1559,7 +1560,7 @@ JRT_ENTRY(void, Deoptimization::uncommon_trap_inner(JavaThread* thread, jint tra
         if (trap_method() == nm->method()) {
           make_not_compilable = true;
         } else {
-          trap_method->set_not_compilable(CompLevel_full_optimization);
+          trap_method->set_not_compilable(CompLevel_full_optimization, true, "overflow_recompile_count > PerBytecodeRecompilationCutoff");
           // But give grace to the enclosing nm->method().
         }
       }

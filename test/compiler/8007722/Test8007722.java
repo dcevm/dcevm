@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2013, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -19,34 +19,38 @@
  * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
  * or visit www.oracle.com if you need additional information or have any
  * questions.
- *
  */
 
-/**
+/*
  * @test
- * @bug 7009359
- * @summary HS with -XX:+AggressiveOpts optimize new StringBuffer(null) so it does not throw NPE as expected
- *
- * @run main/othervm -Xbatch -XX:+IgnoreUnrecognizedVMOptions -XX:+OptimizeStringConcat -XX:CompileCommand=dontinline,Test7009359,stringmakerBUG Test7009359
+ * @bug 8007722
+ * @summary GetAndSetP's MachNode should capture bottom type
+ * @run main/othervm -XX:-UseOnStackReplacement -XX:-BackgroundCompilation Test8007722
  *
  */
 
-public class Test7009359 {
-    public static void main (String[] args) {
-        for(int i = 0; i < 100000; i++) {
-            if(!stringmakerBUG(null).equals("NPE")) {
-                System.out.println("StringBuffer(null) does not throw NPE");
-                System.exit(97);
-            }
-        }
+import java.util.concurrent.atomic.*;
+
+public class Test8007722 {
+
+    int i;
+    static AtomicReference<Test8007722> ref;
+
+    static int test(Test8007722 new_obj) {
+        Test8007722 o = ref.getAndSet(new_obj);
+        int ret = o.i;
+        o.i = 5;
+        return ret;
     }
 
-    public static String stringmakerBUG(String str) {
-       try {
-           return new StringBuffer(str).toString();
-       } catch (NullPointerException e) {
-           return "NPE";
-       }
+    static public void main(String[] args) {
+        Test8007722 obj = new Test8007722();
+        ref = new AtomicReference<Test8007722>(obj);
+
+        for (int i = 0; i < 20000; i++) {
+            test(obj);
+        }
+
+        System.out.println("PASSED");
     }
 }
-

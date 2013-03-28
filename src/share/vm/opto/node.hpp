@@ -374,6 +374,8 @@ protected:
   bool is_dead() const;
 #define is_not_dead(n) ((n) == NULL || !VerifyIterativeGVN || !((n)->is_dead()))
 #endif
+  // Check whether node has become unreachable
+  bool is_unreachable(PhaseIterGVN &igvn) const;
 
   // Set a required input edge, also updates corresponding output edge
   void add_req( Node *n ); // Append a NEW required input
@@ -638,7 +640,8 @@ public:
     Flag_may_be_short_branch = Flag_is_dead_loop_safe << 1,
     Flag_avoid_back_to_back  = Flag_may_be_short_branch << 1,
     Flag_has_call            = Flag_avoid_back_to_back << 1,
-    _max_flags = (Flag_has_call << 1) - 1 // allow flags combination
+    Flag_is_expensive        = Flag_has_call << 1,
+    _max_flags = (Flag_is_expensive << 1) - 1 // allow flags combination
   };
 
 private:
@@ -807,6 +810,8 @@ public:
 
   // The node is a "macro" node which needs to be expanded before matching
   bool is_macro() const { return (_flags & Flag_is_macro) != 0; }
+  // The node is expensive: the best control is set during loop opts
+  bool is_expensive() const { return (_flags & Flag_is_expensive) != 0 && in(0) != NULL; }
 
 //----------------- Optimization
 
@@ -982,12 +987,13 @@ public:
 #ifndef PRODUCT
   Node* find(int idx) const;         // Search the graph for the given idx.
   Node* find_ctrl(int idx) const;    // Search control ancestors for the given idx.
-  void dump() const;                 // Print this node,
+  void dump() const { dump("\n"); }  // Print this node.
+  void dump(const char* suffix, outputStream *st = tty) const;// Print this node.
   void dump(int depth) const;        // Print this node, recursively to depth d
   void dump_ctrl(int depth) const;   // Print control nodes, to depth d
-  virtual void dump_req() const;     // Print required-edge info
-  virtual void dump_prec() const;    // Print precedence-edge info
-  virtual void dump_out() const;     // Print the output edge info
+  virtual void dump_req(outputStream *st = tty) const;     // Print required-edge info
+  virtual void dump_prec(outputStream *st = tty) const;    // Print precedence-edge info
+  virtual void dump_out(outputStream *st = tty) const;     // Print the output edge info
   virtual void dump_spec(outputStream *st) const {}; // Print per-node info
   void verify_edges(Unique_Node_List &visited); // Verify bi-directional edges
   void verify() const;               // Check Def-Use info for my subgraph

@@ -62,11 +62,10 @@ int Abstract_VM_Version::_reserve_for_allocation_prefetch = 0;
   #error HOTSPOT_BUILD_TARGET must be defined
 #endif
 
-// (tw) added DCE VM build number
 #ifdef PRODUCT
-  #define VM_RELEASE  "0.2-b02-internal, " HOTSPOT_RELEASE_VERSION
+  #define VM_RELEASE HOTSPOT_RELEASE_VERSION
 #else
-  #define VM_RELEASE  "0.2-b02-internal-debug, " HOTSPOT_RELEASE_VERSION "-" HOTSPOT_BUILD_TARGET
+  #define VM_RELEASE HOTSPOT_RELEASE_VERSION "-" HOTSPOT_BUILD_TARGET
 #endif
 
 // HOTSPOT_RELEASE_VERSION must follow the release version naming convention
@@ -129,12 +128,6 @@ void Abstract_VM_Version::initialize() {
 #ifndef HOTSPOT_VM_DISTRO
   #error HOTSPOT_VM_DISTRO must be defined
 #endif
-
-// (tw) Set VM name to DCE
-#undef HOTSPOT_VM_DISTRO
-#define HOTSPOT_VM_DISTRO "Dynamic Code Evolution"
-#define VM_RELEASE_HOTSP 
-
 #define VMNAME HOTSPOT_VM_DISTRO " " VMLP EMBEDDED_ONLY("Embedded ") VMTYPE " VM"
 
 const char* Abstract_VM_Version::vm_name() {

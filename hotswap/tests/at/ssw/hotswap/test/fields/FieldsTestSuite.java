@@ -42,6 +42,7 @@ import org.junit.runners.Suite;
     ObjectStressTest.class,
     YieldTest.class,
     ComplexFieldTest.class,
+    FieldAlignmentTest.class,
     StringFieldTest.class,
     RedefinePrivateFieldTest.class,
     AccessDeletedStaticFieldTest.class

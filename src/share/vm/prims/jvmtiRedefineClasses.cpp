@@ -1217,6 +1217,12 @@ void VM_RedefineClasses::calculate_instance_update_information(klassOop new_vers
     }
 
     virtual void do_new_field(fieldDescriptor* fd){
+      int alignment = fd->offset() - curPosition;
+      if (alignment > 0) {
+        // This field was aligned, so we need to make sure that we fill the gap
+        fill(alignment);
+      }
+
       int size = size_of_type(fd->field_type());
       fill(size);
     }

@@ -1181,10 +1181,13 @@ nmethod* CompileBroker::compile_method(methodHandle method, int osr_bci,
                                        int comp_level,
                                        methodHandle hot_method, int hot_count,
                                        const char* comment, Thread* THREAD) {
-//  JavaThread* thread = JavaThread::current();
-//  if (thread->is_Compiler_thread() && thread->as_CompilerThread()->should_bailout()) {
-//    return NULL; // FIXME: DCEVM: should we do something else?
-//  }
+  JavaThread* thread = JavaThread::current();
+  if (thread->is_Compiler_thread() && thread->as_CompilerThread()->should_bailout()) {
+    return NULL; // FIXME: DCEVM: should we do something else?
+  }
+  if (instanceKlass::cast(method->method_holder())->is_not_initialized()) {
+    return NULL; // FIXME: DCEVM: how should we avoid this?
+  }
 
   // make sure arguments make sense
   assert(method->method_holder()->klass_part()->oop_is_instance(), "not an instance method");

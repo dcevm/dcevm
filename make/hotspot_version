@@ -31,7 +31,7 @@
 #
 
 # DCEVM release
-USER_RELEASE_SUFFIX=dcevm03
+USER_RELEASE_SUFFIX=dcevm04
 
 # Don't put quotes (fail windows build).
 HOTSPOT_VM_COPYRIGHT=Copyright 2013

@@ -2507,30 +2507,45 @@ void VM_RedefineClasses::verify_classes(klassOop k_oop_latest, oop initiating_lo
 
 #endif
 
-static void rollback_fast_field_access(methodOop method) {
+// Rewrite faster byte-codes back to their slower equivalent. Undoes rewriting happening in templateTable_xxx.cpp
+// The reason is that once we zero cpool caches, we need to re-resolve all entries again. Faster bytecodes do not
+// do that, they assume that cache entry is resolved already.
+static void unpatch_bytecode(methodOop method) {
   RawBytecodeStream bcs(method);
   Bytecodes::Code code;
+  Bytecodes::Code java_code;
   while (!bcs.is_last_bytecode()) {
     code = bcs.raw_next();
-    Bytecodes::Code java_code = Bytecodes::java_code(code);
-    if (code != java_code) {
-      if (java_code == Bytecodes::_getfield || java_code == Bytecodes::_putfield) {
-        address bcp = bcs.bcp();
-        *bcp = java_code;
-      } else if (code == Bytecodes::_fast_iaccess_0 || code == Bytecodes::_fast_aaccess_0 || code == Bytecodes::_fast_faccess_0) {
-        address bcp = bcs.bcp();
-        *bcp = java_code;
+    address bcp = bcs.bcp();
 
-        // We also need to unpatch bytecode at BCP+1 (which would be fast field access)
-        Bytecodes::Code code2 = Bytecodes::code_or_bp_at(bcp + 1);
-        assert(code2 == Bytecodes::_fast_igetfield ||
-               code2 == Bytecodes::_fast_agetfield ||
-               code2 == Bytecodes::_fast_fgetfield, "");
-        *(bcp + 1) = Bytecodes::java_code(code2);
+    if (code == Bytecodes::_breakpoint) {
+      int bci = method->bci_from(bcp);
+      code = method->orig_bytecode_at(bci);
+      java_code = Bytecodes::java_code(code);
+      if (code != java_code &&
+           (java_code == Bytecodes::_getfield ||
+            java_code == Bytecodes::_putfield ||
+            java_code == Bytecodes::_aload_0)) {
+        // Let breakpoint table handling unpatch bytecode
+        method->set_orig_bytecode_at(bci, java_code);
       }
-    } else if (code == Bytecodes::_breakpoint) {
-      assert(false, "");
-      // FIXME: set_original_bytecode_at for breakpoints!
+    } else {
+      java_code = Bytecodes::java_code(code);
+      if (code != java_code &&
+           (java_code == Bytecodes::_getfield ||
+            java_code == Bytecodes::_putfield ||
+            java_code == Bytecodes::_aload_0)) {
+        *bcp = java_code;
+      }
+    }
+
+    // Additionally, we need to unpatch bytecode at bcp+1 for fast_xaccess (which would be fast field access)
+    if (code == Bytecodes::_fast_iaccess_0 || code == Bytecodes::_fast_aaccess_0 || code == Bytecodes::_fast_faccess_0) {
+      Bytecodes::Code code2 = Bytecodes::code_or_bp_at(bcp + 1);
+      assert(code2 == Bytecodes::_fast_igetfield ||
+             code2 == Bytecodes::_fast_agetfield ||
+             code2 == Bytecodes::_fast_fgetfield, "");
+      *(bcp + 1) = Bytecodes::java_code(code2);
     }
   }
 }
@@ -2587,8 +2602,10 @@ void VM_RedefineClasses::adjust_cpool_cache(klassOop k_oop_latest, oop initiatin
           0);
       }
 
-      // we also need to un-rewrite "fast" field access bytecodes to force them to re-resolve entries
-      ik->methods_do(rollback_fast_field_access);
+      // If bytecode rewriting is enabled, we also need to unpatch bytecode to force resolution of zeroied entries
+      if (RewriteBytecodes) {
+        ik->methods_do(unpatch_bytecode);
+      }
     }
     k_oop = k_oop->klass_part()->old_version();
   }

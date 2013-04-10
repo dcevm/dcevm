@@ -2507,6 +2507,33 @@ void VM_RedefineClasses::verify_classes(klassOop k_oop_latest, oop initiating_lo
 
 #endif
 
+static void rollback_fast_field_access(methodOop method) {
+  RawBytecodeStream bcs(method);
+  Bytecodes::Code code;
+  while (!bcs.is_last_bytecode()) {
+    code = bcs.raw_next();
+    Bytecodes::Code java_code = Bytecodes::java_code(code);
+    if (code != java_code) {
+      if (java_code == Bytecodes::_getfield || java_code == Bytecodes::_putfield) {
+        address bcp = bcs.bcp();
+        *bcp = java_code;
+      } else if (code == Bytecodes::_fast_iaccess_0 || code == Bytecodes::_fast_aaccess_0 || code == Bytecodes::_fast_faccess_0) {
+        address bcp = bcs.bcp();
+        *bcp = java_code;
+
+        // We also need to unpatch bytecode at BCP+1 (which would be fast field access)
+        Bytecodes::Code code2 = Bytecodes::code_or_bp_at(bcp + 1);
+        assert(code2 == Bytecodes::_fast_igetfield ||
+               code2 == Bytecodes::_fast_agetfield ||
+               code2 == Bytecodes::_fast_fgetfield, "");
+        *(bcp + 1) = Bytecodes::java_code(code2);
+      }
+    } else if (code == Bytecodes::_breakpoint) {
+      assert(false, "");
+      // FIXME: set_original_bytecode_at for breakpoints!
+    }
+  }
+}
 
 // Unevolving classes may point to old methods directly
 // from their constant pool caches, itables, and/or vtables. We
@@ -2559,6 +2586,9 @@ void VM_RedefineClasses::adjust_cpool_cache(klassOop k_oop_latest, oop initiatin
           NULL,
           0);
       }
+
+      // we also need to un-rewrite "fast" field access bytecodes to force them to re-resolve entries
+      ik->methods_do(rollback_fast_field_access);
     }
     k_oop = k_oop->klass_part()->old_version();
   }

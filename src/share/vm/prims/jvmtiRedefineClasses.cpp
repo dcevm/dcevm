@@ -1472,8 +1472,6 @@ void VM_RedefineClasses::doit() {
         } else {
           obj->oop_iterate(_closure);
         }
-        // Note: there could be static fields in instanceMirror which points to redefined classes we will update them
-        // during field transferring.
 
         if (obj->blueprint()->new_version() != NULL) {
           Klass* new_klass = obj->blueprint()->new_version()->klass_part();

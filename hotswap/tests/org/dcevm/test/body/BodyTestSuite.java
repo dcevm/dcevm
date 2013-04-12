@@ -46,7 +46,8 @@ import org.junit.runners.Suite;
                 FibTest.class,
                 RedefinePrivateMethodTest.class,
                 ClassRenamingTestCase.class,
-                EMCPTest.class
+                EMCPTest.class,
+                ArrayTest.class
         })
 public class BodyTestSuite {
 }

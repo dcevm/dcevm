@@ -139,8 +139,6 @@ class VM_RedefineClasses: public VM_GC_Operation {
   bool allow_nested_vm_operations() const        { return true;  }
   jvmtiError check_error()                       { return _result;  }
 
-  void update_array_classes_to_newest_version(klassOop smallest_dimension);
-
   // Modifiable test must be shared between IsModifiableClass query
   // and redefine implementation
   static bool is_modifiable_class(oop klass_mirror);

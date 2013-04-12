@@ -601,7 +601,6 @@ class Klass : public Klass_vtbl {
       return search_secondary_supers(k);
     }
   }
-  void update_supers_to_newest_version();
   bool search_secondary_supers(klassOop k) const;
 
   // Find LCA in class hierarchy

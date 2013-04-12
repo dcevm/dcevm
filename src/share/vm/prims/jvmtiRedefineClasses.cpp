@@ -1393,6 +1393,10 @@ void VM_RedefineClasses::mark_as_scavengable(nmethod* nm) {
   }
 }
 
+void uuu(klassOop k) {
+  tty->print_cr("- "INTPTR_FORMAT, k);
+}
+
 struct StoreBarrier {
   template <class T> static void oop_store(T* p, oop v) { ::oop_store(p, v); }
 };
@@ -1553,31 +1557,34 @@ void VM_RedefineClasses::doit() {
       SharedHeap::heap()->gc_epilogue(false);
     }
 
-    // Swap marks to have same hashcodes
-    for (int i=0; i<_new_classes->length(); i++) {
-      klassOop cur_klass = _new_classes->at(i)();
-      instanceKlass* cur = (instanceKlass*)cur_klass->klass_part();
-      swap_marks(_new_classes->at(i)(), _new_classes->at(i)->old_version());
-      swap_marks(_new_classes->at(i)()->java_mirror(), instanceKlass::cast(_new_classes->at(i)->old_version())->java_mirror());
-      ((instanceKlass*)_new_classes->at(i)->old_version()->klass_part())->constants()->set_pool_holder(_new_classes->at(i)->old_version());
-      klassOop old_version_klass = _new_classes->at(i)->old_version();
-    
-      if (((instanceKlass *)cur->old_version()->klass_part())->array_klasses() != NULL) {
-        update_array_classes_to_newest_version(((instanceKlass *)cur->old_version()->klass_part())->array_klasses());
 
-        // Transfer the array classes, otherwise we might get cast exceptions when casting array types.
-        cur->set_array_klasses(((instanceKlass*)cur->old_version()->klass_part())->array_klasses());
-      }  
+    for (int i=0; i<_new_classes->length(); i++) {
+      klassOop cur_oop = _new_classes->at(i)();
+      instanceKlass* cur = instanceKlass::cast(cur_oop);
+      klassOop old_oop = cur->old_version();
+      instanceKlass* old = instanceKlass::cast(old_oop);
+
+      // Swap marks to have same hashcodes
+      swap_marks(cur_oop, old_oop);
+      swap_marks(cur->java_mirror(), old->java_mirror());
+
+      // Revert pool holder for old version of klass (it was updated by one of ours closure!)
+      old->constants()->set_pool_holder(old_oop);
+
+      // Transfer the array classes, otherwise we might get cast exceptions when casting array types.
+      assert(cur->array_klasses() == NULL, "just checking");
+      cur->set_array_klasses(old->array_klasses());
 
       // Initialize the new class! Special static initialization that does not execute the
       // static constructor but copies static field values from the old class if name
       // and signature of a static field match.
       cur->do_local_static_fields(&copy_field_from_old_version, Thread::current()); // TODO (tw): What about internal static fields??
-      instanceKlass::cast(old_version_klass)->set_java_mirror(_new_classes->at(i)()->java_mirror());
+      old->set_java_mirror(cur->java_mirror());
 
-      instanceKlass::ClassState old_version_init_state = (instanceKlass::ClassState)instanceKlass::cast(cur->old_version())->init_state();
-      if (old_version_init_state > instanceKlass::linked) {
-        cur->set_init_state(old_version_init_state);
+      // Transfer init state
+      instanceKlass::ClassState state = old->init_state();
+      if (state > instanceKlass::linked) {
+        cur->set_init_state(state);
       }
     }
 
@@ -1601,14 +1608,6 @@ void VM_RedefineClasses::doit() {
     instanceKlass* cur = (instanceKlass*)cur_klass->klass_part();
     cur->set_redefining(false);
     cur->clear_update_information();
-
-    // (tw) Check if the following call is necessary.
-    cur->update_supers_to_newest_version();
-
-  }
-
-  for (int i=T_BOOLEAN; i<=T_LONG; i++) {
-    update_array_classes_to_newest_version(Universe::typeArrayKlassObj((BasicType)i));
   }
 
   // Disable any dependent concurrent compilations
@@ -1634,25 +1633,6 @@ void VM_RedefineClasses::doit() {
   if (TraceRedefineClasses > 0) {
     tty->flush();
   }
-}
-
-void VM_RedefineClasses::update_array_classes_to_newest_version(klassOop smallest_dimension) {
-
-  arrayKlass *curArrayKlass = arrayKlass::cast(smallest_dimension);
-  assert(curArrayKlass->lower_dimension() == NULL, "argument must be smallest dimension");
-
-
-  while (curArrayKlass != NULL) {
-    klassOop higher_dimension = curArrayKlass->higher_dimension();
-    klassOop lower_dimension = curArrayKlass->lower_dimension();
-    curArrayKlass->update_supers_to_newest_version();
-
-    curArrayKlass = NULL;
-    if (higher_dimension != NULL) {
-      curArrayKlass = arrayKlass::cast(higher_dimension);
-    }
-  }
-
 }
 
 void VM_RedefineClasses::doit_epilogue() {

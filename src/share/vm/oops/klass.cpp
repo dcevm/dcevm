@@ -55,26 +55,6 @@ bool Klass::is_subclass_of(klassOop k) const {
   return false;
 }
 
-void Klass::update_supers_to_newest_version() {
-
-  if (super() != NULL) set_super(super()->klass_part()->newest_version());
-  
-  for (uint i=0; i<primary_super_limit(); i++) {
-    klassOop cur = _primary_supers[i];
-    if (cur != NULL) {
-      _primary_supers[i] = cur->klass_part()->newest_version();
-    }
-  }
-
-  // Scan the array-of-objects 
-  int cnt = secondary_supers()->length();
-  for (int i = 0; i < cnt; i++) {
-    klassOop cur = (klassOop)secondary_supers()->obj_at(i);
-    if (cur != NULL) {
-      secondary_supers()->obj_at_put(i, cur->klass_part()->newest_version());
-    }
-  }
-}
 bool Klass::search_secondary_supers(klassOop k) const {
   // Put some extra logic here out-of-line, before the search proper.
   // This cuts down the size of the inline method.

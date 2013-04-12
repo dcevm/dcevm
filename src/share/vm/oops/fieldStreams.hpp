@@ -125,7 +125,9 @@ class FieldStreamBase : public StackObj {
 
   // Accessors for current field
   AccessFlags access_flags() const {
-    return accessFlags_from(field()->access_flags());
+    AccessFlags flags;
+    flags.set_flags(field()->access_flags());
+    return flags;
   }
 
   void set_access_flags(u2 flags) const {

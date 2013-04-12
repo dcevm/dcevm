@@ -2,7 +2,7 @@
 
     <property environment="env"/>
     <fail unless="env.JRE" message="JRE environmental variable must point to JRE to use for the testing"/>
-    <fail unless="env.ARCH" message="ARCH environmental variable must specify JVM architecture (amd64 or i486)"/>
+    <fail unless="env.ARCH" message="ARCH environmental variable must specify JVM architecture (x64 or i586)"/>
 
     <!-- Detect OS name -->
     <condition property="dcevm.os" value="windows">
@@ -105,23 +105,23 @@
             </condition>
             <condition property="install.path" value="lib/i386/@{jvmname}">
                 <and>
-                  <equals arg1="${env.ARCH}" arg2="x86" />
+                  <equals arg1="${env.ARCH}" arg2="i586" />
                   <os family="unix"/>
                 </and>
             </condition>
             <condition property="install.path" value="lib/amd64/@{jvmname}">
                 <and>
-                  <equals arg1="${env.ARCH}" arg2="x86_64" />
+                  <equals arg1="${env.ARCH}" arg2="x64" />
                   <os family="unix"/>
                 </and>
             </condition>
 
             <!-- Build arch is path in the build/ directory -->
-            <condition property="build.arch" value ="amd64">
-                <equals arg1="${env.ARCH}" arg2="amd64" />
-            </condition>
             <condition property="build.arch" value ="i486">
-                <equals arg1="${env.ARCH}" arg2="x86" />
+                <equals arg1="${env.ARCH}" arg2="i586" />
+            </condition>
+            <condition property="build.arch" value ="amd64">
+                <equals arg1="${env.ARCH}" arg2="x64" />
             </condition>
 
             <echo message="Installing DCEVM runtime into JRE with JVM name @{jvmname}"/>

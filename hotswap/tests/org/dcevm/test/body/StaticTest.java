@@ -30,6 +30,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 
+import static junit.framework.Assert.assertNull;
 import static org.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static org.dcevm.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.assertEquals;
@@ -157,6 +158,20 @@ public class StaticTest {
         public static boolean booleanField;
     }
 
+    public static class E {
+        public static Class<?> eClass = E.class;
+        public static Class<?> eClassArr = E[].class;
+        public static Class<?> eClassNull;
+        public static Class<?> eClassPrim = Integer.TYPE;
+    }
+
+    public static class E___6 {
+        public static Class<?> eClass;
+        public static Class<?> eClassArr;
+        public static Class<?> eClassNull;
+        public static Class<?> eClassPrim;
+    }
+
     @Test
     public void testBase() {
 
@@ -200,6 +215,18 @@ public class StaticTest {
         assertEquals(5, C.value);
     }
 
+    @Test
+    public void testStaticFieldUpdated() {
+        assert __version__() == 0;
+        assertEquals(E.class, E.eClass);
+        assertNull(E.eClassNull);
+        assertEquals(E[].class, E.eClassArr);
+
+        __toVersion__(6);
+        assertEquals(E.class, E.eClass);
+        assertNull(E.eClassNull);
+        assertEquals(E[].class, E.eClassArr);
+    }
 
     @Test
     public void testManyStaticFields() {
@@ -268,4 +295,6 @@ public class StaticTest {
         assertEquals(true, D.booleanField);
 
     }
+
+
 }

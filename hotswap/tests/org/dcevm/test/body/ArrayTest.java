@@ -28,6 +28,8 @@ import org.dcevm.test.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.lang.reflect.Array;
+
 import static org.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static org.dcevm.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.assertEquals;
@@ -65,26 +67,32 @@ public class ArrayTest {
 
         assertTrue(arr instanceof A[]);
         assertTrue(arr instanceof Object[]);
+        assertEquals(arr.getClass(), Array.newInstance(A.class, 0).getClass());
 
         assertTrue(arr2 instanceof B[]);
         assertTrue(arr2 instanceof A[]);
         assertTrue(arr2 instanceof Object[]);
+        assertEquals(arr2.getClass(), Array.newInstance(B.class, 0).getClass());
 
         assertTrue(arr3 instanceof B[][]);
         assertTrue(arr3 instanceof A[][]);
         assertTrue(arr3 instanceof Object[][]);
+        assertEquals(arr3.getClass(), Array.newInstance(B[].class, 0).getClass());
 
-      __toVersion__(0);
+        __toVersion__(0);
 
-      assertTrue(arr instanceof A[]);
-      assertTrue(arr instanceof Object[]);
+        assertTrue(arr instanceof A[]);
+        assertTrue(arr instanceof Object[]);
+        assertEquals(arr.getClass(), Array.newInstance(A.class, 0).getClass());
 
-      assertTrue(arr2 instanceof B[]);
-      assertTrue(arr2 instanceof A[]);
-      assertTrue(arr2 instanceof Object[]);
+        assertTrue(arr2 instanceof B[]);
+        assertTrue(arr2 instanceof A[]);
+        assertTrue(arr2 instanceof Object[]);
+        assertEquals(arr2.getClass(), Array.newInstance(B.class, 0).getClass());
 
-      assertTrue(arr3 instanceof B[][]);
-      assertTrue(arr3 instanceof A[][]);
-      assertTrue(arr3 instanceof Object[][]);
+        assertTrue(arr3 instanceof B[][]);
+        assertTrue(arr3 instanceof A[][]);
+        assertTrue(arr3 instanceof Object[][]);
+        assertEquals(arr3.getClass(), Array.newInstance(B[].class, 0).getClass());
     }
 }

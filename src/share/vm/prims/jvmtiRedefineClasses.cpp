@@ -1332,60 +1332,26 @@ void VM_RedefineClasses::swap_marks(oop first, oop second) {
 }
 
 
-static void copy_field_from_old_version(fieldDescriptor* fd, Thread* t) {
-  oop this_oop = instanceKlass::cast(fd->field_holder())->java_mirror();
-  oop old_oop = instanceKlass::cast(fd->field_holder()->klass_part()->old_version())->java_mirror();
-  fieldDescriptor result;
-  bool found = ((instanceKlass *)(fd->field_holder()->klass_part()->old_version()->klass_part()))->find_local_field(fd->name(), fd->signature(), &result);
+class FieldCopier : public FieldClosure {
+  public:
+  void do_field(fieldDescriptor* fd) {
+    instanceKlass* cur = instanceKlass::cast(fd->field_holder());
+    oop cur_oop = cur->java_mirror();
 
-  if (found && result.is_static()) {
-    int old_offset = result.offset();
-    int this_offset = fd->offset();
-    TRACE_RC3("Copying static field value for field %s old_offset=%d new_offset=%d", fd->name()->as_C_string(), old_offset, this_offset);
+    instanceKlass* old = instanceKlass::cast(cur->old_version());
+    oop old_oop = old->java_mirror();
 
-    switch(result.field_type()) {
-      case T_BOOLEAN:
-        this_oop->bool_field_put(this_offset, old_oop->bool_field(old_offset));
-        DEBUG_ONLY(old_oop->byte_field_put(old_offset, 0));
-        break;
-      case T_CHAR:
-        this_oop->char_field_put(this_offset, old_oop->char_field(old_offset));
-        DEBUG_ONLY(old_oop->char_field_put(old_offset, 0));
-        break;
-      case T_FLOAT:
-        this_oop->float_field_put(this_offset, old_oop->float_field(old_offset));
-        DEBUG_ONLY(old_oop->float_field_put(old_offset, 0));
-        break;
-      case T_DOUBLE:
-        this_oop->double_field_put(this_offset, old_oop->double_field(old_offset));
-        DEBUG_ONLY(old_oop->double_field_put(old_offset, 0));
-        break;
-      case T_BYTE:
-        this_oop->byte_field_put(this_offset, old_oop->byte_field(old_offset));
-        DEBUG_ONLY(old_oop->byte_field_put(old_offset, 0));
-        break;
-      case T_SHORT:
-        this_oop->short_field_put(this_offset, old_oop->short_field(old_offset));
-        DEBUG_ONLY(old_oop->short_field_put(old_offset, 0));
-        break;
-      case T_INT:
-        this_oop->int_field_put(this_offset, old_oop->int_field(old_offset));
-        DEBUG_ONLY(old_oop->int_field_put(old_offset, 0));
-        break;
-      case T_LONG:
-        this_oop->long_field_put(this_offset, old_oop->long_field(old_offset));
-        DEBUG_ONLY(old_oop->long_field_put(old_offset, 0));
-        break;
-      case T_OBJECT:
-      case T_ARRAY:
-        this_oop->obj_field_put(this_offset,  old_oop->obj_field(old_offset));
-        old_oop->obj_field_put(old_offset, NULL);
-        break;
-      default:
-        ShouldNotReachHere();
+    fieldDescriptor result;
+    bool found = old->find_local_field(fd->name(), fd->signature(), &result);
+    if (found && result.is_static()) {
+      TRACE_RC3("Copying static field value for field %s old_offset=%d new_offset=%d",
+        fd->name()->as_C_string(), result.offset(), fd->offset());
+      memcpy(cur_oop->obj_field_addr<HeapWord>(fd->offset()),
+             old_oop->obj_field_addr<HeapWord>(result.offset()),
+             type2aelembytes(fd->field_type()));
     }
   }
-}
+};
 
 void VM_RedefineClasses::mark_as_scavengable(nmethod* nm) {
   if (!nm->on_scavenge_root_list()) {
@@ -1578,7 +1544,8 @@ void VM_RedefineClasses::doit() {
       // Initialize the new class! Special static initialization that does not execute the
       // static constructor but copies static field values from the old class if name
       // and signature of a static field match.
-      cur->do_local_static_fields(&copy_field_from_old_version, Thread::current()); // TODO (tw): What about internal static fields??
+      FieldCopier copier;
+      cur->do_local_static_fields(&copier); // TODO (tw): What about internal static fields??
       old->set_java_mirror(cur->java_mirror());
 
       // Transfer init state

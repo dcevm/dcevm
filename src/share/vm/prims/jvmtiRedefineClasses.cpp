@@ -40,6 +40,7 @@
 #include "utilities/bitMap.inline.hpp"
 #include "prims/jvmtiClassFileReconstituter.hpp"
 #include "compiler/compileBroker.hpp"
+#include "oops/instanceMirrorKlass.hpp"
 
 
 objArrayOop VM_RedefineClasses::_old_methods = NULL;
@@ -1359,10 +1360,6 @@ void VM_RedefineClasses::mark_as_scavengable(nmethod* nm) {
   }
 }
 
-void uuu(klassOop k) {
-  tty->print_cr("- "INTPTR_FORMAT, k);
-}
-
 struct StoreBarrier {
   template <class T> static void oop_store(T* p, oop v) { ::oop_store(p, v); }
 };
@@ -1468,9 +1465,15 @@ void VM_RedefineClasses::doit() {
 
       virtual void do_object(oop obj) {
         if (obj->is_instanceKlass()) return;
-        if (!obj->is_instanceMirror()) {
+        if (obj->is_instanceMirror()) {
+          // static fields may have references to old java.lang.Class instances, update them
+          // at the same time, we don't want to update other oops in the java.lang.Class
+          instanceMirrorKlass::oop_fields_iterate(obj, _closure);
+        } else {
           obj->oop_iterate(_closure);
         }
+        // Note: there could be static fields in instanceMirror which points to redefined classes we will update them
+        // during field transferring.
 
         if (obj->blueprint()->new_version() != NULL) {
           Klass* new_klass = obj->blueprint()->new_version()->klass_part();

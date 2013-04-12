@@ -79,6 +79,9 @@ class instanceMirrorKlass: public instanceKlass {
   DEFINE_ALLOCATE_PERMANENT(instanceMirrorKlass);
   instanceOop allocate_instance(KlassHandle k, TRAPS);
 
+  // Class redefinition, iterate static fields
+  static void oop_fields_iterate(oop obj, OopClosure* blk);
+
   // Garbage collection
   int  oop_adjust_pointers(oop obj);
   void oop_follow_contents(oop obj);

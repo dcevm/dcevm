@@ -156,6 +156,13 @@ void instanceMirrorKlass::oop_follow_contents(oop obj) {
     assert_is_in_closed_subset)
 }
 
+void instanceMirrorKlass::oop_fields_iterate(oop obj, OopClosure* blk) {
+  InstanceMirrorKlass_OOP_ITERATE(                                                    \
+    start_of_static_fields(obj), java_lang_Class::static_oop_field_count(obj),        \
+    blk->do_oop(p),                                                                   \
+    assert_is_in_closed_subset)
+}
+
 #ifndef SERIALGC
 void instanceMirrorKlass::oop_follow_contents(ParCompactionManager* cm,
                                               oop obj) {

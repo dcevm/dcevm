@@ -117,10 +117,10 @@
             </condition>
 
             <!-- Build arch is path in the build/ directory -->
-            <condition property="buil.darch" value ="amd64">
+            <condition property="build.arch" value ="amd64">
                 <equals arg1="${env.ARCH}" arg2="amd64" />
             </condition>
-            <condition property="buil.darch" value ="i486">
+            <condition property="build.arch" value ="i486">
                 <equals arg1="${env.ARCH}" arg2="x86" />
             </condition>
 

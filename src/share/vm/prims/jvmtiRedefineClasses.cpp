@@ -215,6 +215,7 @@ bool VM_RedefineClasses::doit_prologue() {
 
   _revision_number++;
   TRACE_RC1("Redefinition with revision number %d started!", _revision_number);
+  lock_threads();
 
   assert(Thread::current()->is_Java_thread(), "must be Java thread");
   RC_TIMER_START(_timer_prologue);
@@ -504,10 +505,6 @@ jvmtiError VM_RedefineClasses::load_new_class_versions(TRAPS) {
 
       // This was the last class processed => check if additional classes have been loaded in the meantime
 
-      RC_TIMER_STOP(_timer_prologue);
-      lock_threads();
-      RC_TIMER_START(_timer_prologue);
-
       for (int j=0; j<_affected_klasses->length(); j++) {
 
         klassOop initial_klass = _affected_klasses->at(j)();
@@ -537,7 +534,6 @@ jvmtiError VM_RedefineClasses::load_new_class_versions(TRAPS) {
       int new_count = _affected_klasses->length() - 1 - i;
       if (new_count != 0) {
 
-        unlock_threads();
         TRACE_RC1("Found new number of affected classes: %d", new_count);
       }
     }
@@ -1350,6 +1346,22 @@ class FieldCopier : public FieldClosure {
       memcpy(cur_oop->obj_field_addr<HeapWord>(fd->offset()),
              old_oop->obj_field_addr<HeapWord>(result.offset()),
              type2aelembytes(fd->field_type()));
+
+      // Static fields may have references to java.lang.Class
+      if (fd->field_type() == T_OBJECT) {
+         oop oop = cur_oop->obj_field(fd->offset());
+         if (oop != NULL && oop->is_instanceMirror()) {
+            klassOop klass = java_lang_Class::as_klassOop(oop);
+            if (klass != NULL && klass->klass_part()->oop_is_instance()) {
+              assert(oop == instanceKlass::cast(klass)->java_mirror(), "just checking");
+              if (klass->klass_part()->new_version() != NULL) {
+              oop = instanceKlass::cast(klass->klass_part()->new_version())->java_mirror();
+
+              cur_oop->obj_field_put(fd->offset(), oop);
+            }
+          }
+        }
+      }
     }
   }
 };
@@ -1468,7 +1480,8 @@ void VM_RedefineClasses::doit() {
         if (obj->is_instanceMirror()) {
           // static fields may have references to old java.lang.Class instances, update them
           // at the same time, we don't want to update other oops in the java.lang.Class
-          instanceMirrorKlass::oop_fields_iterate(obj, _closure);
+          // Causes SIGSEGV?
+          //instanceMirrorKlass::oop_fields_iterate(obj, _closure);
         } else {
           obj->oop_iterate(_closure);
         }
@@ -1538,9 +1551,12 @@ void VM_RedefineClasses::doit() {
       // Revert pool holder for old version of klass (it was updated by one of ours closure!)
       old->constants()->set_pool_holder(old_oop);
 
-      // Transfer the array classes, otherwise we might get cast exceptions when casting array types.
-      assert(cur->array_klasses() == NULL, "just checking");
-      cur->set_array_klasses(old->array_klasses());
+
+      if (old->array_klasses() != NULL) {
+        // Transfer the array classes, otherwise we might get cast exceptions when casting array types.
+        assert(cur->array_klasses() == NULL, "just checking");
+        cur->set_array_klasses(old->array_klasses());
+      }
 
       // Initialize the new class! Special static initialization that does not execute the
       // static constructor but copies static field values from the old class if name
@@ -1607,7 +1623,7 @@ void VM_RedefineClasses::doit_epilogue() {
 
   RC_TIMER_START(_timer_vm_op_epilogue);
 
-  unlock_threads();
+  //unlock_threads();
 
   ResourceMark mark;
 

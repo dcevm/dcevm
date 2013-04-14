@@ -73,13 +73,9 @@ public class DeleteActiveMethodTest {
 
             try {
                 do {
-                    try {
-                        // FIXME: Race condition possible!
-                        Thread.sleep(500);
-                        this.helperValue();
-                    } catch (InterruptedException e) {
-                    }
+                    this.helperValue();
                 } while (t.isAlive());
+                this.helperValue();
                 Assert.fail("Exception expected!");
             } catch (NoSuchMethodError e) {
             }

@@ -67,7 +67,7 @@ task compileDCEVM(type: InvokeMake) {
 task installDCEVM(dependsOn: prepareJvm) << {
     def installPath = new File(new File(localJre, arch == Arch.X86 ? os.installPath32 : os.installPath64), jvmname)
 
-    println "Installing DCEVM runtime into JRE with JVM name ${jvmname}\n"
+    println "Installing DCEVM runtime into JRE with JVM name ${jvmname} at ${installPath}\n"
     ant.copy(todir: installPath) {
         fileset(dir: "../build/${os.buildPath}/${os.buildPath}_${arch.buildArch}_${compiler}/${kind}",
                 includes: 'libjvm.so,libjsig.so,jvm.dll,jsig.dll,libjvm.dylib,libjsig.dylib')
@@ -80,10 +80,15 @@ test {
     executable new File(localJre, "/bin/java")
     jvmArgs "-XXaltjvm=${jvmname}"
     jvmArgs '-javaagent:agent/build/libs/agent.jar'
-    jvmArgs project.oops == "compressed" ? '-XX:+UseCompressedOops' : "-XX:-UseCompressedOops2"
+    if (arch == Arch.X86_64) {
+        jvmArgs project.oops == "compressed" ? '-XX:+UseCompressedOops' : "-XX:-UseCompressedOops"
+    }
+    //jvmArgs '-XX:TraceRedefineClasses=2'
 
     scanForTestClasses = false
     include 'org/dcevm/test/LightTestSuite.class'
+
+    outputs.upToDateWhen { false }
 }
 
 dependencies {
@@ -95,9 +100,9 @@ dependencies {
 }
 
 enum Os {
+    MAC('bsd', 'lib', 'lib'),
     WINDOWS('windows', 'bin', 'bin'),
-    UNIX('linux', 'lib/i386', 'lib/amd64'), // amd64
-    MAC('bsd', 'lib', 'lib')
+    UNIX('linux', 'lib/i386', 'lib/amd64')
 
     final String buildPath;
     final String installPath32;

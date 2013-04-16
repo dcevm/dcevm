@@ -90,6 +90,7 @@ test {
     }
     //jvmArgs '-XX:TraceRedefineClasses=2'
 
+    ignoreFailures = true
     scanForTestClasses = false
     include 'org/dcevm/test/LightTestSuite.class'
 

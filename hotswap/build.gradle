@@ -75,6 +75,7 @@ test {
     }
     //jvmArgs '-XX:TraceRedefineClasses=2'
 
+    ignoreFailures = true
     scanForTestClasses = false
     include 'at/ssw/hotswap/test/CompleteTestSuite.class'
 

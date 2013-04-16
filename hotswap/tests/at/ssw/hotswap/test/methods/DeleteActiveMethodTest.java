@@ -80,6 +80,7 @@ public class DeleteActiveMethodTest {
                         Thread.sleep(500);
                     } catch (InterruptedException e) {
                     }
+                    helperValue();
                 }
                 Assert.fail("Exception expected!");
             } catch (NoSuchMethodError e) {

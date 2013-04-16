@@ -77,7 +77,7 @@ public class DeleteActiveMethodTest {
                 while (t.isAlive()) {
                     try {
                         this.helperValue();
-                        Thread.sleep(10);
+                        Thread.sleep(500);
                     } catch (InterruptedException e) {
                     }
                 }

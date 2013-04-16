@@ -112,7 +112,7 @@ public class HotSwapTool {
 
         Map<String, ReferenceType> klassesMap = new HashMap<String, ReferenceType>();
         for (ReferenceType t : klasses) {
-            if (!t.name().endsWith("[]")) {
+            if (!t.name().endsWith("[]") && !t.name().startsWith("org.gradle.")) { // XXX: Ignore Gradle classes
                 assert !klassesMap.containsKey(t.name()) : "Must not contain two classes with same name " + t.name() + "!";
                 klassesMap.put(t.name(), t);
             }

@@ -75,6 +75,11 @@ task installDCEVM(dependsOn: prepareJvm) << {
 }
 
 test.dependsOn(installDCEVM)
+test.dependsOn(compileDCEVM)
+clean.dependsOn(cleanDCEVM)
+
+compileDCEVM.onlyIf { !project.hasProperty('skipDCEVM') }
+cleanDCEVM  .onlyIf { !project.hasProperty('skipDCEVM') }
 
 test {
     executable new File(localJre, "/bin/java")

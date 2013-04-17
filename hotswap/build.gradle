@@ -143,12 +143,12 @@ enum Arch {
     }
 
     static Arch find(String token) {
-        Arch res = Arch.values().find({ v -> v.names.contains(token) })
+        Arch res = values().find({ v -> v.names.contains(token) })
         return res
     }
 
     static Arch current() {
-        return Arch.find(System.getProperty("os.arch"))
+        return find(System.getProperty("os.arch"))
     }
 }
 

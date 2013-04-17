@@ -165,7 +165,7 @@ class InvokeMake extends Exec {
         }
 
         args 'ENABLE_FULL_DEBUG_SYMBOLS=0', 'HOTSPOT_BUILD_JOBS=4', 'OPENJDK=true'
-        args "HOTSPOT_BUILD_VERSION=dcevm-${project.buildNumber}"
+        args "HOTSPOT_BUILD_VERSION=dcevmlight-${project.buildNumber}"
         args "ARCH_DATA_MODEL=${project.arch.bits}"
         args "ALT_BOOTDIR=${project.jre.replace('\\', '/')}/.." // Replacing backslashes is essential for Windows!
     }

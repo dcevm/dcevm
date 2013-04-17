@@ -13,6 +13,9 @@ if (!hasProperty('kind')) {
 if (!hasProperty('oops')) {
     project.ext.set('oops', 'compressed')
 }
+if (!hasProperty('buildNumber')) {
+    project.ext.set('buildNumber', 'dev')
+}
 
 // Name of the JVM to install DCEVM as
 def jvmname = "dcevm-${compiler}-${kind}"
@@ -162,6 +165,7 @@ class InvokeMake extends Exec {
         }
 
         args 'ENABLE_FULL_DEBUG_SYMBOLS=0', 'HOTSPOT_BUILD_JOBS=4', 'OPENJDK=true'
+        args "HOTSPOT_BUILD_VERSION=dcevm-${project.buildNumber}"
         args "ARCH_DATA_MODEL=${project.arch.bits}"
         args "ALT_BOOTDIR=${project.jre.replace('\\', '/')}/.." // Replacing backslashes is essential for Windows!
     }

@@ -91,7 +91,7 @@ test {
     if (arch == Arch.X86_64) {
         jvmArgs project.oops == "compressed" ? '-XX:+UseCompressedOops' : "-XX:-UseCompressedOops"
     }
-    //jvmArgs '-XX:TraceRedefineClasses=2'
+    jvmArgs '-XX:TraceRedefineClasses=1'
 
     ignoreFailures = true
     scanForTestClasses = false

@@ -24,26 +24,47 @@
 
 package org.dcevm.test.fields;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+import org.junit.Before;
+import org.junit.Ignore;
+import org.junit.Test;
+
+import static org.dcevm.test.util.HotSwapTestHelper.__toVersion__;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 /**
- * Class redefinition tests that may change the methods and fields of class, but do not change the superklass or the implemented
- * interface.
- *
- * @author Thomas Wuerthinger
+ * @author Ivan Dubrov
  */
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-        FieldChangedOrderTest.class,
-        FieldModificationTest.class,
-        ObjectStressTest.class,
-        YieldTest.class,
-        ComplexFieldTest.class,
-        FieldAlignmentTest.class,
-        StringFieldTest.class,
-        RedefinePrivateFieldTest.class,
-        EnumTest.class
-})
-public class FieldsTestSuite {
+public class EnumTest {
+
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+    }
+
+    static enum A {
+        FIRST,
+        SECOND;
+    }
+
+    static enum A___1 {
+        SECOND,
+        THIRD,
+        FOURTH;
+    }
+
+    @Test
+    @Ignore
+    public void testEnumFields() throws Exception {
+        assertEquals(2, A.values().length);
+        assertNotNull(A.values()[0]);
+        assertNotNull(A.values()[1]);
+
+        __toVersion__(1);
+
+        assertEquals(3, A.values().length);
+        assertNotNull(A.values()[0]);
+        assertNotNull(A.values()[1]);
+        assertNotNull(A.values()[2]);
+    }
 }

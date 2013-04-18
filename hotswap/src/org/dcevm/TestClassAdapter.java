@@ -45,7 +45,7 @@ public class TestClassAdapter extends RemappingClassAdapter {
     public TestClassAdapter(ClassVisitor cv, final Map<String, String> typeMappings) {
         super(cv, new Remapper() {
             @Override
-            public String mapType(String type) {
+            public String map(String type) {
                 return typeMappings.containsKey(type) ? typeMappings.get(type) : type;
             }
         });

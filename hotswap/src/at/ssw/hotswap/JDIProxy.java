@@ -66,7 +66,7 @@ public class JDIProxy {
     private static JDIProxy jdi;
     
     /** Port at which to connect to the agent of the VM. **/
-    public static final int PORT = 4000;
+    public static final int PORT = Integer.getInteger("debugPort", 4000);
     
     private JDIProxy() {
     }

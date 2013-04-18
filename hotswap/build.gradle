@@ -19,6 +19,13 @@ if (!hasProperty('oops')) {
 if (!hasProperty('buildNumber')) {
     project.ext.set('buildNumber', 'dev')
 }
+if (!hasProperty('debugPort')) {
+    // pick random socket port
+    def socket = new java.net.ServerSocket(0)
+    project.ext.set('debugPort', socket.localPort)
+    socket.close()
+
+}
 
 // Name of the JVM to install DCEVM as
 def jvmname = "dcevm-${compiler}-${kind}"
@@ -77,7 +84,8 @@ cleanDCEVM  .onlyIf { !project.hasProperty('skipDCEVM') }
 test {
     executable new File(localJre, "/bin/java")
     jvmArgs "-XXaltjvm=${jvmname}"
-    jvmArgs '-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=4000'
+    jvmArgs "-DdebugPort=${project.debugPort}"
+    jvmArgs "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=${project.debugPort}"
     if (arch == Arch.X86_64) {
         jvmArgs project.oops == "compressed" ? '-XX:+UseCompressedOops' : "-XX:-UseCompressedOops"
     }

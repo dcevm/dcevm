@@ -161,7 +161,7 @@ void ParallelOldTracer::report_dense_prefix(void* dense_prefix) {
   _parallel_old_gc_info.report_dense_prefix(dense_prefix);
 }
 
-void CMSTracer::report_concurrent_mode_failure() {
+void OldGCTracer::report_concurrent_mode_failure() {
   assert_set_gc_id();
 
   send_concurrent_mode_failure_event();
@@ -185,5 +185,12 @@ void G1NewTracer::report_evacuation_info(EvacuationInfo* info) {
   assert_set_gc_id();
 
   send_evacuation_info_event(info);
+}
+
+void G1NewTracer::report_evacuation_failed(EvacuationFailedInfo& ef_info) {
+  assert_set_gc_id();
+
+  send_evacuation_failed_event(ef_info);
+  ef_info.reset();
 }
 #endif

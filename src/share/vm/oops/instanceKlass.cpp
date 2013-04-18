@@ -822,20 +822,16 @@ methodOop instanceKlass::class_initializer() {
 }
 
 void instanceKlass::call_class_initializer_impl(instanceKlassHandle this_oop, TRAPS) {
-
-  ResourceMark rm(THREAD);
   methodHandle h_method(THREAD, this_oop->class_initializer());
-
   assert(!this_oop->is_initialized(), "we cannot initialize twice");
   if (TraceClassInitialization) {
     tty->print("%d Initializing ", call_class_initializer_impl_counter++);
     this_oop->name()->print_value();
     tty->print_cr("%s (" INTPTR_FORMAT ")", h_method() == NULL ? "(no method)" : "", (address)this_oop());
   }
-
-  JavaCallArguments args; // No arguments
-  JavaValue result(T_VOID);
-  if (!h_method.is_null() && (this_oop->old_version() == NULL || ((instanceKlass*)this_oop->old_version()->klass_part())->is_not_initialized())) {
+  if (h_method() != NULL) {
+    JavaCallArguments args; // No arguments
+    JavaValue result(T_VOID);
     JavaCalls::call(&result, h_method, &args, CHECK); // Static call (no args)
   }
 }

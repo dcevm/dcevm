@@ -16,6 +16,9 @@ if (!hasProperty('oops')) {
 if (!hasProperty('buildNumber')) {
     project.ext.set('buildNumber', 'dev')
 }
+if (!hasProperty('traceRedefinition')) {
+    project.ext.set('traceRedefinition', '1')
+}
 
 // Name of the JVM to install DCEVM as
 def jvmname = "dcevm-${compiler}-${kind}"
@@ -91,7 +94,7 @@ test {
     if (arch == Arch.X86_64) {
         jvmArgs project.oops == "compressed" ? '-XX:+UseCompressedOops' : "-XX:-UseCompressedOops"
     }
-    jvmArgs '-XX:TraceRedefineClasses=1'
+    jvmArgs "-XX:TraceRedefineClasses=${traceRedefinition}"
 
     ignoreFailures = true
     scanForTestClasses = false

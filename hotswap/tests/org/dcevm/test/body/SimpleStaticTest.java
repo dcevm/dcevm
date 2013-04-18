@@ -65,11 +65,14 @@ public class SimpleStaticTest {
     public static class E {
         public static int integerField = 10;
 
+        public static E self = new E();
+
         // javac will generate "ConstantValue" attribute for this field!
         public static final int finalIntegerField = 7;
     }
 
     public static class E___1 {
+        public static E___1 self = new E___1();
     }
 
     // Version 1

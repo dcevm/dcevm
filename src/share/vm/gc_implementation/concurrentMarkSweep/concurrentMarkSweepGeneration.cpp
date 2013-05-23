@@ -62,7 +62,8 @@
 
 // statics
 CMSCollector* ConcurrentMarkSweepGeneration::_collector = NULL;
-bool          CMSCollector::_full_gc_requested          = false;
+bool CMSCollector::_full_gc_requested = false;
+GCCause::Cause CMSCollector::_full_gc_cause = GCCause::_no_gc;
 
 //////////////////////////////////////////////////////////////////
 // In support of CMS/VM thread synchronization
@@ -1683,12 +1684,13 @@ void CMSCollector::collect(bool   full,
 
 }
 
-void CMSCollector::request_full_gc(unsigned int full_gc_count) {
+void CMSCollector::request_full_gc(unsigned int full_gc_count, GCCause::Cause cause) {
   GenCollectedHeap* gch = GenCollectedHeap::heap();
   unsigned int gc_count = gch->total_full_collections();
   if (gc_count == full_gc_count) {
     MutexLockerEx y(CGC_lock, Mutex::_no_safepoint_check_flag);
     _full_gc_requested = true;
+    _full_gc_cause = cause;
     CGC_lock->notify();   // nudge CMS thread
   } else {
     assert(gc_count > full_gc_count, "Error: causal loop");
@@ -1885,6 +1887,14 @@ NOT_PRODUCT(
     // code assumes referents are not NULL and that all discovered
     // Reference objects are active.
     ref_processor()->clean_up_discovered_references();
+
+    if (first_state > Idling) {
+      save_heap_summary();
+    }
+
+    if (first_state > Idling) {
+      save_heap_summary();
+    }
 
     do_compaction_work(clear_all_soft_refs);
 
@@ -2123,7 +2133,7 @@ void CMSCollector::do_mark_sweep_work(bool clear_all_soft_refs,
       // required.
       _collectorState = FinalMarking;
   }
-  collect_in_foreground(clear_all_soft_refs);
+  collect_in_foreground(clear_all_soft_refs, GenCollectedHeap::heap()->gc_cause());
 
   // For a mark-sweep, compute_new_size() will be called
   // in the heap's do_collection() method.
@@ -2186,7 +2196,7 @@ class ReleaseForegroundGC: public StackObj {
 // one "collect" method between the background collector and the foreground
 // collector but the if-then-else required made it cleaner to have
 // separate methods.
-void CMSCollector::collect_in_background(bool clear_all_soft_refs) {
+void CMSCollector::collect_in_background(bool clear_all_soft_refs, GCCause::Cause cause) {
   assert(Thread::current()->is_ConcurrentGC_thread(),
     "A CMS asynchronous collection is only allowed on a CMS thread.");
 
@@ -2205,7 +2215,7 @@ void CMSCollector::collect_in_background(bool clear_all_soft_refs) {
     } else {
       assert(_collectorState == Idling, "Should be idling before start.");
       _collectorState = InitialMarking;
-      register_gc_start(GCCause::_cms_concurrent_mark);
+      register_gc_start(cause);
       // Reset the expansion cause, now that we are about to begin
       // a new cycle.
       clear_expansion_cause();
@@ -2214,6 +2224,7 @@ void CMSCollector::collect_in_background(bool clear_all_soft_refs) {
     // ensuing concurrent GC cycle.
     update_should_unload_classes();
     _full_gc_requested = false;           // acks all outstanding full gc requests
+    _full_gc_cause = GCCause::_no_gc;
     // Signal that we are about to start a collection
     gch->increment_total_full_collections();  // ... starting a collection cycle
     _collection_count_start = gch->total_full_collections();
@@ -2460,7 +2471,7 @@ void CMSCollector::report_heap_summary(GCWhen::Type when) {
   _gc_tracer_cm->report_gc_heap_summary(when, _last_heap_summary, _last_perm_gen_summary);
 }
 
-void CMSCollector::collect_in_foreground(bool clear_all_soft_refs) {
+void CMSCollector::collect_in_foreground(bool clear_all_soft_refs, GCCause::Cause cause) {
   assert(_foregroundGCIsActive && !_foregroundGCShouldWait,
          "Foreground collector should be waiting, not executing");
   assert(Thread::current()->is_VM_thread(), "A foreground collection"
@@ -2493,7 +2504,7 @@ void CMSCollector::collect_in_foreground(bool clear_all_soft_refs) {
     }
     switch (_collectorState) {
       case InitialMarking:
-        register_foreground_gc_start(GenCollectedHeap::heap()->gc_cause());
+        register_foreground_gc_start(cause);
         init_mark_was_synchronous = true;  // fact to be exploited in re-mark
         checkpointRootsInitial(false);
         assert(_collectorState == Marking, "Collector state should have changed"
@@ -6396,7 +6407,6 @@ void CMSCollector::reset(bool asynch) {
 }
 
 void CMSCollector::do_CMS_operation(CMS_op_type op, GCCause::Cause gc_cause) {
-  gclog_or_tty->date_stamp(PrintGC && PrintGCDateStamps);
   TraceCPUTime tcpu(PrintGCDetails, true, gclog_or_tty);
   GCTraceTime t(GCCauseString("GC", gc_cause), PrintGC, !PrintGCDetails, NULL);
   TraceCollectorStats tcs(counters());

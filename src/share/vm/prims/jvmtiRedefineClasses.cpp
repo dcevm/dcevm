@@ -2346,12 +2346,6 @@ void VM_RedefineClasses::doit() {
       oop new_mirror = _new_classes->at(i)->java_mirror();
       oop old_mirror = _new_classes->at(i)->old_version()->java_mirror();
       java_lang_Class::set_array_klass(new_mirror, java_lang_Class::array_klass(old_mirror));
-
-      // Transfer init state
-      instanceKlass::ClassState state = instanceKlass::cast(cur->old_version())->init_state();
-      if (state > instanceKlass::linked) {
-        instanceKlass::cast(cur)->call_class_initializer(thread);
-      }
     }
   }
 
@@ -2418,6 +2412,14 @@ void VM_RedefineClasses::doit_epilogue() {
   for (int i=0; i<_new_classes->length(); i++) {
     
     instanceKlassHandle klass = _new_classes->at(i);
+
+    // Transfer init state
+    if (klass->old_version() != NULL) {
+      instanceKlass::ClassState state = instanceKlass::cast(klass->old_version())->init_state();
+      if (state > instanceKlass::linked) {
+        klass->initialize(Thread::current());
+      }
+    }
     
     // Find instance transformer method
 

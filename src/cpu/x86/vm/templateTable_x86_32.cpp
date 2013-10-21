@@ -3041,7 +3041,7 @@ void TemplateTable::invokevirtual_helper(Register index,
   // DCEVM: Check if we are calling an old method (and have to go slow path)
   Label notOld;
   __ movl(rax, flags);
-  __ andl(rax, (1 << ConstantPoolCacheEntry::oldMethodBit));
+  __ andl(rax, (1 << ConstantPoolCacheEntry::is_old_method_shift));
   __ jcc(Assembler::zero, notOld);
 
   // Need a null check here!
@@ -3146,7 +3146,7 @@ void TemplateTable::invokeinterface(int byte_no) {
   // DCEVM: Check if we are calling an old method (and have to go slow path)
   //__ movl(rax, rdx);
   Label notOld;
-  __ andl(rdx, (1 << ConstantPoolCacheEntry::oldMethodBit));
+  __ andl(rdx, (1 << ConstantPoolCacheEntry::is_old_method_shift));
   __ jcc(Assembler::zero, notOld);
 
   // Get receiver klass into rdx - also a null check

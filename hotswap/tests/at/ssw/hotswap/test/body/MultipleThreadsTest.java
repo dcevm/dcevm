@@ -53,7 +53,7 @@ public class MultipleThreadsTest {
 
     @Parameters
     public static List<Object[]> parameters() {
-        return Arrays.asList(new Object[][]{{1}, {50}});
+        return Arrays.asList(new Object[][]{{1}, {20}});
     }
 
     private int count;
@@ -173,20 +173,20 @@ public class MultipleThreadsTest {
         }
 
         __toVersion__(0);
-        Thread.sleep(500);
+        Thread.sleep(1000);
         for (int i = 0; i < count; i++) {
             //assertTrue(arr[i].getValue() > 0);
             assertEquals(0, arr[i].getValue2());
         }
 
         __toVersion__(1);
-        Thread.sleep(500);
+        Thread.sleep(1000);
         for (int i = 0; i < count; i++) {
             assertTrue(arr[i].getValue2() > 0);
         }
 
         __toVersion__(2);
-        Thread.sleep(500);
+        Thread.sleep(1000);
         for (int i = 0; i < count; i++) {
             assertFalse(arr[i].isAlive());
         }

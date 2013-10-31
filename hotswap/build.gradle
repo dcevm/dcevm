@@ -161,6 +161,7 @@ class InvokeMake extends Exec {
             environment ARCH: project.arch == Arch.X86 ? 'x86' : 'x64'
         }
 
+        args 'COMPILER_WARNINGS_FATAL=false' // clang is very serious about warnings
         args 'ENABLE_FULL_DEBUG_SYMBOLS=0', 'HOTSPOT_BUILD_JOBS=4', 'OPENJDK=true'
         args "HOTSPOT_BUILD_VERSION=dcevm-${project.buildNumber}"
         args "ARCH_DATA_MODEL=${project.arch.bits}"

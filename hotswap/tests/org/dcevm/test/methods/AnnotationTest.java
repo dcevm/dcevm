@@ -37,6 +37,7 @@ import static org.junit.Assert.assertEquals;
 /**
  * Tests for adding / removing annotations on methods, fields and classes.
  *
+ * @author Thomas Wuerthinger
  * @author Jiri Bubnik
  */
 public class AnnotationTest {
@@ -65,21 +66,6 @@ public class AnnotationTest {
         }
     }
 
-    // Version 1
-    @TestAnnotation
-    public static class A___2 {
-        @TestAnnotation
-        public int testField;
-
-        // test add method with name after annotated method (swap method ids)
-        public void z() {
-        }
-
-        @TestAnnotation
-        public void testMethod() {
-        }
-    }
-
     @Before
     public void setUp() throws Exception {
         __toVersion__(0);
@@ -102,8 +88,6 @@ public class AnnotationTest {
         assert __version__() == 0;
         checkAnnotation(A.class, false);
         __toVersion__(1);
-        checkAnnotation(A.class, true);
-        __toVersion__(2);
         checkAnnotation(A.class, true);
         __toVersion__(0);
         checkAnnotation(A.class, false);

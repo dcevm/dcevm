@@ -92,6 +92,8 @@ class VM_RedefineClasses: public VM_GC_Operation {
   // Change jmethodIDs to point to the new methods
   void update_jmethod_ids();
 
+  void swap_all_method_annotations(int i, int j, instanceKlassHandle scratch_class);
+
   static void add_affected_klasses( klassOop obj );
 
   static jvmtiError do_topological_class_sorting(const jvmtiClassDefinition *class_definitions, int class_count, TRAPS);

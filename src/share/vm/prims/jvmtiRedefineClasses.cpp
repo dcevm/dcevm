@@ -87,6 +87,22 @@ VM_RedefineClasses::~VM_RedefineClasses() {
   }
 }
 
+void VM_RedefineClasses::swap_all_method_annotations(int i, int j, instanceKlassHandle scratch_class) {
+  typeArrayOop save;
+
+  save = scratch_class->get_method_annotations_of(i);
+  scratch_class->set_method_annotations_of(i, scratch_class->get_method_annotations_of(j));
+  scratch_class->set_method_annotations_of(j, save);
+
+  save = scratch_class->get_method_parameter_annotations_of(i);
+  scratch_class->set_method_parameter_annotations_of(i, scratch_class->get_method_parameter_annotations_of(j));
+  scratch_class->set_method_parameter_annotations_of(j, save);
+
+  save = scratch_class->get_method_default_annotations_of(i);
+  scratch_class->set_method_default_annotations_of(i, scratch_class->get_method_default_annotations_of(j));
+  scratch_class->set_method_default_annotations_of(j, save);
+}
+
 void VM_RedefineClasses::add_affected_klasses( klassOop klass )
 {
   assert(!_affected_klasses->contains(klass), "must not occur more than once!");
@@ -1123,7 +1139,7 @@ int VM_RedefineClasses::calculate_redefinition_flags(instanceKlassHandle new_cla
         }
         k_new_method->set_method_idnum(old_num);
         TRACE_RC2("swapping idnum of new and old method %d / %d!", new_num, old_num);        
-       // swap_all_method_annotations(old_num, new_num, new_class);
+        swap_all_method_annotations(old_num, new_num, new_class);
       }
     }
     TRACE_RC3("Method matched: new: %s [%d] == old: %s [%d]",
@@ -1156,7 +1172,7 @@ int VM_RedefineClasses::calculate_redefinition_flags(instanceKlassHandle new_cla
         idnum_owner->set_method_idnum(new_num);
       }
       k_new_method->set_method_idnum(num);
-      //swap_all_method_annotations(new_num, num, new_class);
+      swap_all_method_annotations(new_num, num, new_class);
     }
     TRACE_RC1("Method added: new: %s [%d]",
       k_new_method->name_and_sig_as_C_string(), ni);

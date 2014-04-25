@@ -1,4 +1,4 @@
 Manifest-Version: 1.0
 Can-Redefine-Classes: true
-Agent-Class: org.dcevm.agent.InstrumentationAgent
-Premain-Class: org.dcevm.agent.InstrumentationAgent
+Agent-Class: com.github.dcevm.agent.InstrumentationAgent
+Premain-Class: com.github.dcevm.agent.InstrumentationAgent

@@ -156,6 +156,7 @@ setup(['tests-java7', 'tests-java8'], {
 
         ignoreFailures = true
         outputs.upToDateWhen { false }
+        exclude '**/*Suite.class'
     }
 
     test.dependsOn project(':hotspot').tasks[kind == 'fastdebug' ? 'installFastdebug' : 'installProduct']

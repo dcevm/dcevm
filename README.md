@@ -18,6 +18,7 @@ You need the following software to build DCEVM:
 
 * Java 7 or later. If you intend to run tests, it should be one of the supported versions (see list of [patches/](patches/))
 * C++ compiler toolchain (gcc). There is no strict version requirement except that it should be supported by HotSpot build scripts.
+* Mercurial
 
 ### Compiling DCEVM
 
@@ -31,6 +32,11 @@ You need the following software to build DCEVM:
 * Replace `libjvm.so/jvm.dll/libjvm.dylib` in the target JRE.
 * Run `java -version`, it should include `Dynamic Code Evolution` string.
 
+Or you can install DCEVM using the gradle script:
+
+ * Run `./gradlew installFastdebug -PtargetJre=$JAVA_HOME/jre` or `./gradlew installProduct -PtargetJre=$JAVA_HOME/jre`
+ * DCEVM will be installed as "alternative" JVM. To use it, add `-XXaltjvm=dcevm`
+
 ### Testing DCEVM
 
 * Configure version you want in [gradle.properties](gradle.properties).
@@ -38,5 +44,10 @@ You need the following software to build DCEVM:
 * Run `./gradlew patch` to retrieve HotSpot sources and patch them.
 * Run `./gradlew test` to run tests.
 * Tests reports will be in `dcevm/build/reports/tests/index.html`
+
+To run tests from IDE, you need:
+ 
+ * Add agent.jar as JVM agent (`-javaagent:agent/build/libs/agent.jar`).
+ * Configure Java to use DCEVM JVM if installed side-by-side (`-XXaltjvm=dcevm`).
 
 ### Known issues

@@ -108,7 +108,7 @@ def setup(prjs, closure) {
     }
 }
 
-setup(['agent', 'framework', 'tests-java7', 'tests-java8'], {
+setup(['agent', 'dcevm'], {
     apply plugin: 'java'
     apply plugin: 'idea'
 
@@ -125,23 +125,19 @@ project('agent') {
     }
 }
 
-project('framework') {
+project('dcevm') {
     dependencies {
         compile project(':agent')
         compile group: 'asm', name: 'asm-all', version: '3.3.+'
         compile files(System.getProperty("java.home") + '/../lib/tools.jar')
-    }
-}
 
-project('tests-java8') {
-    sourceCompatibility = 1.8
-    targetCompatibility = 1.8
-}
-
-setup(['tests-java7', 'tests-java8'], {
-    dependencies {
-        compile project(':framework')
         testCompile group: 'junit', name: 'junit', version: '4.11'
+    }
+
+    def m = System.getProperty('java.version') =~ /^1\.([0-9]+)\.*/
+    def major = m[0][1].toInteger()
+    if (major >= 7) {
+        sourceSets.test.java.srcDirs += 'src/test/java8'
     }
 
     test {
@@ -160,7 +156,7 @@ setup(['tests-java7', 'tests-java8'], {
     }
 
     test.dependsOn project(':hotspot').tasks[kind == 'fastdebug' ? 'installFastdebug' : 'installProduct']
-})
+}
 
 
 enum Arch {

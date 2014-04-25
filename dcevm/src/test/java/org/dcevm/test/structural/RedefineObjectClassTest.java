@@ -85,7 +85,7 @@ public class RedefineObjectClassTest {
         }
 
         public final String myTestFunction___() {
-            return "test";
+            return "org/dcevm/test";
         }
 
         public final native void notify___();
@@ -141,7 +141,7 @@ public class RedefineObjectClassTest {
 
 
         //assertEquals("test", o.toString());
-        assertEquals("test", Helper.access(o));
+        assertEquals("org/dcevm/test", Helper.access(o));
         __toVersion__(0);
         __toVersion__(1);
         __toVersion__(0);

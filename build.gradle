@@ -136,11 +136,17 @@ project('native') {
         if (os != Os.WINDOWS) {
             commandLine 'gcc'
             args "-I${jre}/../include"
-            args "-I${jre}/../include/linux"
             args '-shared'
             args 'natives.c'
-            args '-o'
-            args 'build/libnatives.so'
+            if (os == Os.UNIX) {
+                args "-I${jre}/../include/linux"
+                args '-o'
+                args 'build/libnatives.so'
+            } else if (os == Os.MAC) {
+                args "-I${jre}/../include/darwin"
+                args '-o'
+                args 'build/libnatives.dylib'
+            }
         } else {
             commandLine 'cmd', '/c', 'compile.cmd'
             environment ARCH: arch == Arch.X86 ? 'x86' : 'x64'

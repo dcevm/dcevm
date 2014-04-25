@@ -25,7 +25,6 @@
 package com.github.dcevm.test.natives;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
@@ -37,8 +36,10 @@ import static org.junit.Assert.assertEquals;
  *
  * @author Thomas Wuerthinger
  */
-@Ignore
 public class SimpleNativeTest {
+    static {
+        System.loadLibrary("natives");
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -69,7 +70,6 @@ public class SimpleNativeTest {
 
     @Test
     public void testSimpleNativeCalls() {
-
         assert __version__() == 0;
 
 

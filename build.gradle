@@ -187,6 +187,7 @@ project('dcevm') {
             jvmArgs(project.oops == "compressed" ? '-XX:+UseCompressedOops' : "-XX:-UseCompressedOops")
         }
         jvmArgs "-XX:TraceRedefineClasses=${traceRedefinition}"
+        jvmArgs "-Djava.library.path=../native/build"
 
         ignoreFailures = true
         outputs.upToDateWhen { false }
@@ -195,6 +196,7 @@ project('dcevm') {
         }
     }
 
+    test.dependsOn project(':native').tasks['compile']
     test.dependsOn project(':hotspot').tasks[kind == 'fastdebug' ? 'installFastdebug' : 'installProduct']
 }
 

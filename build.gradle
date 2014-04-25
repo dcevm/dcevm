@@ -73,29 +73,30 @@ project('hotspot') {
         }
     }
 
-    task compileFastdebug(type: InvokeMake) {
-        args 'STRIP_POLICY=no_strip'
-        args 'ZIP_DEBUGINFO_FILES=0'
-        args 'ENABLE_FULL_DEBUG_SYMBOLS=1'
-        args 'fastdebug'
-    }
+    def arguments = ['product':   ['ENABLE_FULL_DEBUG_SYMBOLS=0'],
+                     'fastdebug': ['ENABLE_FULL_DEBUG_SYMBOLS=1', 'STRIP_POLICY=no_strip', 'ZIP_DEBUGINFO_FILES=0']]
 
-    task compileProduct(type: InvokeMake) {
-        args 'ENABLE_FULL_DEBUG_SYMBOLS=0'
-        args 'product'
-    }
+    ['product', 'fastdebug'].each { k ->
+        // Compile given kind of DCEVM
+        def compile = task("compile${k.capitalize()}", type: InvokeMake) {
+            args arguments[k]
+            args k
+            doLast {
+                ant.copy(todir: "build/${k}", overwrite: true) {
+                    fileset(dir: "build/${os.buildPath}/${os.buildPath}_${arch.buildArch}_${compiler}/${k}",
+                            includes: 'libjvm.so,libjsig.so,jvm.dll,jsig.dll,libjvm.dylib,libjsig.dylib')
+                }
+            }
+        }
+        compile.mustRunAfter(patch)
 
-    compileFastdebug.mustRunAfter patch
-    compileProduct.mustRunAfter patch
-
-    // Install given kind of DCEVM into destination JRE
-    ['Product', 'Fastdebug'].each { k ->
-        task("install${k}", dependsOn: [prepareJvm, "compile${k}"]) << {
+        // Install given kind of DCEVM into destination JRE
+        task("install${k.capitalize()}", dependsOn: [prepareJvm, compile]) << {
             def installPath = new File(new File(targetJreFile, arch == Arch.X86 ? os.installPath32 : os.installPath64), jvmName)
 
-            logger.info("Installing DCEVM runtime into JRE with JVM name '${jvmName}' and kind '${k.toLowerCase()}' at ${installPath}")
+            logger.info("Installing DCEVM runtime into JRE with JVM name '${jvmName}' and kind '${k}' at ${installPath}")
             ant.copy(todir: installPath, overwrite: true) {
-                fileset(dir: "build/${os.buildPath}/${os.buildPath}_${arch.buildArch}_${compiler}/${k.toLowerCase()}",
+                fileset(dir: "build/${os.buildPath}/${os.buildPath}_${arch.buildArch}_${compiler}/${k}",
                         includes: 'libjvm.so,libjsig.so,jvm.dll,jsig.dll,libjvm.dylib,libjsig.dylib')
             }
         }
@@ -146,7 +147,9 @@ project('dcevm') {
     test {
         executable new File(targetJreFile, 'bin/java')
 
-        jvmArgs '-XX:LogFile=build/hotspot.log'
+        if (kind == 'fastdebug') {
+            jvmArgs '-XX:LogFile=build/hotspot.log'
+        }
         jvmArgs "-XXaltjvm=${jvmName}"
         jvmArgs '-javaagent:../agent/build/libs/agent.jar'
         if (arch == Arch.X86_64) {

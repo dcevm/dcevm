@@ -47,7 +47,8 @@ Or you can install DCEVM using the gradle script:
 
 To run tests from IDE, you need:
  
- * Add agent.jar as JVM agent (`-javaagent:agent/build/libs/agent.jar`).
- * Configure Java to use DCEVM JVM if installed side-by-side (`-XXaltjvm=dcevm`).
+ * Run `./gradlew agent:build` to build redefinition agent code.
+ * Add JVM argument to use redefinition agent (`-javaagent:agent/build/libs/agent.jar`).
+ * Add JVM argument to DCEVM VM if installed side-by-side (`-XXaltjvm=dcevm`).
 
 ### Known issues

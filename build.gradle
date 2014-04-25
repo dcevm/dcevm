@@ -137,6 +137,8 @@ project('dcevm') {
     def m = System.getProperty('java.version') =~ /^1\.([0-9]+)\.*/
     def major = m[0][1].toInteger()
     if (major >= 7) {
+        sourceSets.test.java.srcDirs += 'src/test/java7'
+    } else if (major >= 8) {
         sourceSets.test.java.srcDirs += 'src/test/java8'
     }
 

@@ -26,9 +26,11 @@ package com.github.dcevm.test.methods;
 
 import com.github.dcevm.MethodRedefinitionPolicy;
 import com.github.dcevm.RedefinitionPolicy;
+import com.github.dcevm.test.category.Full;
 import junit.framework.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
@@ -39,6 +41,7 @@ import static org.junit.Assert.assertEquals;
  *
  * @author Thomas Wuerthinger
  */
+@Category(Full.class)
 public class CallDeletedMethodTest {
 
     @Before

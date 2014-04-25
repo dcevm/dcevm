@@ -25,7 +25,8 @@ project('hotspot') {
     task prepareJvm {
         onlyIf { jreFile.canonicalPath != targetJreFile.canonicalPath }
         doLast {
-            ant.copy(todir: targetJreFile) {
+            // FIXME: We probably should check if source path is different and delete old JRE in that case
+            ant.copy(todir: targetJreFile, overwrite: true) {
                 fileset(dir: jreFile)
             }
             ant.chmod(file: new File(targetJreFile, 'bin/java'), perm: '0755')

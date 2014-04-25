@@ -23,7 +23,7 @@ project('hotspot') {
     }
 
     task prepareJvm {
-        onlyIf { jreFile != targetJreFile }
+        onlyIf { jreFile.canonicalPath != targetJreFile.canonicalPath }
         doLast {
             ant.copy(todir: targetJreFile) {
                 fileset(dir: jreFile)

@@ -140,7 +140,8 @@ project('dcevm') {
     def major = m[0][1].toInteger()
     if (major >= 7) {
         sourceSets.test.java.srcDirs += 'src/test/java7'
-    } else if (major >= 8) {
+    }
+    if (major >= 8) {
         sourceSets.test.java.srcDirs += 'src/test/java8'
     }
 

@@ -25,103 +25,93 @@
 package com.github.dcevm.test.structural;
 
 import com.github.dcevm.test.TestUtil;
-import com.github.dcevm.test.category.Light;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
 
 /**
- * Tests that change the type of the object references by the Java this pointer.
+ * Test case for type narrowing where a non-active method fails verification because of the new hierarchy.
  *
  * @author Thomas Wuerthinger
  */
-@Category(Light.class)
-public class ThisTypeChange {
-
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
+@Ignore
+public class TypeNarrowingMethodTest3 {
 
     // Version 0
     public static class A {
 
-        public int valueOK() {
-            return 1;
-        }
+        int x = 1;
+        int y = 2;
+        int z = 3;
 
         public int value() {
-            __toVersion__(1);
-            return 1;
+            return x;
+        }
+
+        public static int badMethod() {
+            A a = indirectionMethod()[0];
+            return a.y;
         }
     }
 
     public static class B extends A {
 
-        @Override
-        public int value() {
-            return super.value();
-        }
-
-
-        @Override
-        public int valueOK() {
-            __toVersion__(1);
-            return super.valueOK();
-        }
-    }
-
-    // Version 1
-    public static class A___1 {
-
-        public int valueOK() {
-            return 2;
-        }
     }
 
     // Version 1
     public static class B___1 {
     }
 
-    // Method to enforce cast (otherwise bytecodes become invalid in version 2)
-    public static A convertBtoA(Object b) {
-        return (A) b;
+    // Version 2
+    public static class A___2 {
+
+        int x = 1;
+        int y = 2;
+        int z = 3;
+
+        public int value() {
+            return x;
+        }
+
+        public static int badMethod(B b) {
+            return 5;
+        }
+    }
+
+    public static class B___2 {
+    }
+
+
+    @Before
+    public void setUp() throws Exception {
+        __toVersion__(0);
+        A a = new A();
+        B b = new B();
+    }
+
+    public static B[] indirectionMethod() {
+        return new B[]{ new B() };
     }
 
     @Test
-    public void testThisTypeChange() {
+    public void testTypeNarrowingWithViolatingMethod() {
+        final A a = new A();
 
-        assert __version__() == 0;
-
-        final B b = new B();
-        TestUtil.assertUnsupported(new Runnable() {
-            @Override
-            public void run() {
-                b.value();
-            }
+        TestUtil.assertException(UnsupportedOperationException.class, new Runnable() {
+          @Override
+          public void run() {
+            __toVersion__(1);
+            System.out.println(a.badMethod());
+          }
         });
 
         assert __version__() == 0;
 
-        TestUtil.assertUnsupported(new Runnable() {
-            @Override
-            public void run() {
-                b.valueOK();
-            }
-        });
+        __toVersion__(2);
 
-        assert __version__() == 0;
-
-        TestUtil.assertUnsupported(new Runnable() {
-            @Override
-            public void run() {
-                b.valueOK();
-            }
-        });
-
-        assert __version__() == 0;
+        __toVersion__(0);
     }
 }

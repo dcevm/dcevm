@@ -22,28 +22,17 @@
  *
  */
 
-package com.github.dcevm.test.methods;
+package com.github.dcevm;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
- * Class redefinition tests that perform adding/removing/changing the methods of a class.
  *
  * @author Thomas Wuerthinger
  */
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-        AddMethodTest.class,
-        DeleteActiveMethodTest.class,
-        ClassReflectionTest.class,
-        MethodReflectionTest.class,
-        ClassObjectSynchronizationTest.class,
-        ClassObjectHashcodeTest.class,
-        OverrideMethodTest.class,
-        SingleClassTest.class,
-        SingleClassReflectionTest.class,
-        AnnotationTest.class
-})
-public class MethodsTestSuite {
+@Retention(RetentionPolicy.CLASS)
+public @interface MethodRedefinitionPolicy {
+    RedefinitionPolicy value();
+
 }

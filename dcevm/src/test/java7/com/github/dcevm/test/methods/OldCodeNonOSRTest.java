@@ -22,24 +22,24 @@
  *
  */
 
-package com.github.dcevm.test.structural;
+package com.github.dcevm.test.methods;
 
-import com.github.dcevm.test.TestUtil;
-import com.github.dcevm.test.category.Light;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
+import static org.junit.Assert.assertEquals;
 
 /**
- * Tests that change the type of the object references by the Java this pointer.
+ * Test case that makes sure that old code does not get on-stack-replaced.
  *
  * @author Thomas Wuerthinger
  */
-@Category(Light.class)
-public class ThisTypeChange {
+public class OldCodeNonOSRTest {
+
+    // Chose high enough to make sure method could get OSR (usually the OSR flag in the VM is set to about 15000)
+    private static final int N = 100000;
 
     @Before
     public void setUp() throws Exception {
@@ -49,79 +49,75 @@ public class ThisTypeChange {
     // Version 0
     public static class A {
 
-        public int valueOK() {
-            return 1;
-        }
-
         public int value() {
+            return 5;
+        }
+
+        public int oldMethod() {
             __toVersion__(1);
+            int sum = 0;
+            for (int i=0; i<N; i++) {
+                sum += i;
+            }
+            return (sum & deletedMethod()) | 1;
+        }
+
+        public int oldMethod2() {
+            int sum = 0;
+            for (int i=0; i<N; i++) {
+                sum += i;
+            }
+            __toVersion__(1);
+            return (sum & deletedMethod()) | 1;
+        }
+
+        public int oldMethod3() {
+            int sum = 0;
+            for (int i=0; i<N; i++) {
+                sum += i;
+            }
+            __toVersion__(1);
+            for (int i=0; i<N; i++) {
+                sum += i;
+            }
+            return (sum & deletedMethod()) | 1;
+        }
+
+        public int deletedMethod() {
             return 1;
-        }
-    }
-
-    public static class B extends A {
-
-        @Override
-        public int value() {
-            return super.value();
-        }
-
-
-        @Override
-        public int valueOK() {
-            __toVersion__(1);
-            return super.valueOK();
         }
     }
 
     // Version 1
     public static class A___1 {
 
-        public int valueOK() {
+        public int oldMethod() {
             return 2;
         }
     }
 
-    // Version 1
-    public static class B___1 {
-    }
-
-    // Method to enforce cast (otherwise bytecodes become invalid in version 2)
-    public static A convertBtoA(Object b) {
-        return (A) b;
-    }
-
     @Test
-    public void testThisTypeChange() {
+    public void testOldCodeNonOSR() {
 
         assert __version__() == 0;
+        A a = new A();
 
-        final B b = new B();
-        TestUtil.assertUnsupported(new Runnable() {
-            @Override
-            public void run() {
-                b.value();
-            }
-        });
+        assertEquals(1, a.oldMethod());
+        assert __version__() == 1;
+        assertEquals(2, a.oldMethod());
 
-        assert __version__() == 0;
+        __toVersion__(0);
 
-        TestUtil.assertUnsupported(new Runnable() {
-            @Override
-            public void run() {
-                b.valueOK();
-            }
-        });
+        assertEquals(1, a.oldMethod2());
+        assert __version__() == 1;
+        assertEquals(2, a.oldMethod());
 
-        assert __version__() == 0;
+        __toVersion__(0);
 
-        TestUtil.assertUnsupported(new Runnable() {
-            @Override
-            public void run() {
-                b.valueOK();
-            }
-        });
+        assertEquals(1, a.oldMethod3());
+        assert __version__() == 1;
+        assertEquals(2, a.oldMethod());
 
-        assert __version__() == 0;
+        __toVersion__(0);
     }
 }

@@ -148,6 +148,8 @@ project('dcevm') {
     test {
         executable new File(targetJreFile, 'bin/java')
 
+        systemProperty 'dcevm.test.light', (flavor == 'light')
+
         if (kind == 'fastdebug') {
             jvmArgs '-XX:LogFile=build/hotspot.log'
         }
@@ -160,7 +162,9 @@ project('dcevm') {
 
         ignoreFailures = true
         outputs.upToDateWhen { false }
-        exclude '**/*Suite.class'
+        useJUnit {
+            excludeCategories ('com.github.dcevm.test.category.' + (flavor == 'light' ? 'Full' : 'Light'))
+        }
     }
 
     test.dependsOn project(':hotspot').tasks[kind == 'fastdebug' ? 'installFastdebug' : 'installProduct']

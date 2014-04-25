@@ -21,54 +21,74 @@
  * questions.
  *
  */
-package com.github.dcevm.test.structural;
 
-import com.github.dcevm.ClassRedefinitionPolicy;
-import com.github.dcevm.test.category.Full;
+package com.github.dcevm.test.methods;
+
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
+import static org.junit.Assert.assertEquals;
 
 /**
- * Smallest test case for redefining the interface java/lang/reflect/Type (causes java/lang/Class being redefined)
+ * Test case that calls an interface method that was deleted through class redefinition.
  *
  * @author Thomas Wuerthinger
  */
-@Category(Full.class)
-@Ignore
-public class RedefineClassClassTest {
-
-    // Version 0
-    public interface Type {
-    }
-
-    // Version 1
-    @ClassRedefinitionPolicy(alias = java.lang.reflect.Type.class)
-    public interface Type___1 {
-    }
+public class CallDeletedInterfaceMethodTest {
 
     @Before
     public void setUp() throws Exception {
         __toVersion__(0);
     }
 
+    // Version 0
+    public static interface I {
+        public int foo();
+    }
+
+    public static class A implements I {
+        @Override
+        public int foo() {
+            return 1;
+        }
+    }
+
+    public static class Helper {
+        public static int process(I i) {
+            __toVersion__(1);
+            return i.foo();
+        }
+    }
+
+    // Version 1
+    public static interface I___1 {
+        
+    }
+
+    public static class Helper___1 {
+        public static int process(I i) {
+            return 2;
+        }
+    }
+
     @Test
-    public void testRedefineClass() {
+    public void testOldCodeCallsDeletedInterfaceMethod() {
 
         assert __version__() == 0;
+        A a = new A();
 
-        __toVersion__(1);
+        assertEquals(1, Helper.process(a));
+        assert __version__() == 1;
+        assertEquals(2, Helper.process(a));
 
         __toVersion__(0);
 
-        __toVersion__(1);
+        assertEquals(1, Helper.process(a));
+        assert __version__() == 1;
+        assertEquals(2, Helper.process(a));
 
         __toVersion__(0);
-
-
     }
 }

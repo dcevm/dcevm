@@ -21,54 +21,98 @@
  * questions.
  *
  */
+
 package com.github.dcevm.test.structural;
 
-import com.github.dcevm.ClassRedefinitionPolicy;
-import com.github.dcevm.test.category.Full;
+import com.github.dcevm.test.TestUtil;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
 
 /**
- * Smallest test case for redefining the interface java/lang/reflect/Type (causes java/lang/Class being redefined)
+ * Test case for type narrowing where a non-active method fails verification because of the new hierarchy.
  *
  * @author Thomas Wuerthinger
  */
-@Category(Full.class)
 @Ignore
-public class RedefineClassClassTest {
+public class TypeNarrowingMethodTest2 {
 
     // Version 0
-    public interface Type {
+    public static class A {
+
+        int x = 1;
+        int y = 2;
+        int z = 3;
+
+        public int value() {
+            return x;
+        }
+
+        public static int badMethod() {
+            A a = indirectionMethod();
+            return a.y;
+        }
     }
 
-    // Version 1
-    @ClassRedefinitionPolicy(alias = java.lang.reflect.Type.class)
-    public interface Type___1 {
+    public static class B extends A {
+
     }
+
+
+    // Version 1
+    public static class B___1 {
+    }
+
+    // Version 2
+    public static class A___2 {
+
+        int x = 1;
+        int y = 2;
+        int z = 3;
+
+        public int value() {
+            return x;
+        }
+
+        public static int badMethod(B b) {
+            return 5;
+        }
+    }
+
+    public static class B___2 {
+    }
+
 
     @Before
     public void setUp() throws Exception {
         __toVersion__(0);
+        A a = new A();
+        B b = new B();
+    }
+
+    public static B indirectionMethod() {
+        return new B();
     }
 
     @Test
-    public void testRedefineClass() {
+    public void testTypeNarrowingWithViolatingMethod() {
+        final A a = new A();
+
+        TestUtil.assertException(UnsupportedOperationException.class, new Runnable() {
+          @Override
+          public void run() {
+            __toVersion__(1);
+            System.out.println(a.badMethod());
+          }
+        });
 
         assert __version__() == 0;
 
-        __toVersion__(1);
+        __toVersion__(2);
 
         __toVersion__(0);
-
-        __toVersion__(1);
-
-        __toVersion__(0);
-
-
     }
 }

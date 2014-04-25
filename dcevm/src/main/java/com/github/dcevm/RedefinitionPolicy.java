@@ -22,24 +22,15 @@
  *
  */
 
-package com.github.dcevm.test.structural;
-
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+package com.github.dcevm;
 
 /**
- * Class redefinition tests that do arbitrary structural changes.
- * <p/>
- * TODO: Add a test where redefinition triggers classloading (e.g. because a super type is not yet loaded).
  *
  * @author Thomas Wuerthinger
  */
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-        RedefineClassClassTest.class,
-        RedefineObjectClassTest.class,
-        InterfaceTest.class,
-        ThisTypeChange.class
-})
-public class StructuralTestSuite {
+public enum RedefinitionPolicy {
+    StaticCheck,
+    DynamicCheck,
+    AccessDeletedMembers,
+    AccessOldMembers
 }

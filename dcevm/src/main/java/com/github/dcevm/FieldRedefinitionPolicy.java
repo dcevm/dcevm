@@ -21,29 +21,17 @@
  * questions.
  *
  */
+package com.github.dcevm;
 
-package com.github.dcevm.test;
-
-import com.github.dcevm.test.body.BodyTestSuite;
-import com.github.dcevm.test.eval.EvalTestSuite;
-import com.github.dcevm.test.fields.FieldsTestSuite;
-import com.github.dcevm.test.methods.MethodsTestSuite;
-import com.github.dcevm.test.structural.StructuralTestSuite;
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
- * Summarizes all available test suites.
  *
  * @author Thomas Wuerthinger
  */
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
-        BodyTestSuite.class,
-        EvalTestSuite.class,
-        MethodsTestSuite.class,
-        FieldsTestSuite.class,
-        StructuralTestSuite.class
-})
-public class LightTestSuite {
+@Retention(RetentionPolicy.CLASS)
+public @interface FieldRedefinitionPolicy {
+
+    RedefinitionPolicy value();
 }

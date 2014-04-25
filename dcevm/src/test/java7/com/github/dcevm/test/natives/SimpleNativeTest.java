@@ -21,54 +21,68 @@
  * questions.
  *
  */
-package com.github.dcevm.test.structural;
 
-import com.github.dcevm.ClassRedefinitionPolicy;
-import com.github.dcevm.test.category.Full;
+package com.github.dcevm.test.natives;
+
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
+import static org.junit.Assert.assertEquals;
 
 /**
- * Smallest test case for redefining the interface java/lang/reflect/Type (causes java/lang/Class being redefined)
+ * Testing correct resolving of a native method after class redefinition.
  *
  * @author Thomas Wuerthinger
  */
-@Category(Full.class)
 @Ignore
-public class RedefineClassClassTest {
-
-    // Version 0
-    public interface Type {
-    }
-
-    // Version 1
-    @ClassRedefinitionPolicy(alias = java.lang.reflect.Type.class)
-    public interface Type___1 {
-    }
+public class SimpleNativeTest {
 
     @Before
     public void setUp() throws Exception {
         __toVersion__(0);
     }
 
+    // Version 0
+    public static class A {
+
+        public static int get() {
+            return value();
+        }
+
+        public static native int value();
+    }
+
+    // Version 1
+    public static class A___1 {
+
+        public static int get() {
+            return value() + value2();
+        }
+
+        public static native int value();
+
+        public static native int value2();
+    }
+
     @Test
-    public void testRedefineClass() {
+    public void testSimpleNativeCalls() {
 
         assert __version__() == 0;
 
+
+        assertEquals(1, A.get());
+
         __toVersion__(1);
+
+        assertEquals(3, A.get());
 
         __toVersion__(0);
 
-        __toVersion__(1);
-
-        __toVersion__(0);
-
+        assertEquals(1, A.get());
 
     }
+
 }

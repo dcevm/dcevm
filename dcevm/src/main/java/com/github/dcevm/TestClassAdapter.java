@@ -23,9 +23,9 @@
  */
 package com.github.dcevm;
 
-import org.objectweb.asm.ClassVisitor;
-import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.*;
 import org.objectweb.asm.commons.Remapper;
+import org.objectweb.asm.commons.RemappingAnnotationAdapter;
 import org.objectweb.asm.commons.RemappingClassAdapter;
 import org.objectweb.asm.commons.RemappingMethodAdapter;
 
@@ -79,8 +79,7 @@ public class TestClassAdapter extends RemappingClassAdapter {
     protected MethodVisitor createRemappingMethodAdapter(
             int access,
             String newDesc,
-            MethodVisitor mv)
-    {
+            MethodVisitor mv) {
         return new RemappingMethodAdapter(access, newDesc, mv, remapper) {
             @Override
             public void visitMethodInsn(int opcode, String owner, String name, String desc) {
@@ -97,5 +96,40 @@ public class TestClassAdapter extends RemappingClassAdapter {
         int pos = name.indexOf(METHOD_SUFFIX);
         return (pos != -1) ? name.substring(0, pos) : name;
     }
+
+    @Override
+    public AnnotationVisitor visitAnnotation(final String desc, final boolean visible) {
+        AnnotationVisitor av = super.visitAnnotation(remapper.mapDesc(desc), visible);
+        return av == null ? null : new RemappingAnnotationAdapter(av, remapper) {
+            @Override
+            public void visitEnum(String name, String enumDesc, String value) {
+                if (Type.getType(enumDesc).getClassName().equals(RedefinitionPolicy.class.getName())) {
+                    RedefinitionPolicy valueAsEnum = RedefinitionPolicy.valueOf(value);
+                    if (Type.getType(desc).getClassName().equals(FieldRedefinitionPolicy.class.getName())) {
+                        cv.visitAttribute(new SingleByteAttribute(FieldRedefinitionPolicy.class.getSimpleName(), (byte) valueAsEnum.ordinal()));
+                    }
+                    if (Type.getType(desc).getClassName().equals(MethodRedefinitionPolicy.class.getName())) {
+                        cv.visitAttribute(new SingleByteAttribute(MethodRedefinitionPolicy.class.getSimpleName(), (byte) valueAsEnum.ordinal()));
+                    }
+                }
+                super.visitEnum(name, desc, value);
+            }
+        };
+    }
+
+    private static class SingleByteAttribute extends Attribute {
+        private byte value;
+
+        public SingleByteAttribute(String name, byte value) {
+            super(name);
+            this.value = value;
+        }
+
+        @Override
+        protected ByteVector write(ClassWriter writer, byte[] code, int len, int maxStack, int maxLocals) {
+            return new ByteVector().putByte(value);
+        }
+    }
+
 }
 

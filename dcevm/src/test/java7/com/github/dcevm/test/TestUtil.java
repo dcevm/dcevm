@@ -33,8 +33,7 @@ import com.github.dcevm.HotSwapTool;
  * @author Thomas Wuerthinger
  */
 public class TestUtil {
-
-    public static final boolean LIGHT = true;
+    public static final boolean LIGHT = Boolean.getBoolean("dcevm.test.light");
 
     public static int assertException(Class exceptionClass, Runnable run) {
 
@@ -61,15 +60,6 @@ public class TestUtil {
 
     public static int assertUnsupported(Runnable run) {
         return assertException(UnsupportedOperationException.class, run);
-    }
-
-    public static void assertUnsupportedToVersion(final Class clazz, final int version) {
-        TestUtil.assertUnsupported(new Runnable() {
-            @Override
-            public void run() {
-                HotSwapTool.toVersion(clazz, version);
-            }
-        });
     }
 
     public static void assertUnsupportedToVersionWithLight(final Class clazz, final int version) {

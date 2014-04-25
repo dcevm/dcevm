@@ -24,6 +24,7 @@
 package com.github.dcevm.test.util;
 
 import com.github.dcevm.HotSwapTool;
+import sun.reflect.CallerSensitive;
 
 /**
  * Shortcut methods for testing. Methods are named this way to make them more visible in the test code.

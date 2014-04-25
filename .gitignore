@@ -3,3 +3,5 @@
 /hotspot
 build
 *.iml
+hs_err*
+core

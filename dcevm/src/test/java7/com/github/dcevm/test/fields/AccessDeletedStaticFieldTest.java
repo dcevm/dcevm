@@ -21,25 +21,22 @@
  * questions.
  *
  */
-
-package com.github.dcevm.test.structural;
+package com.github.dcevm.test.fields;
 
 import com.github.dcevm.test.TestUtil;
-import com.github.dcevm.test.category.Light;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
+import static org.junit.Assert.assertEquals;
 
 /**
- * Tests that change the type of the object references by the Java this pointer.
+ * Tests for accessing a deleted static field.
  *
  * @author Thomas Wuerthinger
  */
-@Category(Light.class)
-public class ThisTypeChange {
+public class AccessDeletedStaticFieldTest {
 
     @Before
     public void setUp() throws Exception {
@@ -49,78 +46,77 @@ public class ThisTypeChange {
     // Version 0
     public static class A {
 
-        public int valueOK() {
-            return 1;
-        }
+        public static int x;
 
-        public int value() {
+        static int getFieldInOldCode() {
+            
             __toVersion__(1);
-            return 1;
-        }
-    }
 
-    public static class B extends A {
+            newMethodFromOldCode();
 
-        @Override
-        public int value() {
-            return super.value();
+            // This field does no longer exist
+            return x;
         }
 
-
-        @Override
-        public int valueOK() {
-            __toVersion__(1);
-            return super.valueOK();
+        static int getFieldEMCPMethod() {
+            __toVersion__(2);
+            return A.x;
         }
     }
 
     // Version 1
     public static class A___1 {
+    }
 
-        public int valueOK() {
-            return 2;
+    // Version 2
+
+    public static class A___2 {
+
+        // EMCP to method in version 0
+        static int getFieldEMCPMethod() {
+            __toVersion__(2);
+            return A.x;
         }
     }
 
-    // Version 1
-    public static class B___1 {
-    }
-
-    // Method to enforce cast (otherwise bytecodes become invalid in version 2)
-    public static A convertBtoA(Object b) {
-        return (A) b;
+    private static void newMethodFromOldCode() {
+        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
+          @Override
+          public void run() {
+            System.out.println(A.x);
+          }
+        });
     }
 
     @Test
-    public void testThisTypeChange() {
+    public void testAccessDeletedStaticField() {
 
         assert __version__() == 0;
 
-        final B b = new B();
-        TestUtil.assertUnsupported(new Runnable() {
-            @Override
-            public void run() {
-                b.value();
-            }
-        });
+        A.x = 1;
+        assertEquals(1, A.getFieldInOldCode());
+
+        assert __version__() == 1;
+        __toVersion__(0);
+        assertEquals(0, A.x);
+        
+        assert __version__() == 0;
+    }
+
+
+    @Test
+    public void testAccessDeletedStaticFieldFromEMCPMethod() {
 
         assert __version__() == 0;
-
-        TestUtil.assertUnsupported(new Runnable() {
+        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
             @Override
             public void run() {
-                b.valueOK();
+                System.out.println(A.getFieldEMCPMethod());
             }
         });
-
-        assert __version__() == 0;
-
-        TestUtil.assertUnsupported(new Runnable() {
-            @Override
-            public void run() {
-                b.valueOK();
-            }
-        });
+        
+        __toVersion__(0);
+        assertEquals(0, A.x);
 
         assert __version__() == 0;
     }

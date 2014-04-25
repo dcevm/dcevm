@@ -24,14 +24,18 @@
 
 package com.github.dcevm.test.methods;
 
-import junit.framework.Assert;
+import static org.junit.Assert.assertEquals;
+
+import com.github.dcevm.MethodRedefinitionPolicy;
+import com.github.dcevm.RedefinitionPolicy;
 import com.github.dcevm.test.TestUtil;
+import junit.framework.Assert;
+
 import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
-import static org.junit.Assert.assertEquals;
 
 /**
  * Test cases that delete a method that is currently active on the stack.
@@ -72,10 +76,14 @@ public class DeleteActiveMethodTest {
             t.start();
 
             try {
-                do {
-                    this.helperValue();
-                } while (t.isAlive());
-                this.helperValue();
+                while (t.isAlive()) {
+                    try {
+                        this.helperValue();
+                        Thread.sleep(500);
+                    } catch (InterruptedException e) {
+                    }
+                    helperValue();
+                }
                 Assert.fail("Exception expected!");
             } catch (NoSuchMethodError e) {
             }
@@ -101,6 +109,7 @@ public class DeleteActiveMethodTest {
     }
 
     // Version 1
+    @MethodRedefinitionPolicy(RedefinitionPolicy.DynamicCheck)
     public static class A___1 {
 
         boolean firstCall;
@@ -111,6 +120,7 @@ public class DeleteActiveMethodTest {
         }
     }
 
+    @MethodRedefinitionPolicy(RedefinitionPolicy.DynamicCheck)
     public static class B___1 {
     }
 
@@ -125,9 +135,9 @@ public class DeleteActiveMethodTest {
                 b.fac(5);
             }
         });
-
+       
         assert __version__() == 1;
-
+        
         __toVersion__(0);
         assert __version__() == 0;
     }

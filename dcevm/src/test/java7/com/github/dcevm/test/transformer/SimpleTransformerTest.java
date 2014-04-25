@@ -21,35 +21,40 @@
  * questions.
  *
  */
-package com.github.dcevm.test.structural;
 
-import com.github.dcevm.ClassRedefinitionPolicy;
-import com.github.dcevm.test.category.Full;
+package com.github.dcevm.test.transformer;
+
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
+import static org.junit.Assert.assertEquals;
 
 /**
- * Smallest test case for redefining the interface java/lang/reflect/Type (causes java/lang/Class being redefined)
+ * Tests for executing the transformer of a class.
  *
  * @author Thomas Wuerthinger
  */
-@Category(Full.class)
-@Ignore
-public class RedefineClassClassTest {
+public class SimpleTransformerTest {
 
     // Version 0
-    public interface Type {
+    public static class A {
+
+        public int x = 2;
     }
 
-    // Version 1
-    @ClassRedefinitionPolicy(alias = java.lang.reflect.Type.class)
-    public interface Type___1 {
+    // Version 3
+    public static class A___1 {
+
+        public int x;
+
+        public void $transformer() {
+            System.out.println("Transformer of A executing...");
+            x = x * 2;
+        }
     }
+
 
     @Before
     public void setUp() throws Exception {
@@ -57,18 +62,28 @@ public class RedefineClassClassTest {
     }
 
     @Test
-    public void testRedefineClass() {
+    public void testSimpleTransformer() {
 
         assert __version__() == 0;
 
+        A a = new A();
+
+        assertEquals(2, a.x);
+
         __toVersion__(1);
+
+        assertEquals(4, a.x);
 
         __toVersion__(0);
 
+        assertEquals(4, a.x);
+
         __toVersion__(1);
+
+        assertEquals(8, a.x);
 
         __toVersion__(0);
 
-
+        assertEquals(8, a.x);
     }
 }

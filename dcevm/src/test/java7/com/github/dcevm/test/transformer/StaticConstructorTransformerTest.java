@@ -21,34 +21,50 @@
  * questions.
  *
  */
-package com.github.dcevm.test.structural;
+package com.github.dcevm.test.transformer;
 
-import com.github.dcevm.ClassRedefinitionPolicy;
-import com.github.dcevm.test.category.Full;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
 
 /**
- * Smallest test case for redefining the interface java/lang/reflect/Type (causes java/lang/Class being redefined)
- *
- * @author Thomas Wuerthinger
+ * @author Kerstin Breiteneder
+ * @author Christoph Wimberger
  */
-@Category(Full.class)
-@Ignore
-public class RedefineClassClassTest {
+public class StaticConstructorTransformerTest {
 
-    // Version 0
-    public interface Type {
+    //Version 0
+    public static class Static_TestClass {
+
+        // remove static --> no fatal error occurs
+        public static int x = 0;
+        //public int x = 0;
+
+        static {
+            System.out.println("Start Static_TestClass Version 0");
+
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ex) {
+            }
+            System.out.println("End Static_TestClass Version 0");
+        }
     }
 
-    // Version 1
-    @ClassRedefinitionPolicy(alias = java.lang.reflect.Type.class)
-    public interface Type___1 {
+    //Version 1
+    public static class Static_TestClass___1 {
+
+        public int version = 1;
+
+        static {
+            System.out.println("Static_TestClass Version 1");
+        }
+
+        public void $transformer() {
+            System.out.println(":::::::::transformerExecuted:::::::::::");
+        }
     }
 
     @Before
@@ -57,18 +73,16 @@ public class RedefineClassClassTest {
     }
 
     @Test
-    public void testRedefineClass() {
+    public void testStaticConstructorTransformerTest() {
 
         assert __version__() == 0;
+        try {
+            Class.forName("at.ssw.hotswap.test.transformer.StaticConstructorTransformerTest$Static_TestClass");
+        } catch (ClassNotFoundException ex) {
+            ex.printStackTrace();
+        }
+        Static_TestClass clazz = new Static_TestClass();
 
         __toVersion__(1);
-
-        __toVersion__(0);
-
-        __toVersion__(1);
-
-        __toVersion__(0);
-
-
     }
 }

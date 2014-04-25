@@ -24,7 +24,7 @@
 
 package com.github.dcevm.test.methods;
 
-import junit.framework.Assert;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 

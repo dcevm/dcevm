@@ -24,8 +24,8 @@
 
 package com.github.dcevm.test;
 
-import junit.framework.Assert;
 import com.github.dcevm.HotSwapTool;
+import org.junit.Assert;
 
 /**
  * Utility methods for unit testing.

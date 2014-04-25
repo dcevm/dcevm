@@ -27,7 +27,7 @@ package com.github.dcevm.test.methods;
 import com.github.dcevm.MethodRedefinitionPolicy;
 import com.github.dcevm.RedefinitionPolicy;
 import com.github.dcevm.test.category.Full;
-import junit.framework.Assert;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;

@@ -24,18 +24,16 @@
 
 package com.github.dcevm.test.methods;
 
-import static org.junit.Assert.assertEquals;
-
 import com.github.dcevm.MethodRedefinitionPolicy;
 import com.github.dcevm.RedefinitionPolicy;
 import com.github.dcevm.test.TestUtil;
-import junit.framework.Assert;
-
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Test cases that delete a method that is currently active on the stack.

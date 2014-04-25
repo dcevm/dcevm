@@ -18,6 +18,7 @@ def jreFile = file(jre)
 // HotSpot itself
 project('hotspot') {
     task clean(type: InvokeMake) {
+        onlyIf { file('hotspot').exists() }
         args 'clean'
     }
 

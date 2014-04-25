@@ -128,8 +128,12 @@ project('agent') {
 }
 
 project('native') {
+    apply plugin: 'base'
     task compile(type: Exec) {
-        if (root.os != Os.WINDOWS) {
+        doFirst {
+            buildDir.mkdirs()
+        }
+        if (os != Os.WINDOWS) {
             commandLine 'gcc'
             args "-I${jre}/../include"
             args "-I${jre}/../include/linux"
@@ -138,8 +142,8 @@ project('native') {
             args '-o'
             args 'build/libnatives.so'
         } else {
-            commandLine 'compile.cmd'
-            environment ARCH: root.arch == Arch.X86 ? 'x86' : 'x64'
+            commandLine 'cmd', '/c', 'compile.cmd'
+            environment ARCH: arch == Arch.X86 ? 'x86' : 'x64'
             environment JAVA_HOME: jre
         }
     }

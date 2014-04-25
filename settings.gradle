@@ -1,1 +1,1 @@
-include 'agent', 'dcevm', 'hotspot'
+include 'agent', 'dcevm', 'hotspot', 'native'

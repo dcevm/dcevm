@@ -28,45 +28,17 @@
 #define NATIVES
 
 /*
- * Class:     at_ssw_hotswap_test_natives_SimpleNativeTest_A
+ * Class:     com_github_dcevm_test_natives_SimpleNativeTest_A
  * Method:    value
  * Signature: ()I
  */
-JNIEXPORT jint JNICALL Java_at_ssw_hotswap_test_natives_SimpleNativeTest_00024A_value(JNIEnv *, jclass);
+JNIEXPORT jint JNICALL Java_com_github_dcevm_test_natives_SimpleNativeTest_00024A_value(JNIEnv *, jclass);
 
 /*
- * Class:     at_ssw_hotswap_test_natives_SimpleNativeTest_A
+ * Class:     com_github_dcevm_test_natives_SimpleNativeTest_A
  * Method:    value2
  * Signature: ()I
  */
-JNIEXPORT jint JNICALL Java_at_ssw_hotswap_test_natives_SimpleNativeTest_00024A_value2(JNIEnv *, jclass);
+JNIEXPORT jint JNICALL Java_com_github_dcevm_test_natives_SimpleNativeTest_00024A_value2(JNIEnv *, jclass);
 
-/*
- * Class:     at_ssw_hotswap_test_access_jni_JNIVMAccess
- * Method:    findClass
- * Signature: (String)Class
- */
-JNIEXPORT jclass JNICALL Java_at_ssw_hotswap_test_access_jni_JNIVMAccess_findClassNative(JNIEnv *, jclass, jstring);
-
-/*
- * Class:     at_ssw_hotswap_test_access_jni_JNIClassAccess
- * Method:    findMethod
- * Signature: (Class, String)Object
- */
-JNIEXPORT jobject JNICALL Java_at_ssw_hotswap_test_access_jni_JNIClassAccess_findMethodNative(JNIEnv *, jclass, jclass, jstring);
-
-/*
- * Class:     at_ssw_hotswap_test_access_jni_JNIClassAccess
- * Method:    getMethods
- * Signature: (Class)Object[]
- */
-JNIEXPORT jobjectArray JNICALL Java_at_ssw_hotswap_test_access_jni_JNIClassAccess_getMethodsNative(JNIEnv *, jclass, jclass);
-
-/*
- * Class:     at_ssw_hotswap_test_access_jni_JNIMethodAccess
- * Method:    invokeMethod
- * Signature: (Class, String, Object)Value
- */
-JNIEXPORT jobject JNICALL Java_at_ssw_hotswap_test_access_jni_JNIMethodAccess_invokeMethod(JNIEnv *, jclass, jclass, jobject, jstring, jstring, jboolean, jstring);
-
-#endif
+#endif // NATIVES

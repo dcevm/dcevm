@@ -127,11 +127,29 @@ project('agent') {
     }
 }
 
+project('native') {
+    task compile(type: Exec) {
+        if (root.os != Os.WINDOWS) {
+            commandLine 'gcc'
+            args "-I${jre}/../include"
+            args "-I${jre}/../include/linux"
+            args '-shared'
+            args 'natives.c'
+            args '-o'
+            args 'build/libnatives.so'
+        } else {
+            commandLine 'compile.cmd'
+            environment ARCH: root.arch == Arch.X86 ? 'x86' : 'x64'
+            environment JAVA_HOME: jre
+        }
+    }
+}
+
 project('dcevm') {
     dependencies {
         compile project(':agent')
         compile group: 'asm', name: 'asm-all', version: '3.3.+'
-        compile files(System.getProperty("java.home") + '/../lib/tools.jar')
+        compile files(jre + '/../lib/tools.jar')
 
         testCompile group: 'junit', name: 'junit', version: '4.11'
     }

@@ -59,6 +59,7 @@ project('hotspot') {
                 args 'status'
                 standardOutput os
             }
+            // Purge unversioned files
             def str = os.toString()
             def matcher = str =~ /(?m)^\?\s+(.*)$/
             matcher.each {
@@ -68,7 +69,7 @@ project('hotspot') {
         // Use hg import since ant.patchfile requires 'patch' to be installed
         exec {
             executable 'hg'
-            args 'import', '--no-commit', "../patches/light-${hotspotTag}.patch"
+            args 'import', '--no-commit', "../patches/${flavor}-${hotspotTag}.patch"
         }
     }
 
@@ -145,6 +146,7 @@ project('dcevm') {
     test {
         executable new File(targetJreFile, 'bin/java')
 
+        jvmArgs '-XX:LogFile=build/hotspot.log'
         jvmArgs "-XXaltjvm=${jvmName}"
         jvmArgs '-javaagent:../agent/build/libs/agent.jar'
         if (arch == Arch.X86_64) {
@@ -208,18 +210,19 @@ enum Os {
 // Helper task to run make targets against hotspot
 class InvokeMake extends org.gradle.api.tasks.Exec {
     InvokeMake() {
+        def root = project.rootProject
         logging.captureStandardOutput LogLevel.INFO
-        if (project.rootProject.os != Os.WINDOWS) {
+        if (root.os != Os.WINDOWS) {
             commandLine 'make', '-C', 'make'
         } else {
             // Using launcher script
             commandLine 'cmd', '/c', '..\\build.cmd'
-            environment ARCH: project.rootProject.arch == Arch.X86 ? 'x86' : 'x64'
+            environment ARCH: root.arch == Arch.X86 ? 'x86' : 'x64'
         }
         args 'OPENJDK=true'
-        args "HOTSPOT_BUILD_VERSION=dcevmlight-${project.rootProject.buildNumber}"
-        args "ARCH_DATA_MODEL=${project.rootProject.arch.bits}"
-        args "ALT_BOOTDIR=${project.rootProject.jre.replace('\\', '/')}/.."
+        args "HOTSPOT_BUILD_VERSION=dcevm${root.flavor}-${root.buildNumber}"
+        args "ARCH_DATA_MODEL=${root.arch.bits}"
+        args "ALT_BOOTDIR=${root.jre.replace('\\', '/')}/.."
         // Replacing backslashes is essential for Windows!
         args 'COMPILER_WARNINGS_FATAL=false' // Clang is very serious about warnings
         args 'HOTSPOT_BUILD_JOBS=4'

@@ -1,0 +1,1 @@
+include 'agent', 'framework', 'tests-java7', 'tests-java8', 'hotspot'

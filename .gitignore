@@ -1,0 +1,5 @@
+/.gradle
+/.idea
+/hotspot
+build
+*.iml

@@ -1,0 +1,223 @@
+// Global settings
+project.ext {
+    // Source JRE used for compilation, etc
+    if (!project.hasProperty('jre')) {
+        jre = System.getProperty('java.home')
+    }
+    os = Os.current()
+    arch = Arch.current()
+
+    if (!project.hasProperty('targetJre')) {
+        targetJre = jre
+    }
+}
+
+def targetJreFile = file(targetJre)
+def jreFile = file(jre)
+
+// HotSpot itself
+project('hotspot') {
+    task clean(type: InvokeMake) {
+        args 'clean'
+    }
+
+    task prepareJvm {
+        onlyIf { jreFile != targetJreFile }
+        doLast {
+            ant.copy(todir: targetJreFile) {
+                fileset(dir: jreFile)
+            }
+            ant.chmod(file: new File(targetJreFile, 'bin/java'), perm: '0755')
+        }
+    }
+
+    task clone(description: 'Clone HotSpot repository') {
+        onlyIf { !file('hotspot').exists() }
+        doLast {
+            exec {
+                workingDir '..'
+                executable 'hg'
+                args 'clone', hotspotRepository
+            }
+        }
+    }
+
+    task patch(description: 'Patch HotSpot sources', dependsOn: clone) << {
+        exec {
+            executable 'hg'
+            args 'pull'
+        }
+        exec {
+            executable 'hg'
+            args 'update', '-C', '-r', hotspotTag
+        }
+        new ByteArrayOutputStream().withStream { os ->
+            exec {
+                workingDir 'hotspot'
+                executable 'hg'
+                args 'status'
+                standardOutput os
+            }
+            def str = os.toString()
+            def matcher = str =~ /(?m)^\?\s+(.*)$/
+            matcher.each {
+                ant.delete(file: new File(file('hotspot'), it[1]))
+            }
+        }
+        ant.patch(patchfile: "../patches/dcevm-${hotspotTag}.patch", strip: 1)
+    }
+
+    task compileFastdebug(type: InvokeMake) {
+        args 'STRIP_POLICY=no_strip'
+        args 'ZIP_DEBUGINFO_FILES=0'
+        args 'ENABLE_FULL_DEBUG_SYMBOLS=1'
+        args 'fastdebug'
+    }
+
+    task compileProduct(type: InvokeMake) {
+        args 'ENABLE_FULL_DEBUG_SYMBOLS=0'
+        args 'product'
+    }
+
+    compileFastdebug.mustRunAfter patch
+    compileProduct.mustRunAfter patch
+
+    // Install given kind of DCEVM into destination JRE
+    ['Product', 'Fastdebug'].each { k ->
+        task("install${k}", dependsOn: [prepareJvm, "compile${k}"]) << {
+            def installPath = new File(new File(targetJreFile, arch == Arch.X86 ? os.installPath32 : os.installPath64), jvmName)
+
+            logger.info("Installing DCEVM runtime into JRE with JVM name '${jvmName}' and kind '${k.toLowerCase()}' at ${installPath}")
+            ant.copy(todir: installPath, overwrite: true) {
+                fileset(dir: "build/${os.buildPath}/${os.buildPath}_${arch.buildArch}_${compiler}/${k.toLowerCase()}",
+                        includes: 'libjvm.so,libjsig.so,jvm.dll,jsig.dll,libjvm.dylib,libjsig.dylib')
+            }
+        }
+    }
+}
+
+// Java projects for testing DCEVM
+def setup(prjs, closure) {
+    prjs.each { prj ->
+        project(prj, closure)
+    }
+}
+
+setup(['agent', 'framework', 'tests-java7', 'tests-java8'], {
+    apply plugin: 'java'
+    apply plugin: 'idea'
+
+    repositories {
+        mavenCentral()
+    }
+})
+
+project('agent') {
+    jar {
+        manifest {
+            from "src/main/java/META-INF/MANIFEST.MF"
+        }
+    }
+}
+
+project('framework') {
+    dependencies {
+        compile project(':agent')
+        compile group: 'asm', name: 'asm-all', version: '3.3.+'
+        compile files(System.getProperty("java.home") + '/../lib/tools.jar')
+    }
+}
+
+project('tests-java8') {
+    sourceCompatibility = 1.8
+    targetCompatibility = 1.8
+}
+
+setup(['tests-java7', 'tests-java8'], {
+    dependencies {
+        compile project(':framework')
+        testCompile group: 'junit', name: 'junit', version: '4.11'
+    }
+
+    test {
+        executable new File(targetJreFile, 'bin/java')
+
+        jvmArgs "-XXaltjvm=${jvmName}"
+        jvmArgs '-javaagent:../agent/build/libs/agent.jar'
+        if (arch == Arch.X86_64) {
+            jvmArgs(project.oops == "compressed" ? '-XX:+UseCompressedOops' : "-XX:-UseCompressedOops")
+        }
+        jvmArgs "-XX:TraceRedefineClasses=${traceRedefinition}"
+
+        ignoreFailures = true
+        outputs.upToDateWhen { false }
+    }
+
+    test.dependsOn project(':hotspot').tasks[kind == 'fastdebug' ? 'installFastdebug' : 'installProduct']
+})
+
+
+enum Arch {
+    X86(["i386", "i486", "i586", "x86"], 'i486', 32),
+    X86_64(["x86_64", "x64", "amd64"], 'amd64', 64)
+
+    final List<String> names
+    final String buildArch
+    final int bits
+
+    Arch(List<String> names, String buildArch, int bits) {
+        this.names = names
+        this.buildArch = buildArch
+        this.bits = bits
+    }
+
+    static Arch find(String token) {
+        Arch res = values().find({ v -> v.names.contains(token) })
+        return res
+    }
+
+    static Arch current() {
+        return find(System.getProperty("os.arch"))
+    }
+}
+
+enum Os {
+    MAC('bsd', 'lib', 'lib'),
+    WINDOWS('windows', 'bin', 'bin'),
+    UNIX('linux', 'lib/i386', 'lib/amd64')
+
+    final String buildPath;
+    final String installPath32;
+    final String installPath64;
+
+    Os(String buildPath, String installPath32, String installPath64) {
+        this.buildPath = buildPath
+        this.installPath32 = installPath32
+        this.installPath64 = installPath64
+    }
+
+    static Os current() {
+        return values().find { os -> org.apache.tools.ant.taskdefs.condition.Os.isFamily(os.name().toLowerCase()) }
+    }
+}
+
+// Helper task to run make targets against hotspot
+class InvokeMake extends org.gradle.api.tasks.Exec {
+    InvokeMake() {
+        logging.captureStandardOutput LogLevel.INFO
+        if (project.rootProject.os != Os.WINDOWS) {
+            commandLine 'make', '-C', 'make'
+        } else {
+            // Using launcher script
+            commandLine 'cmd', '/c', '..\\build.cmd'
+            environment ARCH: project.rootProject.arch == Arch.X86 ? 'x86' : 'x64'
+        }
+        args 'OPENJDK=true'
+        args "HOTSPOT_BUILD_VERSION=dcevmlight-${project.rootProject.buildNumber}"
+        args "ARCH_DATA_MODEL=${project.rootProject.arch.bits}"
+        args "ALT_BOOTDIR=${project.rootProject.jre.replace('\\', '/')}/.."
+        // Replacing backslashes is essential for Windows!
+        args 'COMPILER_WARNINGS_FATAL=false' // Clang is very serious about warnings
+        args 'HOTSPOT_BUILD_JOBS=4'
+    }
+}

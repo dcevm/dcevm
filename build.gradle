@@ -65,7 +65,11 @@ project('hotspot') {
                 ant.delete(file: new File(file('hotspot'), it[1]))
             }
         }
-        ant.patch(patchfile: "../patches/dcevm-${hotspotTag}.patch", strip: 1)
+        // Use hg import since ant.patchfile requires 'patch' to be installed
+        exec {
+            executable 'hg'
+            args 'import', '--no-commit', "../patches/dcevm-${hotspotTag}.patch"
+        }
     }
 
     task compileFastdebug(type: InvokeMake) {

@@ -143,6 +143,7 @@ project('native') {
                 args "-I${jre}/../include/linux"
                 args '-o'
                 args 'build/libnatives.so'
+                args (arch == Arch.X86 ? '-m32' : '-m64')
             } else if (os == Os.MAC) {
                 args "-I${jre}/../include/darwin"
                 args '-o'

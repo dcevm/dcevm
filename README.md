@@ -4,6 +4,18 @@ This project is a fork of original [DCEVM](http://ssw.jku.at/dcevm/) project.
 
 The purpose of the project is to maintain enhanced class redefinition functionality for OpenJDK HotSpot 7/8.
 
+## Binaries
+
+ * [Java 7 update 51](https://github.com/dcevm/dcevm/releases/download/light-jdk7u51%2B3/installer-light-jdk7u51.3.jar)
+ * [Java 8 update 5](https://github.com/dcevm/dcevm/releases/download/light-jdk8u5%2B36/installer-light-jdk8u5.36.jar)
+ * [Java 7 update 51](https://github.com/dcevm/dcevm/releases/download/full-7u51%2B3/installer-full-jdk7u51.3.jar)
+
+Usage:
+
+* Run `java -jar installer.jar`
+* Follow the instructions to install DCEVM into existing JDK/JRE
+
+
 ## Supported versions
 
 [pathes/](patches/) contains patches for all supported versions. Each patch is named by concatenating prefix `full` or `light` with the OpenJDK HotSpot tag. `full` patches support full redefenition capabilities (including removal of superclasses, for example). `light` patches are easier to maintain, but they only support limited functionality (generally, additions to class hierarchies are fine, removals are not).

@@ -36,6 +36,9 @@ project('hotspot') {
     task clone(description: 'Clone HotSpot repository') {
         onlyIf { !file('hotspot').exists() }
         doLast {
+            def hotspotRepository = hotspotTag.contains('jdk7') ?
+                'http://hg.openjdk.java.net/jdk7u/jdk7u/hotspot' :
+                'http://hg.openjdk.java.net/jdk8u/jdk8u/hotspot'
             exec {
                 workingDir '..'
                 executable 'hg'

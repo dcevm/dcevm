@@ -4,6 +4,10 @@ This project is a fork of original [DCEVM](http://ssw.jku.at/dcevm/) project.
 
 The purpose of the project is to maintain enhanced class redefinition functionality for OpenJDK HotSpot 7/8.
 
+## Binaries
+
+You can download binaries [here](https://dcevm.github.io/).
+
 ## Supported versions
 
 [pathes/](patches/) contains patches for all supported versions. Each patch is named by concatenating prefix `full` or `light` with the OpenJDK HotSpot tag. `full` patches support full redefenition capabilities (including removal of superclasses, for example). `light` patches are easier to maintain, but they only support limited functionality (generally, additions to class hierarchies are fine, removals are not).

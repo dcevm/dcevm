@@ -1,0 +1,68 @@
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.BasicFileAttributes
+
+apply plugin: 'java'
+apply plugin: 'idea'
+
+jar {
+    manifest {
+        attributes("Main-Class": "com.github.dcevm.installer.Main")
+    }
+}
+
+project.ext {
+    processedData = Paths.get("$buildDir/data")
+    // Should be populated by build server from the DCEVM upstream job
+    dataSource = Paths.get("$buildDir/rawdata")
+}
+
+sourceSets {
+    main {
+        output.dir(processedData.toFile(), builtBy: 'copyData')
+    }
+}
+
+task copyData << {
+    Files.createDirectories(processedData)
+    Files.walkFileTree(dataSource, new CopyDataVisitor(project));
+}
+
+class CopyDataVisitor extends SimpleFileVisitor<Path> {
+    def project
+
+    CopyDataVisitor(prj) {
+        project = prj
+    }
+
+    @Override
+    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+        Path rel = project.dataSource.relativize(dir)
+        if (rel.nameCount > 4) {
+            rel = rel.subpath(4, rel.nameCount);
+            if (rel.fileName.toString() == 'fastdebug') {
+                // Do not copy fastdebug versions
+                return FileVisitResult.SKIP_SUBTREE;
+            }
+            def targetPath = project.processedData.resolve(rel);
+            if(!Files.exists(targetPath)){
+                Files.createDirectory(targetPath);
+            }
+        }
+        return FileVisitResult.CONTINUE;
+    }
+    @Override
+    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+        Path rel = project.dataSource.relativize(file)
+        if (rel.nameCount > 4) {
+            rel = rel.subpath(4, rel.nameCount);
+            def targetPath = project.processedData.resolve(rel);
+            Files.copy(file, targetPath, StandardCopyOption.REPLACE_EXISTING);
+        }
+        return FileVisitResult.CONTINUE;
+    }
+}

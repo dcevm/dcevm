@@ -27,9 +27,12 @@ sourceSets {
     }
 }
 
-task copyData << {
-    Files.createDirectories(processedData)
-    Files.walkFileTree(dataSource, new CopyDataVisitor(project));
+task copyData {
+    onlyIf { Files.exists(dataSource) }
+    doLast {
+        Files.createDirectories(processedData)
+        Files.walkFileTree(dataSource, new CopyDataVisitor(project));
+    }
 }
 
 class CopyDataVisitor extends SimpleFileVisitor<Path> {

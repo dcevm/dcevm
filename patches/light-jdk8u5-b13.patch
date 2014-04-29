@@ -1,7 +1,6 @@
-diff --git a/make/openjdk_distro b/make/openjdk_distro
-index 520b33d..ea7eff0 100644
---- a/make/openjdk_distro
-+++ b/make/openjdk_distro
+diff -r 8a6717910608 make/openjdk_distro
+--- a/make/openjdk_distro	Tue Mar 11 13:02:13 2014 -0700
++++ b/make/openjdk_distro	Tue Apr 29 13:56:49 2014 -0700
 @@ -27,6 +27,6 @@
  #
  
@@ -10,11 +9,10 @@ index 520b33d..ea7eff0 100644
 +HOTSPOT_VM_DISTRO=Dynamic Code Evolution
  COMPANY_NAME=
  PRODUCT_NAME=OpenJDK
-diff --git a/src/share/vm/ci/ciObjectFactory.cpp b/src/share/vm/ci/ciObjectFactory.cpp
-index d257e8a..6adcbbf 100644
---- a/src/share/vm/ci/ciObjectFactory.cpp
-+++ b/src/share/vm/ci/ciObjectFactory.cpp
-@@ -750,3 +750,27 @@ void ciObjectFactory::print() {
+diff -r 8a6717910608 src/share/vm/ci/ciObjectFactory.cpp
+--- a/src/share/vm/ci/ciObjectFactory.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/ci/ciObjectFactory.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -750,3 +750,27 @@
               _unloaded_instances->length(),
               _unloaded_klasses->length());
  }
@@ -42,11 +40,10 @@ index d257e8a..6adcbbf 100644
 +#endif // ASSERT
 +}
 +
-diff --git a/src/share/vm/ci/ciObjectFactory.hpp b/src/share/vm/ci/ciObjectFactory.hpp
-index c1baca0..dfe0adc 100644
---- a/src/share/vm/ci/ciObjectFactory.hpp
-+++ b/src/share/vm/ci/ciObjectFactory.hpp
-@@ -90,6 +90,7 @@ private:
+diff -r 8a6717910608 src/share/vm/ci/ciObjectFactory.hpp
+--- a/src/share/vm/ci/ciObjectFactory.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/ci/ciObjectFactory.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -90,6 +90,7 @@
  
    ciInstance* get_unloaded_instance(ciInstanceKlass* klass);
  
@@ -54,7 +51,7 @@ index c1baca0..dfe0adc 100644
  public:
    static bool is_initialized() { return _initialized; }
  
-@@ -145,6 +146,8 @@ public:
+@@ -145,6 +146,8 @@
  
    void print_contents();
    void print();
@@ -63,11 +60,10 @@ index c1baca0..dfe0adc 100644
  };
  
  #endif // SHARE_VM_CI_CIOBJECTFACTORY_HPP
-diff --git a/src/share/vm/classfile/classFileParser.cpp b/src/share/vm/classfile/classFileParser.cpp
-index 3b1d4d2..4d3ca85 100644
---- a/src/share/vm/classfile/classFileParser.cpp
-+++ b/src/share/vm/classfile/classFileParser.cpp
-@@ -759,6 +759,7 @@ bool put_after_lookup(Symbol* name, Symbol* sig, NameSigHash** table) {
+diff -r 8a6717910608 src/share/vm/classfile/classFileParser.cpp
+--- a/src/share/vm/classfile/classFileParser.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/classFileParser.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -759,6 +759,7 @@
  Array<Klass*>* ClassFileParser::parse_interfaces(int length,
                                                   Handle protection_domain,
                                                   Symbol* class_name,
@@ -75,7 +71,7 @@ index 3b1d4d2..4d3ca85 100644
                                                   bool* has_default_methods,
                                                   TRAPS) {
    if (length == 0) {
-@@ -777,7 +778,11 @@ Array<Klass*>* ClassFileParser::parse_interfaces(int length,
+@@ -777,7 +778,11 @@
          "Interface name has bad constant pool index %u in class file %s",
          interface_index, CHECK_NULL);
        if (_cp->tag_at(interface_index).is_klass()) {
@@ -88,7 +84,7 @@ index 3b1d4d2..4d3ca85 100644
        } else {
          Symbol*  unresolved_klass  = _cp->klass_name_at(interface_index);
  
-@@ -791,6 +796,9 @@ Array<Klass*>* ClassFileParser::parse_interfaces(int length,
+@@ -791,6 +796,9 @@
          Klass* k = SystemDictionary::resolve_super_or_fail(class_name,
                        unresolved_klass, class_loader, protection_domain,
                        false, CHECK_NULL);
@@ -98,7 +94,7 @@ index 3b1d4d2..4d3ca85 100644
          interf = KlassHandle(THREAD, k);
        }
  
-@@ -3093,6 +3101,7 @@ AnnotationArray* ClassFileParser::assemble_annotations(u1* runtime_visible_annot
+@@ -3093,6 +3101,7 @@
  }
  
  instanceKlassHandle ClassFileParser::parse_super_class(int super_class_index,
@@ -106,7 +102,7 @@ index 3b1d4d2..4d3ca85 100644
                                                         TRAPS) {
    instanceKlassHandle super_klass;
    if (super_class_index == 0) {
-@@ -3109,7 +3118,11 @@ instanceKlassHandle ClassFileParser::parse_super_class(int super_class_index,
+@@ -3109,7 +3118,11 @@
      // However, make sure it is not an array type.
      bool is_array = false;
      if (_cp->tag_at(super_class_index).is_klass()) {
@@ -119,7 +115,7 @@ index 3b1d4d2..4d3ca85 100644
        if (_need_verify)
          is_array = super_klass->oop_is_array();
      } else if (_need_verify) {
-@@ -3658,8 +3671,10 @@ void ClassFileParser::layout_fields(Handle class_loader,
+@@ -3658,8 +3671,10 @@
  instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
                                                      ClassLoaderData* loader_data,
                                                      Handle protection_domain,
@@ -130,7 +126,7 @@ index 3b1d4d2..4d3ca85 100644
                                                      TempNewSymbol& parsed_name,
                                                      bool verify,
                                                      TRAPS) {
-@@ -3672,6 +3687,7 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
+@@ -3672,6 +3687,7 @@
    JvmtiCachedClassFileData *cached_class_file = NULL;
    Handle class_loader(THREAD, loader_data->class_loader());
    bool has_default_methods = false;
@@ -138,7 +134,7 @@ index 3b1d4d2..4d3ca85 100644
    ResourceMark rm(THREAD);
  
    ClassFileStream* cfs = stream();
-@@ -3688,7 +3704,7 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
+@@ -3688,7 +3704,7 @@
  
    init_parsed_class_attributes(loader_data);
  
@@ -147,7 +143,7 @@ index 3b1d4d2..4d3ca85 100644
      // Get the cached class file bytes (if any) from the class that
      // is being redefined or retransformed. We use jvmti_thread_state()
      // instead of JvmtiThreadState::state_for(jt) so we don't allocate
-@@ -3823,6 +3839,26 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
+@@ -3823,6 +3839,26 @@
                         CHECK_(nullHandle));
    }
  
@@ -174,7 +170,7 @@ index 3b1d4d2..4d3ca85 100644
    Klass* preserve_this_klass;   // for storing result across HandleMark
  
    // release all handles when parsing is done
-@@ -3849,13 +3885,14 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
+@@ -3849,13 +3885,14 @@
  
      u2 super_class_index = cfs->get_u2_fast();
      instanceKlassHandle super_klass = parse_super_class(super_class_index,
@@ -190,7 +186,7 @@ index 3b1d4d2..4d3ca85 100644
  
      u2 java_fields_count = 0;
      // Fields (offsets are filled in later)
-@@ -3897,6 +3934,9 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
+@@ -3897,6 +3934,9 @@
                                                           true,
                                                           CHECK_(nullHandle));
  
@@ -200,7 +196,7 @@ index 3b1d4d2..4d3ca85 100644
        KlassHandle kh (THREAD, k);
        super_klass = instanceKlassHandle(THREAD, kh());
      }
-@@ -4056,7 +4096,7 @@ instanceKlassHandle ClassFileParser::parseClassFile(Symbol* name,
+@@ -4056,7 +4096,7 @@
      fill_oop_maps(this_klass, info.nonstatic_oop_map_count, info.nonstatic_oop_offsets, info.nonstatic_oop_counts);
  
      // Fill in has_finalizer, has_vanilla_constructor, and layout_helper
@@ -209,7 +205,7 @@ index 3b1d4d2..4d3ca85 100644
  
      // reinitialize modifiers, using the InnerClasses attribute
      int computed_modifiers = this_klass->compute_modifier_flags(CHECK_(nullHandle));
-@@ -4283,7 +4323,7 @@ void ClassFileParser::fill_oop_maps(instanceKlassHandle k,
+@@ -4283,7 +4323,7 @@
  }
  
  
@@ -218,7 +214,7 @@ index 3b1d4d2..4d3ca85 100644
    Klass* super = k->super();
  
    // Check if this klass has an empty finalize method (i.e. one with return bytecode only),
-@@ -4291,7 +4331,9 @@ void ClassFileParser::set_precomputed_flags(instanceKlassHandle k) {
+@@ -4291,7 +4331,9 @@
    if (!_has_empty_finalizer) {
      if (_has_finalizer ||
          (super != NULL && super->has_finalizer())) {
@@ -229,7 +225,7 @@ index 3b1d4d2..4d3ca85 100644
      }
    }
  
-@@ -4307,7 +4349,7 @@ void ClassFileParser::set_precomputed_flags(instanceKlassHandle k) {
+@@ -4307,7 +4349,7 @@
  
    // Check if this klass supports the java.lang.Cloneable interface
    if (SystemDictionary::Cloneable_klass_loaded()) {
@@ -238,11 +234,10 @@ index 3b1d4d2..4d3ca85 100644
        k->set_is_cloneable();
      }
    }
-diff --git a/src/share/vm/classfile/classFileParser.hpp b/src/share/vm/classfile/classFileParser.hpp
-index 02a4ce2..e5c6557 100644
---- a/src/share/vm/classfile/classFileParser.hpp
-+++ b/src/share/vm/classfile/classFileParser.hpp
-@@ -214,11 +214,12 @@ class ClassFileParser VALUE_OBJ_CLASS_SPEC {
+diff -r 8a6717910608 src/share/vm/classfile/classFileParser.hpp
+--- a/src/share/vm/classfile/classFileParser.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/classFileParser.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -214,11 +214,12 @@
    Array<Klass*>* parse_interfaces(int length,
                                    Handle protection_domain,
                                    Symbol* class_name,
@@ -256,7 +251,7 @@ index 02a4ce2..e5c6557 100644
    // Field parsing
    void parse_field_attributes(u2 attributes_count,
                                bool is_static, u2 signature_index,
-@@ -299,7 +300,7 @@ class ClassFileParser VALUE_OBJ_CLASS_SPEC {
+@@ -299,7 +300,7 @@
                       unsigned int nonstatic_oop_map_count,
                       int* nonstatic_oop_offsets,
                       unsigned int* nonstatic_oop_counts);
@@ -265,7 +260,7 @@ index 02a4ce2..e5c6557 100644
    Array<Klass*>* compute_transitive_interfaces(instanceKlassHandle super,
                                                 Array<Klass*>* local_ifs, TRAPS);
  
-@@ -461,17 +462,20 @@ class ClassFileParser VALUE_OBJ_CLASS_SPEC {
+@@ -461,17 +462,20 @@
    instanceKlassHandle parseClassFile(Symbol* name,
                                       ClassLoaderData* loader_data,
                                       Handle protection_domain,
@@ -287,11 +282,10 @@ index 02a4ce2..e5c6557 100644
                                       TempNewSymbol& parsed_name,
                                       bool verify,
                                       TRAPS);
-diff --git a/src/share/vm/classfile/classLoader.cpp b/src/share/vm/classfile/classLoader.cpp
-index 0ab350d..3dba736 100644
---- a/src/share/vm/classfile/classLoader.cpp
-+++ b/src/share/vm/classfile/classLoader.cpp
-@@ -926,6 +926,7 @@ instanceKlassHandle ClassLoader::load_classfile(Symbol* h_name, TRAPS) {
+diff -r 8a6717910608 src/share/vm/classfile/classLoader.cpp
+--- a/src/share/vm/classfile/classLoader.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/classLoader.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -926,6 +926,7 @@
      instanceKlassHandle result = parser.parseClassFile(h_name,
                                                         loader_data,
                                                         protection_domain,
@@ -299,11 +293,10 @@ index 0ab350d..3dba736 100644
                                                         parsed_name,
                                                         false,
                                                         CHECK_(h));
-diff --git a/src/share/vm/classfile/dictionary.cpp b/src/share/vm/classfile/dictionary.cpp
-index e308791..b2a5cc3 100644
---- a/src/share/vm/classfile/dictionary.cpp
-+++ b/src/share/vm/classfile/dictionary.cpp
-@@ -145,7 +145,7 @@ bool Dictionary::do_unloading() {
+diff -r 8a6717910608 src/share/vm/classfile/dictionary.cpp
+--- a/src/share/vm/classfile/dictionary.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/dictionary.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -145,7 +145,7 @@
        InstanceKlass* ik = InstanceKlass::cast(e);
  
        // Non-unloadable classes were handled in always_strong_oops_do
@@ -312,7 +305,7 @@ index e308791..b2a5cc3 100644
          // Entry was not visited in phase1 (negated test from phase1)
          assert(!loader_data->is_the_null_class_loader_data(), "unloading entry with null class loader");
          ClassLoaderData* k_def_class_loader_data = ik->class_loader_data();
-@@ -336,6 +336,32 @@ void Dictionary::add_klass(Symbol* class_name, ClassLoaderData* loader_data,
+@@ -336,6 +336,32 @@
    add_entry(index, entry);
  }
  
@@ -345,7 +338,7 @@ index e308791..b2a5cc3 100644
  
  // This routine does not lock the system dictionary.
  //
-@@ -366,7 +392,7 @@ Klass* Dictionary::find(int index, unsigned int hash, Symbol* name,
+@@ -366,7 +392,7 @@
                            ClassLoaderData* loader_data, Handle protection_domain, TRAPS) {
    DictionaryEntry* entry = get_entry(index, hash, name, loader_data);
    if (entry != NULL && entry->is_valid_protection_domain(protection_domain)) {
@@ -354,7 +347,7 @@ index e308791..b2a5cc3 100644
    } else {
      return NULL;
    }
-@@ -379,7 +405,7 @@ Klass* Dictionary::find_class(int index, unsigned int hash,
+@@ -379,7 +405,7 @@
    assert (index == index_for(name, loader_data), "incorrect index?");
  
    DictionaryEntry* entry = get_entry(index, hash, name, loader_data);
@@ -363,7 +356,7 @@ index e308791..b2a5cc3 100644
  }
  
  
-@@ -391,7 +417,7 @@ Klass* Dictionary::find_shared_class(int index, unsigned int hash,
+@@ -391,7 +417,7 @@
    assert (index == index_for(name, NULL), "incorrect index?");
  
    DictionaryEntry* entry = get_entry(index, hash, name, NULL);
@@ -372,11 +365,10 @@ index e308791..b2a5cc3 100644
  }
  
  
-diff --git a/src/share/vm/classfile/dictionary.hpp b/src/share/vm/classfile/dictionary.hpp
-index 17d916f..7e47788 100644
---- a/src/share/vm/classfile/dictionary.hpp
-+++ b/src/share/vm/classfile/dictionary.hpp
-@@ -78,6 +78,10 @@ public:
+diff -r 8a6717910608 src/share/vm/classfile/dictionary.hpp
+--- a/src/share/vm/classfile/dictionary.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/dictionary.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -78,6 +78,10 @@
  
    void add_klass(Symbol* class_name, ClassLoaderData* loader_data,KlassHandle obj);
  
@@ -387,7 +379,7 @@ index 17d916f..7e47788 100644
    Klass* find_class(int index, unsigned int hash,
                        Symbol* name, ClassLoaderData* loader_data);
  
-@@ -107,6 +111,11 @@ public:
+@@ -107,6 +111,11 @@
      return (loader_data->is_the_null_class_loader_data() || !ClassUnloading);
    }
  
@@ -399,11 +391,10 @@ index 17d916f..7e47788 100644
    // Unload (that is, break root links to) all unmarked classes and
    // loaders.  Returns "true" iff something was unloaded.
    bool do_unloading();
-diff --git a/src/share/vm/classfile/javaClasses.cpp b/src/share/vm/classfile/javaClasses.cpp
-index 06e75ea..05dd8fe 100644
---- a/src/share/vm/classfile/javaClasses.cpp
-+++ b/src/share/vm/classfile/javaClasses.cpp
-@@ -1629,6 +1629,8 @@ void java_lang_Throwable::fill_in_stack_trace(Handle throwable, methodHandle met
+diff -r 8a6717910608 src/share/vm/classfile/javaClasses.cpp
+--- a/src/share/vm/classfile/javaClasses.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/javaClasses.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -1629,6 +1629,8 @@
          skip_throwableInit_check = true;
        }
      }
@@ -412,11 +403,10 @@ index 06e75ea..05dd8fe 100644
      if (method->is_hidden()) {
        if (skip_hidden)  continue;
      }
-diff --git a/src/share/vm/classfile/loaderConstraints.cpp b/src/share/vm/classfile/loaderConstraints.cpp
-index 8d59c00..5651e6d 100644
---- a/src/share/vm/classfile/loaderConstraints.cpp
-+++ b/src/share/vm/classfile/loaderConstraints.cpp
-@@ -446,7 +446,7 @@ void LoaderConstraintTable::verify(Dictionary* dictionary,
+diff -r 8a6717910608 src/share/vm/classfile/loaderConstraints.cpp
+--- a/src/share/vm/classfile/loaderConstraints.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/loaderConstraints.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -446,7 +446,7 @@
          if (k != NULL) {
            // We found the class in the system dictionary, so we should
            // make sure that the Klass* matches what we already have.
@@ -425,11 +415,10 @@ index 8d59c00..5651e6d 100644
          } else {
            // If we don't find the class in the system dictionary, it
            // has to be in the placeholders table.
-diff --git a/src/share/vm/classfile/systemDictionary.cpp b/src/share/vm/classfile/systemDictionary.cpp
-index f5c5c01..8b1fbcd 100644
---- a/src/share/vm/classfile/systemDictionary.cpp
-+++ b/src/share/vm/classfile/systemDictionary.cpp
-@@ -174,6 +174,7 @@ Klass* SystemDictionary::resolve_or_fail(Symbol* class_name, Handle class_loader
+diff -r 8a6717910608 src/share/vm/classfile/systemDictionary.cpp
+--- a/src/share/vm/classfile/systemDictionary.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/systemDictionary.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -174,6 +174,7 @@
      // can return a null klass
      klass = handle_resolution_exception(class_name, class_loader, protection_domain, throw_error, k_h, THREAD);
    }
@@ -437,7 +426,7 @@ index f5c5c01..8b1fbcd 100644
    return klass;
  }
  
-@@ -216,7 +217,7 @@ Klass* SystemDictionary::resolve_or_fail(Symbol* class_name,
+@@ -216,7 +217,7 @@
  // Forwards to resolve_instance_class_or_null
  
  Klass* SystemDictionary::resolve_or_null(Symbol* class_name, Handle class_loader, Handle protection_domain, TRAPS) {
@@ -446,7 +435,7 @@ index f5c5c01..8b1fbcd 100644
           err_msg("can not load classes with compiler thread: class=%s, classloader=%s",
                   class_name->as_C_string(),
                   class_loader.is_null() ? "null" : class_loader->klass()->name()->as_C_string()));
-@@ -1029,8 +1030,10 @@ Klass* SystemDictionary::parse_stream(Symbol* class_name,
+@@ -1029,8 +1030,10 @@
    instanceKlassHandle k = ClassFileParser(st).parseClassFile(class_name,
                                                               loader_data,
                                                               protection_domain,
@@ -457,7 +446,7 @@ index f5c5c01..8b1fbcd 100644
                                                               parsed_name,
                                                               true,
                                                               THREAD);
-@@ -1085,6 +1088,7 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
+@@ -1085,6 +1088,7 @@
                                               Handle protection_domain,
                                               ClassFileStream* st,
                                               bool verify,
@@ -465,7 +454,7 @@ index f5c5c01..8b1fbcd 100644
                                               TRAPS) {
  
    // Classloaders that support parallelism, e.g. bootstrap classloader,
-@@ -1112,9 +1116,15 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
+@@ -1112,9 +1116,15 @@
    instanceKlassHandle k = ClassFileParser(st).parseClassFile(class_name,
                                                               loader_data,
                                                               protection_domain,
@@ -481,7 +470,7 @@ index f5c5c01..8b1fbcd 100644
  
    const char* pkg = "java/";
    if (!HAS_PENDING_EXCEPTION &&
-@@ -1149,10 +1159,11 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
+@@ -1149,10 +1159,11 @@
      // Add class just loaded
      // If a class loader supports parallel classloading handle parallel define requests
      // find_or_define_instance_class may return a different InstanceKlass
@@ -495,7 +484,7 @@ index f5c5c01..8b1fbcd 100644
      }
    }
  
-@@ -1166,7 +1177,7 @@ Klass* SystemDictionary::resolve_from_stream(Symbol* class_name,
+@@ -1166,7 +1177,7 @@
        MutexLocker mu(SystemDictionary_lock, THREAD);
  
        Klass* check = find_class(parsed_name, loader_data);
@@ -504,7 +493,7 @@ index f5c5c01..8b1fbcd 100644
  
        Klass* check2 = find_class(h_name, defining_loader_data);
        assert(check == check2, "name inconsistancy in SystemDictionary");
-@@ -1386,7 +1397,11 @@ instanceKlassHandle SystemDictionary::load_instance_class(Symbol* class_name, Ha
+@@ -1386,7 +1397,11 @@
    }
  }
  
@@ -517,7 +506,7 @@ index f5c5c01..8b1fbcd 100644
  
    ClassLoaderData* loader_data = k->class_loader_data();
    Handle class_loader_h(THREAD, loader_data->class_loader());
-@@ -1416,7 +1431,17 @@ void SystemDictionary::define_instance_class(instanceKlassHandle k, TRAPS) {
+@@ -1416,7 +1431,17 @@
    Symbol*  name_h = k->name();
    unsigned int d_hash = dictionary()->compute_hash(name_h, loader_data);
    int d_index = dictionary()->hash_to_index(d_hash);
@@ -536,7 +525,7 @@ index f5c5c01..8b1fbcd 100644
  
    // Register class just loaded with class loader (placed in Vector)
    // Note we do this before updating the dictionary, as this can
-@@ -1449,8 +1474,9 @@ void SystemDictionary::define_instance_class(instanceKlassHandle k, TRAPS) {
+@@ -1449,8 +1474,9 @@
    }
    k->eager_initialize(THREAD);
  
@@ -547,7 +536,7 @@ index f5c5c01..8b1fbcd 100644
        assert(THREAD->is_Java_thread(), "thread->is_Java_thread()");
        JvmtiExport::post_class_load((JavaThread *) THREAD, k());
  
-@@ -1524,7 +1550,7 @@ instanceKlassHandle SystemDictionary::find_or_define_instance_class(Symbol* clas
+@@ -1524,7 +1550,7 @@
      }
    }
  
@@ -556,7 +545,7 @@ index f5c5c01..8b1fbcd 100644
  
    Handle linkage_exception = Handle(); // null handle
  
-@@ -1654,6 +1680,14 @@ void SystemDictionary::add_to_hierarchy(instanceKlassHandle k, TRAPS) {
+@@ -1654,6 +1680,14 @@
    Universe::flush_dependents_on(k);
  }
  
@@ -571,7 +560,7 @@ index f5c5c01..8b1fbcd 100644
  
  // ----------------------------------------------------------------------------
  // GC support
-@@ -2000,7 +2034,7 @@ void SystemDictionary::check_constraints(int d_index, unsigned int d_hash,
+@@ -2000,7 +2034,7 @@
        // also holds array classes
  
        assert(check->oop_is_instance(), "noninstance in systemdictionary");
@@ -580,11 +569,10 @@ index f5c5c01..8b1fbcd 100644
          linkage_error = "loader (instance of  %s): attempted  duplicate class "
            "definition for name: \"%s\"";
        } else {
-diff --git a/src/share/vm/classfile/systemDictionary.hpp b/src/share/vm/classfile/systemDictionary.hpp
-index b0e914f..8542985 100644
---- a/src/share/vm/classfile/systemDictionary.hpp
-+++ b/src/share/vm/classfile/systemDictionary.hpp
-@@ -269,7 +269,7 @@ public:
+diff -r 8a6717910608 src/share/vm/classfile/systemDictionary.hpp
+--- a/src/share/vm/classfile/systemDictionary.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/systemDictionary.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -269,7 +269,7 @@
    // Resolve from stream (called by jni_DefineClass and JVM_DefineClass)
    static Klass* resolve_from_stream(Symbol* class_name, Handle class_loader,
                                        Handle protection_domain,
@@ -593,7 +581,7 @@ index b0e914f..8542985 100644
  
    // Lookup an already loaded class. If not found NULL is returned.
    static Klass* find(Symbol* class_name, Handle class_loader, Handle protection_domain, TRAPS);
-@@ -339,6 +339,8 @@ public:
+@@ -339,6 +339,8 @@
    // System loader lock
    static oop system_loader_lock()           { return _system_loader_lock_obj; }
  
@@ -602,7 +590,7 @@ index b0e914f..8542985 100644
  private:
    // Extended Redefine classes support (tbi)
    static void preloaded_classes_do(KlassClosure* f);
-@@ -408,6 +410,9 @@ public:
+@@ -408,6 +410,9 @@
      initialize_wk_klasses_until((WKID) limit, start_id, THREAD);
    }
  
@@ -612,7 +600,7 @@ index b0e914f..8542985 100644
  public:
    #define WK_KLASS_DECLARE(name, symbol, option) \
      static Klass* name() { return check_klass_##option(_well_known_klasses[WK_KLASS_ENUM_NAME(name)]); } \
-@@ -613,7 +618,7 @@ private:
+@@ -613,7 +618,7 @@
    // after waiting, but before reentering SystemDictionary_lock
    // to preserve lock order semantics.
    static void double_lock_wait(Handle lockObject, TRAPS);
@@ -621,11 +609,10 @@ index b0e914f..8542985 100644
    static instanceKlassHandle find_or_define_instance_class(Symbol* class_name,
                                                  Handle class_loader,
                                                  instanceKlassHandle k, TRAPS);
-diff --git a/src/share/vm/classfile/verifier.cpp b/src/share/vm/classfile/verifier.cpp
-index 2e64747..d402d91 100644
---- a/src/share/vm/classfile/verifier.cpp
-+++ b/src/share/vm/classfile/verifier.cpp
-@@ -189,7 +189,7 @@ bool Verifier::is_eligible_for_verification(instanceKlassHandle klass, bool shou
+diff -r 8a6717910608 src/share/vm/classfile/verifier.cpp
+--- a/src/share/vm/classfile/verifier.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/verifier.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -189,7 +189,7 @@
    Symbol* name = klass->name();
    Klass* refl_magic_klass = SystemDictionary::reflect_MagicAccessorImpl_klass();
  
@@ -634,7 +621,7 @@ index 2e64747..d402d91 100644
  
    return (should_verify_for(klass->class_loader(), should_verify_class) &&
      // return if the class is a bootstrapping class
-@@ -518,7 +518,7 @@ void ErrorContext::stackmap_details(outputStream* ss, const Method* method) cons
+@@ -518,7 +518,7 @@
  
  ClassVerifier::ClassVerifier(
      instanceKlassHandle klass, TRAPS)
@@ -643,7 +630,7 @@ index 2e64747..d402d91 100644
    _this_type = VerificationType::reference_type(klass->name());
    // Create list to hold symbols in reference area.
    _symbols = new GrowableArray<Symbol*>(100, 0, NULL);
-@@ -548,7 +548,7 @@ void ClassVerifier::verify_class(TRAPS) {
+@@ -548,7 +548,7 @@
        _klass->external_name());
    }
  
@@ -652,11 +639,10 @@ index 2e64747..d402d91 100644
    int num_methods = methods->length();
  
    for (int index = 0; index < num_methods; index++) {
-diff --git a/src/share/vm/classfile/verifier.hpp b/src/share/vm/classfile/verifier.hpp
-index 74143a6..002ef25 100644
---- a/src/share/vm/classfile/verifier.hpp
-+++ b/src/share/vm/classfile/verifier.hpp
-@@ -331,6 +331,7 @@ class ClassVerifier : public StackObj {
+diff -r 8a6717910608 src/share/vm/classfile/verifier.hpp
+--- a/src/share/vm/classfile/verifier.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/verifier.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -331,6 +331,7 @@
  
    VerificationType object_type() const;
  
@@ -664,11 +650,10 @@ index 74143a6..002ef25 100644
    instanceKlassHandle _klass;  // the class being verified
    methodHandle        _method; // current method being verified
    VerificationType    _this_type; // the verification type of the current class
-diff --git a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp
-index b87efd7..53738f4 100644
---- a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp
-+++ b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp
-@@ -161,6 +161,12 @@ CompactibleFreeListSpace::CompactibleFreeListSpace(BlockOffsetSharedArray* bs,
+diff -r 8a6717910608 src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp
+--- a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -161,6 +161,12 @@
    }
  }
  
@@ -681,7 +666,7 @@ index b87efd7..53738f4 100644
  // Like CompactibleSpace forward() but always calls cross_threshold() to
  // update the block offset table.  Removed initialize_threshold call because
  // CFLS does not use a block offset array for contiguous spaces.
-@@ -2098,7 +2104,7 @@ bool CompactibleFreeListSpace::should_concurrent_collect() const {
+@@ -2098,7 +2104,7 @@
  // Support for compaction
  
  void CompactibleFreeListSpace::prepare_for_compaction(CompactPoint* cp) {
@@ -690,7 +675,7 @@ index b87efd7..53738f4 100644
    // prepare_for_compaction() uses the space between live objects
    // so that later phase can skip dead space quickly.  So verification
    // of the free lists doesn't work after.
-@@ -2119,7 +2125,7 @@ void CompactibleFreeListSpace::adjust_pointers() {
+@@ -2119,7 +2125,7 @@
  }
  
  void CompactibleFreeListSpace::compact() {
@@ -699,11 +684,10 @@ index b87efd7..53738f4 100644
  }
  
  // fragmentation_metric = 1 - [sum of (fbs**2) / (sum of fbs)**2]
-diff --git a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp
-index e625d3a..4eb587f 100644
---- a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp
-+++ b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp
-@@ -150,6 +150,7 @@ class CompactibleFreeListSpace: public CompactibleSpace {
+diff -r 8a6717910608 src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp
+--- a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -150,6 +150,7 @@
  
    // Support for compacting cms
    HeapWord* cross_threshold(HeapWord* start, HeapWord* end);
@@ -711,10 +695,9 @@ index e625d3a..4eb587f 100644
    HeapWord* forward(oop q, size_t size, CompactPoint* cp, HeapWord* compact_top);
  
    // Initialization helpers.
-diff --git a/src/share/vm/gc_implementation/shared/markSweep.cpp b/src/share/vm/gc_implementation/shared/markSweep.cpp
-index 1bc3ea4..15efb77 100644
---- a/src/share/vm/gc_implementation/shared/markSweep.cpp
-+++ b/src/share/vm/gc_implementation/shared/markSweep.cpp
+diff -r 8a6717910608 src/share/vm/gc_implementation/shared/markSweep.cpp
+--- a/src/share/vm/gc_implementation/shared/markSweep.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/gc_implementation/shared/markSweep.cpp	Tue Apr 29 13:56:49 2014 -0700
 @@ -32,6 +32,8 @@
  #include "oops/objArrayKlass.inline.hpp"
  #include "oops/oop.inline.hpp"
@@ -724,7 +707,7 @@ index 1bc3ea4..15efb77 100644
  uint                    MarkSweep::_total_invocations = 0;
  
  Stack<oop, mtGC>              MarkSweep::_marking_stack;
-@@ -171,3 +173,100 @@ void MarkSweep::trace(const char* msg) {
+@@ -171,3 +173,100 @@
  }
  
  #endif
@@ -825,11 +808,10 @@ index 1bc3ea4..15efb77 100644
 +    }
 +  }
 +}
-diff --git a/src/share/vm/gc_implementation/shared/markSweep.hpp b/src/share/vm/gc_implementation/shared/markSweep.hpp
-index 38fc8e7..ce591ad 100644
---- a/src/share/vm/gc_implementation/shared/markSweep.hpp
-+++ b/src/share/vm/gc_implementation/shared/markSweep.hpp
-@@ -107,8 +107,12 @@ class MarkSweep : AllStatic {
+diff -r 8a6717910608 src/share/vm/gc_implementation/shared/markSweep.hpp
+--- a/src/share/vm/gc_implementation/shared/markSweep.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/gc_implementation/shared/markSweep.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -107,8 +107,12 @@
    friend class AdjustPointerClosure;
    friend class KeepAliveClosure;
    friend class VM_MarkSweep;
@@ -842,7 +824,7 @@ index 38fc8e7..ce591ad 100644
    //
    // Vars
    //
-@@ -169,6 +173,9 @@ class MarkSweep : AllStatic {
+@@ -169,6 +173,9 @@
  
    static inline void push_objarray(oop obj, size_t index);
  
@@ -852,11 +834,10 @@ index 38fc8e7..ce591ad 100644
    static void follow_stack();   // Empty marking stack.
  
    static void follow_klass(Klass* klass);
-diff --git a/src/share/vm/interpreter/linkResolver.cpp b/src/share/vm/interpreter/linkResolver.cpp
-index b63e03b..8c0a55e 100644
---- a/src/share/vm/interpreter/linkResolver.cpp
-+++ b/src/share/vm/interpreter/linkResolver.cpp
-@@ -215,8 +215,8 @@ void CallInfo::verify() {
+diff -r 8a6717910608 src/share/vm/interpreter/linkResolver.cpp
+--- a/src/share/vm/interpreter/linkResolver.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/interpreter/linkResolver.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -215,8 +215,8 @@
  // Klass resolution
  
  void LinkResolver::check_klass_accessability(KlassHandle ref_klass, KlassHandle sel_klass, TRAPS) {
@@ -867,7 +848,7 @@ index b63e03b..8c0a55e 100644
                                         true)) {
      ResourceMark rm(THREAD);
      Exceptions::fthrow(
-@@ -444,7 +444,7 @@ void LinkResolver::check_method_accessability(KlassHandle ref_klass,
+@@ -444,7 +444,7 @@
    // We'll check for the method name first, as that's most likely
    // to be false (so we'll short-circuit out of these tests).
    if (sel_method->name() == vmSymbols::clone_name() &&
@@ -876,7 +857,7 @@ index b63e03b..8c0a55e 100644
        resolved_klass->oop_is_array()) {
      // We need to change "protected" to "public".
      assert(flags.is_protected(), "clone not protected?");
-@@ -802,7 +802,7 @@ void LinkResolver::resolve_field(fieldDescriptor& fd, KlassHandle resolved_klass
+@@ -802,7 +802,7 @@
    }
  
    // Final fields can only be accessed from its own class.
@@ -885,7 +866,7 @@ index b63e03b..8c0a55e 100644
      THROW(vmSymbols::java_lang_IllegalAccessError());
    }
  
-@@ -1199,6 +1199,9 @@ void LinkResolver::runtime_resolve_virtual_method(CallInfo& result,
+@@ -1199,6 +1199,9 @@
        // recv_klass might be an arrayKlassOop but all vtables start at
        // the same place. The cast is to avoid virtual call and assertion.
        InstanceKlass* inst = (InstanceKlass*)recv_klass();
@@ -895,11 +876,10 @@ index b63e03b..8c0a55e 100644
        selected_method = methodHandle(THREAD, inst->method_at_vtable(vtable_index));
      }
    }
-diff --git a/src/share/vm/memory/genMarkSweep.cpp b/src/share/vm/memory/genMarkSweep.cpp
-index fdeba2a..fb207ed 100644
---- a/src/share/vm/memory/genMarkSweep.cpp
-+++ b/src/share/vm/memory/genMarkSweep.cpp
-@@ -334,11 +334,16 @@ void GenMarkSweep::mark_sweep_phase4() {
+diff -r 8a6717910608 src/share/vm/memory/genMarkSweep.cpp
+--- a/src/share/vm/memory/genMarkSweep.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/memory/genMarkSweep.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -334,11 +334,16 @@
    // in the same order in phase2, phase3 and phase4. We don't quite do that
    // here (perm_gen first rather than last), so we tell the validate code
    // to use a higher index (saved from phase2) when verifying perm_gen.
@@ -916,11 +896,10 @@ index fdeba2a..fb207ed 100644
 +
 +  MarkSweep::copy_rescued_objects_back();
  }
-diff --git a/src/share/vm/memory/space.cpp b/src/share/vm/memory/space.cpp
-index 8f844df..81a5db3 100644
---- a/src/share/vm/memory/space.cpp
-+++ b/src/share/vm/memory/space.cpp
-@@ -379,9 +379,8 @@ void CompactibleSpace::clear(bool mangle_space) {
+diff -r 8a6717910608 src/share/vm/memory/space.cpp
+--- a/src/share/vm/memory/space.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/memory/space.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -379,9 +379,8 @@
    _compaction_top = bottom();
  }
  
@@ -932,7 +911,7 @@ index 8f844df..81a5db3 100644
    // First check if we should switch compaction space
    assert(this == cp->space, "'this' should be current compaction space.");
    size_t compaction_max_size = pointer_delta(end(), compact_top);
-@@ -401,8 +400,15 @@ HeapWord* CompactibleSpace::forward(oop q, size_t size,
+@@ -401,8 +400,15 @@
      compaction_max_size = pointer_delta(cp->space->end(), compact_top);
    }
  
@@ -949,7 +928,7 @@ index 8f844df..81a5db3 100644
      q->forward_to(oop(compact_top));
      assert(q->is_gc_marked(), "encoding the pointer should preserve the mark");
    } else {
-@@ -423,6 +429,58 @@ HeapWord* CompactibleSpace::forward(oop q, size_t size,
+@@ -423,6 +429,58 @@
    return compact_top;
  }
  
@@ -1008,7 +987,7 @@ index 8f844df..81a5db3 100644
  
  bool CompactibleSpace::insert_deadspace(size_t& allowed_deadspace_words,
                                          HeapWord* q, size_t deadlength) {
-@@ -444,12 +502,17 @@ bool CompactibleSpace::insert_deadspace(size_t& allowed_deadspace_words,
+@@ -444,12 +502,17 @@
  #define adjust_obj_size(s) s
  
  void CompactibleSpace::prepare_for_compaction(CompactPoint* cp) {
@@ -1028,7 +1007,7 @@ index 8f844df..81a5db3 100644
  }
  
  void Space::adjust_pointers() {
-@@ -487,6 +550,111 @@ void Space::adjust_pointers() {
+@@ -487,6 +550,111 @@
    assert(q == t, "just checking");
  }
  
@@ -1140,7 +1119,7 @@ index 8f844df..81a5db3 100644
  void CompactibleSpace::adjust_pointers() {
    // Check first is there is any work to do.
    if (used() == 0) {
-@@ -497,7 +665,12 @@ void CompactibleSpace::adjust_pointers() {
+@@ -497,7 +665,12 @@
  }
  
  void CompactibleSpace::compact() {
@@ -1154,11 +1133,10 @@ index 8f844df..81a5db3 100644
  }
  
  void Space::print_short() const { print_short_on(tty); }
-diff --git a/src/share/vm/memory/space.hpp b/src/share/vm/memory/space.hpp
-index 04efc7d..abd4b6b 100644
---- a/src/share/vm/memory/space.hpp
-+++ b/src/share/vm/memory/space.hpp
-@@ -450,6 +450,9 @@ public:
+diff -r 8a6717910608 src/share/vm/memory/space.hpp
+--- a/src/share/vm/memory/space.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/memory/space.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -450,6 +450,9 @@
    // indicates when the next such action should be taken.
    virtual void prepare_for_compaction(CompactPoint* cp);
    // MarkSweep support phase3
@@ -1168,7 +1146,7 @@ index 04efc7d..abd4b6b 100644
    virtual void adjust_pointers();
    // MarkSweep support phase4
    virtual void compact();
-@@ -479,6 +482,15 @@ public:
+@@ -479,6 +482,15 @@
    // accordingly".
    virtual HeapWord* forward(oop q, size_t size, CompactPoint* cp,
                      HeapWord* compact_top);
@@ -1184,7 +1162,7 @@ index 04efc7d..abd4b6b 100644
  
    // Return a size with adjusments as required of the space.
    virtual size_t adjust_object_size_v(size_t size) const { return size; }
-@@ -509,7 +521,7 @@ protected:
+@@ -509,7 +521,7 @@
                          size_t word_len);
  };
  
@@ -1193,7 +1171,7 @@ index 04efc7d..abd4b6b 100644
    /* Compute the new addresses for the live objects and store it in the mark \
     * Used by universe::mark_sweep_phase2()                                   \
     */                                                                        \
-@@ -567,7 +579,17 @@ protected:
+@@ -567,7 +579,17 @@
        /* prefetch beyond q */                                                \
        Prefetch::write(q, interval);                                          \
        size_t size = block_size(q);                                           \
@@ -1211,7 +1189,7 @@ index 04efc7d..abd4b6b 100644
        q += size;                                                             \
        end_of_live = q;                                                       \
      } else {                                                                 \
-@@ -616,6 +638,8 @@ protected:
+@@ -616,6 +638,8 @@
      }                                                                        \
    }                                                                          \
                                                                               \
@@ -1220,7 +1198,7 @@ index 04efc7d..abd4b6b 100644
    assert(q == t, "just checking");                                           \
    if (liveRange != NULL) {                                                   \
      liveRange->set_end(q);                                                   \
-@@ -662,13 +686,8 @@ protected:
+@@ -662,13 +686,8 @@
        q += size;                                                                \
      }                                                                           \
                                                                                  \
@@ -1236,7 +1214,7 @@ index 04efc7d..abd4b6b 100644
    }                                                                             \
                                                                                  \
    const intx interval = PrefetchScanIntervalInBytes;                            \
-@@ -696,7 +715,7 @@ protected:
+@@ -696,7 +715,7 @@
    assert(q == t, "just checking");                                              \
  }
  
@@ -1245,7 +1223,7 @@ index 04efc7d..abd4b6b 100644
    /* Copy all live objects to their new location                                \
     * Used by MarkSweep::mark_sweep_phase4() */                                  \
                                                                                  \
-@@ -721,13 +740,9 @@ protected:
+@@ -721,13 +740,9 @@
      }                                                                           \
      )  /* debug_only */                                                         \
                                                                                  \
@@ -1261,7 +1239,7 @@ index 04efc7d..abd4b6b 100644
                                                                                  \
    const intx scan_interval = PrefetchScanIntervalInBytes;                       \
    const intx copy_interval = PrefetchCopyIntervalInBytes;                       \
-@@ -745,11 +760,34 @@ protected:
+@@ -745,11 +760,34 @@
        size_t size = obj_size(q);                                                \
        HeapWord* compaction_top = (HeapWord*)oop(q)->forwardee();                \
                                                                                  \
@@ -1297,10 +1275,9 @@ index 04efc7d..abd4b6b 100644
        Copy::aligned_conjoint_words(q, compaction_top, size);                    \
        oop(compaction_top)->init_mark();                                         \
        assert(oop(compaction_top)->klass() != NULL, "should have a class");      \
-diff --git a/src/share/vm/memory/universe.cpp b/src/share/vm/memory/universe.cpp
-index d022ae1..02dc63f 100644
---- a/src/share/vm/memory/universe.cpp
-+++ b/src/share/vm/memory/universe.cpp
+diff -r 8a6717910608 src/share/vm/memory/universe.cpp
+--- a/src/share/vm/memory/universe.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/memory/universe.cpp	Tue Apr 29 13:56:49 2014 -0700
 @@ -78,6 +78,8 @@
  #include "gc_implementation/parallelScavenge/parallelScavengeHeap.hpp"
  #endif // INCLUDE_ALL_GCS
@@ -1310,7 +1287,7 @@ index d022ae1..02dc63f 100644
  // Known objects
  Klass* Universe::_boolArrayKlassObj                 = NULL;
  Klass* Universe::_byteArrayKlassObj                 = NULL;
-@@ -157,6 +159,42 @@ void Universe::basic_type_classes_do(void f(Klass*)) {
+@@ -157,6 +159,42 @@
    f(doubleArrayKlassObj());
  }
  
@@ -1353,11 +1330,10 @@ index d022ae1..02dc63f 100644
  void Universe::oops_do(OopClosure* f, bool do_all) {
  
    f->do_oop((oop*) &_int_mirror);
-diff --git a/src/share/vm/memory/universe.hpp b/src/share/vm/memory/universe.hpp
-index ec3b59f..bf75fe0 100644
---- a/src/share/vm/memory/universe.hpp
-+++ b/src/share/vm/memory/universe.hpp
-@@ -248,7 +248,13 @@ class Universe: AllStatic {
+diff -r 8a6717910608 src/share/vm/memory/universe.hpp
+--- a/src/share/vm/memory/universe.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/memory/universe.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -248,7 +248,13 @@
  
    static void compute_verify_oop_data();
  
@@ -1371,7 +1347,7 @@ index ec3b59f..bf75fe0 100644
    // Known classes in the VM
    static Klass* boolArrayKlassObj()                 { return _boolArrayKlassObj;   }
    static Klass* byteArrayKlassObj()                 { return _byteArrayKlassObj;   }
-@@ -401,6 +407,7 @@ class Universe: AllStatic {
+@@ -401,6 +407,7 @@
    static void run_finalizers_on_exit();
  
    // Iteration
@@ -1379,11 +1355,10 @@ index ec3b59f..bf75fe0 100644
  
    // Apply "f" to the addresses of all the direct heap pointers maintained
    // as static fields of "Universe".
-diff --git a/src/share/vm/oops/cpCache.cpp b/src/share/vm/oops/cpCache.cpp
-index c9bbb5f..d27370a 100644
---- a/src/share/vm/oops/cpCache.cpp
-+++ b/src/share/vm/oops/cpCache.cpp
-@@ -532,6 +532,20 @@ bool ConstantPoolCacheEntry::is_interesting_method_entry(Klass* k) {
+diff -r 8a6717910608 src/share/vm/oops/cpCache.cpp
+--- a/src/share/vm/oops/cpCache.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/cpCache.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -532,6 +532,20 @@
    // the method is in the interesting class so the entry is interesting
    return true;
  }
@@ -1396,15 +1371,15 @@ index c9bbb5f..d27370a 100644
 +  _f1 = NULL;
 +  _f2 = 0;
 +
-+  // FIXME: (DCEVM) we want to clear flags, but it seems like they are referenced after clear_entry is called, but
-+  // before they are reinitialized! So we are keeping them here for now...
-+  // It's probably happening around prepare_invoke in template table.
-+  //_flags = 0;
++  // FIXME: (DCEVM) we want to clear flags, but parameter size is actually used
++  // after we return from the method, before entry is re-initialized. So let's
++  // keep parameter size the same.
++  _flags &= 0x0000000f;
 +}
  #endif // INCLUDE_JVMTI
  
  void ConstantPoolCacheEntry::print(outputStream* st, int index) const {
-@@ -660,6 +674,14 @@ void ConstantPoolCache::dump_cache() {
+@@ -660,6 +674,14 @@
      }
    }
  }
@@ -1419,11 +1394,10 @@ index c9bbb5f..d27370a 100644
  #endif // INCLUDE_JVMTI
  
  
-diff --git a/src/share/vm/oops/cpCache.hpp b/src/share/vm/oops/cpCache.hpp
-index 26079fd..e3d593f 100644
---- a/src/share/vm/oops/cpCache.hpp
-+++ b/src/share/vm/oops/cpCache.hpp
-@@ -373,6 +373,10 @@ class ConstantPoolCacheEntry VALUE_OBJ_CLASS_SPEC {
+diff -r 8a6717910608 src/share/vm/oops/cpCache.hpp
+--- a/src/share/vm/oops/cpCache.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/cpCache.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -373,6 +373,10 @@
           bool * trace_name_printed);
    bool check_no_old_or_obsolete_entries();
    bool is_interesting_method_entry(Klass* k);
@@ -1434,7 +1408,7 @@ index 26079fd..e3d593f 100644
  #endif // INCLUDE_JVMTI
  
    // Debugging & Printing
-@@ -472,6 +476,10 @@ class ConstantPoolCache: public MetaspaceObj {
+@@ -472,6 +476,10 @@
                               int methods_length, bool * trace_name_printed);
    bool check_no_old_or_obsolete_entries();
    void dump_cache();
@@ -1445,11 +1419,10 @@ index 26079fd..e3d593f 100644
  #endif // INCLUDE_JVMTI
  
    // Deallocate - no fields to deallocate
-diff --git a/src/share/vm/oops/instanceKlass.cpp b/src/share/vm/oops/instanceKlass.cpp
-index a6ca58c..33f944a 100644
---- a/src/share/vm/oops/instanceKlass.cpp
-+++ b/src/share/vm/oops/instanceKlass.cpp
-@@ -718,7 +718,8 @@ bool InstanceKlass::link_class_impl(
+diff -r 8a6717910608 src/share/vm/oops/instanceKlass.cpp
+--- a/src/share/vm/oops/instanceKlass.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/instanceKlass.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -718,7 +718,8 @@
        }
  #endif
        this_oop->set_init_state(linked);
@@ -1459,7 +1432,7 @@ index a6ca58c..33f944a 100644
          Thread *thread = THREAD;
          assert(thread->is_Java_thread(), "thread->is_Java_thread()");
          JvmtiExport::post_class_prepare((JavaThread *) thread, this_oop());
-@@ -795,7 +796,9 @@ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
+@@ -795,7 +796,9 @@
      // If we were to use wait() instead of waitInterruptibly() then
      // we might end up throwing IE from link/symbol resolution sites
      // that aren't expected to throw.  This would wreak havoc.  See 6320309.
@@ -1470,7 +1443,7 @@ index a6ca58c..33f944a 100644
          wait = true;
        ol.waitUninterruptibly(CHECK);
      }
-@@ -1051,6 +1054,18 @@ bool InstanceKlass::implements_interface(Klass* k) const {
+@@ -1051,6 +1054,18 @@
    return false;
  }
  
@@ -1489,7 +1462,7 @@ index a6ca58c..33f944a 100644
  bool InstanceKlass::is_same_or_direct_interface(Klass *k) const {
    // Verify direct super interface
    if (this == k) return true;
-@@ -1314,6 +1329,18 @@ void InstanceKlass::methods_do(void f(Method* method)) {
+@@ -1314,6 +1329,18 @@
    }
  }
  
@@ -1508,7 +1481,7 @@ index a6ca58c..33f944a 100644
  
  void InstanceKlass::do_local_static_fields(FieldClosure* cl) {
    for (JavaFieldStream fs(this); !fs.done(); fs.next()) {
-@@ -1797,6 +1824,18 @@ jmethodID InstanceKlass::jmethod_id_or_null(Method* method) {
+@@ -1797,6 +1824,18 @@
    return id;
  }
  
@@ -1527,7 +1500,7 @@ index a6ca58c..33f944a 100644
  
  //
  // Walk the list of dependent nmethods searching for nmethods which
-@@ -1875,6 +1914,13 @@ void InstanceKlass::remove_dependent_nmethod(nmethod* nm) {
+@@ -1875,6 +1914,13 @@
      last = b;
      b = b->next();
    }
@@ -1541,7 +1514,7 @@ index a6ca58c..33f944a 100644
  #ifdef ASSERT
    tty->print_cr("### %s can't find dependent nmethod:", this->external_name());
    nm->print();
-@@ -2884,6 +2930,24 @@ void InstanceKlass::print_on(outputStream* st) const {
+@@ -2884,6 +2930,24 @@
    assert(is_klass(), "must be klass");
    Klass::print_on(st);
  
@@ -1566,7 +1539,7 @@ index a6ca58c..33f944a 100644
    st->print(BULLET"instance size:     %d", size_helper());                        st->cr();
    st->print(BULLET"klass size:        %d", size());                               st->cr();
    st->print(BULLET"access:            "); access_flags().print_on(st);            st->cr();
-@@ -3219,7 +3283,7 @@ void InstanceKlass::verify_on(outputStream* st, bool check_dictionary) {
+@@ -3219,7 +3283,7 @@
      }
  
      guarantee(sib->is_klass(), "should be klass");
@@ -1575,7 +1548,7 @@ index a6ca58c..33f944a 100644
    }
  
    // Verify implementor fields
-@@ -3384,6 +3448,7 @@ void InstanceKlass::set_init_state(ClassState state) {
+@@ -3384,6 +3448,7 @@
  
  // Purge previous versions
  static void purge_previous_versions_internal(InstanceKlass* ik, int emcp_method_count) {
@@ -1583,7 +1556,7 @@ index a6ca58c..33f944a 100644
    if (ik->previous_versions() != NULL) {
      // This klass has previous versions so see what we can cleanup
      // while it is safe to do so.
-@@ -3621,7 +3686,7 @@ void InstanceKlass::add_previous_version(instanceKlassHandle ikh,
+@@ -3621,7 +3686,7 @@
  
  // Determine if InstanceKlass has a previous version.
  bool InstanceKlass::has_previous_version() const {
@@ -1592,11 +1565,10 @@ index a6ca58c..33f944a 100644
  } // end has_previous_version()
  
  
-diff --git a/src/share/vm/oops/instanceKlass.hpp b/src/share/vm/oops/instanceKlass.hpp
-index 2b7a73a..9c10765 100644
---- a/src/share/vm/oops/instanceKlass.hpp
-+++ b/src/share/vm/oops/instanceKlass.hpp
-@@ -139,6 +139,7 @@ class InstanceKlass: public Klass {
+diff -r 8a6717910608 src/share/vm/oops/instanceKlass.hpp
+--- a/src/share/vm/oops/instanceKlass.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/instanceKlass.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -139,6 +139,7 @@
    friend class VMStructs;
    friend class ClassFileParser;
    friend class CompileReplay;
@@ -1604,7 +1576,7 @@ index 2b7a73a..9c10765 100644
  
   protected:
    // Constructor
-@@ -637,7 +638,7 @@ class InstanceKlass: public Klass {
+@@ -637,7 +638,7 @@
    // If the _previous_versions array is non-NULL, then this klass
    // has been redefined at least once even if we aren't currently
    // tracking a previous version.
@@ -1613,7 +1585,7 @@ index 2b7a73a..9c10765 100644
    bool has_previous_version() const;
    void init_previous_versions() {
      _previous_versions = NULL;
-@@ -711,6 +712,7 @@ class InstanceKlass: public Klass {
+@@ -711,6 +712,7 @@
    static void get_jmethod_id_length_value(jmethodID* cache, size_t idnum,
                  size_t *length_p, jmethodID* id_p);
    jmethodID jmethod_id_or_null(Method* method);
@@ -1621,7 +1593,7 @@ index 2b7a73a..9c10765 100644
  
    // annotations support
    Annotations* annotations() const          { return _annotations; }
-@@ -780,6 +782,7 @@ class InstanceKlass: public Klass {
+@@ -780,6 +782,7 @@
    // subclass/subinterface checks
    bool implements_interface(Klass* k) const;
    bool is_same_or_direct_interface(Klass* k) const;
@@ -1629,7 +1601,7 @@ index 2b7a73a..9c10765 100644
  
    // Access to the implementor of an interface.
    Klass* implementor() const
-@@ -831,6 +834,10 @@ class InstanceKlass: public Klass {
+@@ -831,6 +834,10 @@
    void do_nonstatic_fields(FieldClosure* cl); // including inherited fields
    void do_local_static_fields(void f(fieldDescriptor*, TRAPS), TRAPS);
  
@@ -1640,11 +1612,10 @@ index 2b7a73a..9c10765 100644
    void methods_do(void f(Method* method));
    void array_klasses_do(void f(Klass* k));
    void array_klasses_do(void f(Klass* k, TRAPS), TRAPS);
-diff --git a/src/share/vm/oops/klass.cpp b/src/share/vm/oops/klass.cpp
-index 22b570b..c7afba7 100644
---- a/src/share/vm/oops/klass.cpp
-+++ b/src/share/vm/oops/klass.cpp
-@@ -170,6 +170,13 @@ Klass::Klass() {
+diff -r 8a6717910608 src/share/vm/oops/klass.cpp
+--- a/src/share/vm/oops/klass.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/klass.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -170,6 +170,13 @@
    set_next_link(NULL);
    TRACE_INIT_ID(this);
  
@@ -1658,7 +1629,7 @@ index 22b570b..c7afba7 100644
    set_prototype_header(markOopDesc::prototype());
    set_biased_lock_revocation_count(0);
    set_last_biased_lock_bulk_revocation_time(0);
-@@ -375,6 +382,24 @@ void Klass::append_to_sibling_list() {
+@@ -375,6 +382,24 @@
    debug_only(verify();)
  }
  
@@ -1683,11 +1654,10 @@ index 22b570b..c7afba7 100644
  bool Klass::is_loader_alive(BoolObjectClosure* is_alive) {
    assert(ClassLoaderDataGraph::contains((address)this), "is in the metaspace");
  
-diff --git a/src/share/vm/oops/klass.hpp b/src/share/vm/oops/klass.hpp
-index 9855fdd..c3e1f35 100644
---- a/src/share/vm/oops/klass.hpp
-+++ b/src/share/vm/oops/klass.hpp
-@@ -149,6 +149,10 @@ class Klass : public Metadata {
+diff -r 8a6717910608 src/share/vm/oops/klass.hpp
+--- a/src/share/vm/oops/klass.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/klass.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -149,6 +149,10 @@
    oop       _java_mirror;
    // Superclass
    Klass*      _super;
@@ -1698,7 +1668,7 @@ index 9855fdd..c3e1f35 100644
    // First subclass (NULL if none); _subklass->next_sibling() is next one
    Klass*      _subklass;
    // Sibling link (or NULL); links all subklasses of a klass
-@@ -164,6 +168,16 @@ class Klass : public Metadata {
+@@ -164,6 +168,16 @@
    jint        _modifier_flags;  // Processed access flags, for use by Class.getModifiers.
    AccessFlags _access_flags;    // Access flags. The class/interface distinction is stored here.
  
@@ -1715,7 +1685,7 @@ index 9855fdd..c3e1f35 100644
    // Biased locking implementation and statistics
    // (the 64-bit chunk goes first, to avoid some fragmentation)
    jlong    _last_biased_lock_bulk_revocation_time;
-@@ -208,6 +222,53 @@ class Klass : public Metadata {
+@@ -208,6 +222,53 @@
    Array<Klass*>* secondary_supers() const { return _secondary_supers; }
    void set_secondary_supers(Array<Klass*>* k) { _secondary_supers = k; }
  
@@ -1769,7 +1739,7 @@ index 9855fdd..c3e1f35 100644
    // Return the element of the _super chain of the given depth.
    // If there is no such element, return either NULL or this.
    Klass* primary_super_of_depth(juint i) const {
-@@ -261,6 +322,7 @@ class Klass : public Metadata {
+@@ -261,6 +322,7 @@
    Klass* subklass() const;
    Klass* next_sibling() const;
    void append_to_sibling_list();           // add newly created receiver to superklass' subklass list
@@ -1777,7 +1747,7 @@ index 9855fdd..c3e1f35 100644
  
    void set_next_link(Klass* k) { _next_link = k; }
    Klass* next_link() const { return _next_link; }   // The next klass defined by the class loader.
-@@ -287,6 +349,16 @@ class Klass : public Metadata {
+@@ -287,6 +349,16 @@
    void     set_next_sibling(Klass* s);
  
   public:
@@ -1794,11 +1764,10 @@ index 9855fdd..c3e1f35 100644
  
    // Compiler support
    static ByteSize super_offset()                 { return in_ByteSize(offset_of(Klass, _super)); }
-diff --git a/src/share/vm/oops/klassVtable.cpp b/src/share/vm/oops/klassVtable.cpp
-index a7fc062..94602c6 100644
---- a/src/share/vm/oops/klassVtable.cpp
-+++ b/src/share/vm/oops/klassVtable.cpp
-@@ -1409,6 +1409,8 @@ void klassVtable::verify(outputStream* st, bool forced) {
+diff -r 8a6717910608 src/share/vm/oops/klassVtable.cpp
+--- a/src/share/vm/oops/klassVtable.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/klassVtable.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -1409,6 +1409,8 @@
  
  void klassVtable::verify_against(outputStream* st, klassVtable* vt, int index) {
    vtableEntry* vte = &vt->table()[index];
@@ -1807,7 +1776,7 @@ index a7fc062..94602c6 100644
    if (vte->method()->name()      != table()[index].method()->name() ||
        vte->method()->signature() != table()[index].method()->signature()) {
      fatal("mismatched name/signature of vtable entries");
-@@ -1428,6 +1430,8 @@ void klassVtable::print() {
+@@ -1428,6 +1430,8 @@
  
  void vtableEntry::verify(klassVtable* vt, outputStream* st) {
    NOT_PRODUCT(FlagSetting fs(IgnoreLockingAssertions, true));
@@ -1816,7 +1785,7 @@ index a7fc062..94602c6 100644
    assert(method() != NULL, "must have set method");
    method()->verify();
    // we sub_type, because it could be a miranda method
-@@ -1435,7 +1439,9 @@ void vtableEntry::verify(klassVtable* vt, outputStream* st) {
+@@ -1435,7 +1439,9 @@
  #ifndef PRODUCT
      print();
  #endif
@@ -1827,11 +1796,10 @@ index a7fc062..94602c6 100644
    }
  }
  
-diff --git a/src/share/vm/oops/method.cpp b/src/share/vm/oops/method.cpp
-index 7c292c3..cb53f20 100644
---- a/src/share/vm/oops/method.cpp
-+++ b/src/share/vm/oops/method.cpp
-@@ -1185,6 +1185,8 @@ methodHandle Method::clone_with_new_data(methodHandle m, u_char* new_code, int n
+diff -r 8a6717910608 src/share/vm/oops/method.cpp
+--- a/src/share/vm/oops/method.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/method.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -1185,6 +1185,8 @@
  
    // Reset correct method/const method, method size, and parameter info
    newm->set_constMethod(newcm);
@@ -1840,7 +1808,7 @@ index 7c292c3..cb53f20 100644
    newm->constMethod()->set_code_size(new_code_length);
    newm->constMethod()->set_constMethod_size(new_const_method_size);
    newm->set_method_size(new_method_size);
-@@ -1788,6 +1790,10 @@ Method* const JNIMethodBlock::_free_method = (Method*)55;
+@@ -1788,6 +1790,10 @@
  
  // Add a method id to the jmethod_ids
  jmethodID Method::make_jmethod_id(ClassLoaderData* loader_data, Method* m) {
@@ -1851,11 +1819,10 @@ index 7c292c3..cb53f20 100644
    ClassLoaderData* cld = loader_data;
  
    if (!SafepointSynchronize::is_at_safepoint()) {
-diff --git a/src/share/vm/oops/method.hpp b/src/share/vm/oops/method.hpp
-index 63705b3..51e01e3 100644
---- a/src/share/vm/oops/method.hpp
-+++ b/src/share/vm/oops/method.hpp
-@@ -105,6 +105,10 @@ class Method : public Metadata {
+diff -r 8a6717910608 src/share/vm/oops/method.hpp
+--- a/src/share/vm/oops/method.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/method.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -105,6 +105,10 @@
    AccessFlags       _access_flags;               // Access flags
    int               _vtable_index;               // vtable index of this method (see VtableIndexFlag)
                                                   // note: can have vtables with >2**16 elements (because of inheritance)
@@ -1866,7 +1833,7 @@ index 63705b3..51e01e3 100644
  #ifdef CC_INTERP
    int               _result_index;               // C++ interpreter needs for converting results to/from stack
  #endif
-@@ -175,6 +179,23 @@ class Method : public Metadata {
+@@ -175,6 +179,23 @@
    int name_index() const                         { return constMethod()->name_index();         }
    void set_name_index(int index)                 { constMethod()->set_name_index(index);       }
  
@@ -1890,11 +1857,10 @@ index 63705b3..51e01e3 100644
    // signature
    Symbol* signature() const                      { return constants()->symbol_at(signature_index()); }
    int signature_index() const                    { return constMethod()->signature_index();         }
-diff --git a/src/share/vm/prims/jni.cpp b/src/share/vm/prims/jni.cpp
-index ab24446..b16a9f3 100644
---- a/src/share/vm/prims/jni.cpp
-+++ b/src/share/vm/prims/jni.cpp
-@@ -406,6 +406,7 @@ JNI_ENTRY(jclass, jni_DefineClass(JNIEnv *env, const char *name, jobject loaderR
+diff -r 8a6717910608 src/share/vm/prims/jni.cpp
+--- a/src/share/vm/prims/jni.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/prims/jni.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -406,6 +406,7 @@
    }
    Klass* k = SystemDictionary::resolve_from_stream(class_name, class_loader,
                                                       Handle(), &st, true,
@@ -1902,11 +1868,10 @@ index ab24446..b16a9f3 100644
                                                       CHECK_NULL);
  
    if (TraceClassResolution && k != NULL) {
-diff --git a/src/share/vm/prims/jvm.cpp b/src/share/vm/prims/jvm.cpp
-index a757e19..77c3be2 100644
---- a/src/share/vm/prims/jvm.cpp
-+++ b/src/share/vm/prims/jvm.cpp
-@@ -904,6 +904,7 @@ static jclass jvm_define_class_common(JNIEnv *env, const char *name,
+diff -r 8a6717910608 src/share/vm/prims/jvm.cpp
+--- a/src/share/vm/prims/jvm.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/prims/jvm.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -904,6 +904,7 @@
    Klass* k = SystemDictionary::resolve_from_stream(class_name, class_loader,
                                                       protection_domain, &st,
                                                       verify != 0,
@@ -1914,10 +1879,9 @@ index a757e19..77c3be2 100644
                                                       CHECK_NULL);
  
    if (TraceClassResolution && k != NULL) {
-diff --git a/src/share/vm/prims/jvmtiEnv.cpp b/src/share/vm/prims/jvmtiEnv.cpp
-index 318fe4e..f8fb12b 100644
---- a/src/share/vm/prims/jvmtiEnv.cpp
-+++ b/src/share/vm/prims/jvmtiEnv.cpp
+diff -r 8a6717910608 src/share/vm/prims/jvmtiEnv.cpp
+--- a/src/share/vm/prims/jvmtiEnv.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/prims/jvmtiEnv.cpp	Tue Apr 29 13:56:49 2014 -0700
 @@ -42,6 +42,7 @@
  #include "prims/jvmtiManageCapabilities.hpp"
  #include "prims/jvmtiRawMonitor.hpp"
@@ -1926,7 +1890,7 @@ index 318fe4e..f8fb12b 100644
  #include "prims/jvmtiTagMap.hpp"
  #include "prims/jvmtiThreadState.inline.hpp"
  #include "prims/jvmtiUtil.hpp"
-@@ -206,8 +207,10 @@ JvmtiEnv::GetClassLoaderClasses(jobject initiating_loader, jint* class_count_ptr
+@@ -206,8 +207,10 @@
  // is_modifiable_class_ptr - pre-checked for NULL
  jvmtiError
  JvmtiEnv::IsModifiableClass(oop k_mirror, jboolean* is_modifiable_class_ptr) {
@@ -1939,7 +1903,7 @@ index 318fe4e..f8fb12b 100644
    return JVMTI_ERROR_NONE;
  } /* end IsModifiableClass */
  
-@@ -276,6 +279,11 @@ JvmtiEnv::RetransformClasses(jint class_count, const jclass* classes) {
+@@ -276,6 +279,11 @@
      }
      class_definitions[index].klass              = jcls;
    }
@@ -1951,7 +1915,7 @@ index 318fe4e..f8fb12b 100644
    VM_RedefineClasses op(class_count, class_definitions, jvmti_class_load_kind_retransform);
    VMThread::execute(&op);
    return (op.check_error());
-@@ -287,6 +295,11 @@ JvmtiEnv::RetransformClasses(jint class_count, const jclass* classes) {
+@@ -287,6 +295,11 @@
  jvmtiError
  JvmtiEnv::RedefineClasses(jint class_count, const jvmtiClassDefinition* class_definitions) {
  //TODO: add locking
@@ -1963,11 +1927,10 @@ index 318fe4e..f8fb12b 100644
    VM_RedefineClasses op(class_count, class_definitions, jvmti_class_load_kind_redefine);
    VMThread::execute(&op);
    return (op.check_error());
-diff --git a/src/share/vm/prims/jvmtiExport.hpp b/src/share/vm/prims/jvmtiExport.hpp
-index d2a7dec..f27a8d4 100644
---- a/src/share/vm/prims/jvmtiExport.hpp
-+++ b/src/share/vm/prims/jvmtiExport.hpp
-@@ -188,6 +188,7 @@ class JvmtiExport : public AllStatic {
+diff -r 8a6717910608 src/share/vm/prims/jvmtiExport.hpp
+--- a/src/share/vm/prims/jvmtiExport.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/prims/jvmtiExport.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -188,6 +188,7 @@
    // systems as needed to relax invariant checks.
    static bool _has_redefined_a_class;
    friend class VM_RedefineClasses;
@@ -1975,11 +1938,10 @@ index d2a7dec..f27a8d4 100644
    inline static void set_has_redefined_a_class() {
      JVMTI_ONLY(_has_redefined_a_class = true;)
    }
-diff --git a/src/share/vm/prims/jvmtiImpl.cpp b/src/share/vm/prims/jvmtiImpl.cpp
-index ad90eeb..8834ad3 100644
---- a/src/share/vm/prims/jvmtiImpl.cpp
-+++ b/src/share/vm/prims/jvmtiImpl.cpp
-@@ -289,6 +289,11 @@ void JvmtiBreakpoint::each_method_version_do(method_action meth_act) {
+diff -r 8a6717910608 src/share/vm/prims/jvmtiImpl.cpp
+--- a/src/share/vm/prims/jvmtiImpl.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/prims/jvmtiImpl.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -289,6 +289,11 @@
    Symbol* m_name = _method->name();
    Symbol* m_signature = _method->signature();
  
@@ -1991,11 +1953,9 @@ index ad90eeb..8834ad3 100644
    // search previous versions if they exist
    PreviousVersionWalker pvw(thread, (InstanceKlass *)ikh());
    for (PreviousVersionNode * pv_node = pvw.next_previous_version();
-diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.cpp b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
-new file mode 100644
-index 0000000..d96a103
---- /dev/null
-+++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
+diff -r 8a6717910608 src/share/vm/prims/jvmtiRedefineClasses2.cpp
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp	Tue Apr 29 13:56:49 2014 -0700
 @@ -0,0 +1,2015 @@
 +/*
 + * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
@@ -4012,11 +3972,9 @@ index 0000000..d96a103
 +  transfer.transfer_registrations(old_klass, _deleted_methods, _deleted_methods_length);
 +  transfer.transfer_registrations(old_klass, _matching_old_methods, _matching_methods_length);
 +}
-diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.hpp b/src/share/vm/prims/jvmtiRedefineClasses2.hpp
-new file mode 100644
-index 0000000..06f9a35
---- /dev/null
-+++ b/src/share/vm/prims/jvmtiRedefineClasses2.hpp
+diff -r 8a6717910608 src/share/vm/prims/jvmtiRedefineClasses2.hpp
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/src/share/vm/prims/jvmtiRedefineClasses2.hpp	Tue Apr 29 13:56:49 2014 -0700
 @@ -0,0 +1,156 @@
 +/*
 + * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
@@ -4174,10 +4132,9 @@ index 0000000..06f9a35
 +};
 +
 +#endif // SHARE_VM_PRIMS_JVMTIENHANCEDREDEFINECLASSES_HPP
-diff --git a/src/share/vm/runtime/arguments.cpp b/src/share/vm/runtime/arguments.cpp
-index 5a8ea0d..22c6afe 100644
---- a/src/share/vm/runtime/arguments.cpp
-+++ b/src/share/vm/runtime/arguments.cpp
+diff -r 8a6717910608 src/share/vm/runtime/arguments.cpp
+--- a/src/share/vm/runtime/arguments.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/runtime/arguments.cpp	Tue Apr 29 13:56:49 2014 -0700
 @@ -59,8 +59,8 @@
  #include "gc_implementation/parallelScavenge/parallelScavengeHeap.hpp"
  #endif // INCLUDE_ALL_GCS
@@ -4189,7 +4146,7 @@ index 5a8ea0d..22c6afe 100644
  #define DEFAULT_JAVA_LAUNCHER  "generic"
  
  // Disable options not supported in this release, with a warning if they
-@@ -1507,6 +1507,10 @@ void Arguments::set_conservative_max_heap_alignment() {
+@@ -1507,6 +1507,10 @@
  
  void Arguments::set_ergonomics_flags() {
  
@@ -4200,7 +4157,7 @@ index 5a8ea0d..22c6afe 100644
    if (os::is_server_class_machine()) {
      // If no other collector is requested explicitly,
      // let the VM select the collector based on
-@@ -1948,6 +1952,17 @@ bool Arguments::check_gc_consistency() {
+@@ -1948,6 +1952,17 @@
    if (UseConcMarkSweepGC || UseParNewGC) i++;
    if (UseParallelGC || UseParallelOldGC) i++;
    if (UseG1GC)                           i++;
@@ -4218,11 +4175,10 @@ index 5a8ea0d..22c6afe 100644
    if (i > 1) {
      jio_fprintf(defaultStream::error_stream(),
                  "Conflicting collector combinations in option list; "
-diff --git a/src/share/vm/runtime/globals.hpp b/src/share/vm/runtime/globals.hpp
-index 4967ead..040e281 100644
---- a/src/share/vm/runtime/globals.hpp
-+++ b/src/share/vm/runtime/globals.hpp
-@@ -1273,6 +1273,9 @@ class CommandLineFlags {
+diff -r 8a6717910608 src/share/vm/runtime/globals.hpp
+--- a/src/share/vm/runtime/globals.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/runtime/globals.hpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -1273,6 +1273,9 @@
    product(intx, TraceRedefineClasses, 0,                                    \
            "Trace level for JVMTI RedefineClasses")                          \
                                                                              \
@@ -4232,11 +4188,10 @@ index 4967ead..040e281 100644
    develop(bool, StressMethodComparator, false,                              \
            "Run the MethodComparator on all loaded methods")                 \
                                                                              \
-diff --git a/src/share/vm/runtime/reflection.cpp b/src/share/vm/runtime/reflection.cpp
-index a8d24fa..c9496c0 100644
---- a/src/share/vm/runtime/reflection.cpp
-+++ b/src/share/vm/runtime/reflection.cpp
-@@ -519,6 +519,12 @@ bool Reflection::verify_field_access(Klass* current_class,
+diff -r 8a6717910608 src/share/vm/runtime/reflection.cpp
+--- a/src/share/vm/runtime/reflection.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/runtime/reflection.cpp	Tue Apr 29 13:56:49 2014 -0700
+@@ -519,6 +519,12 @@
                                       AccessFlags access,
                                       bool classloader_only,
                                       bool protected_restriction) {

@@ -82,12 +82,12 @@ public class TestClassAdapter extends RemappingClassAdapter {
             MethodVisitor mv) {
         return new RemappingMethodAdapter(access, newDesc, mv, remapper) {
             @Override
-            public void visitMethodInsn(int opcode, String owner, String name, String desc) {
+            public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean itf) {
                 if (name.equals("<init>") && isObject && owner.equals("java/lang/Object")) {
                     return;
                 }
 
-                super.visitMethodInsn(opcode, owner, stripMethodSuffix(name), desc);
+                super.visitMethodInsn(opcode, owner, stripMethodSuffix(name), desc, itf);
             }
         };
     }

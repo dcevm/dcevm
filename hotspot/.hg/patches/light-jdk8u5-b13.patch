@@ -1,20 +1,6 @@
-# HG changeset patch
-# Parent 8a67179106085689906732013a282efeeb9bd5f4
-
-diff --git a/make/openjdk_distro b/make/openjdk_distro
---- a/make/openjdk_distro
-+++ b/make/openjdk_distro
-@@ -27,6 +27,6 @@
- #
- 
- # Don't put quotes (fail windows build).
--HOTSPOT_VM_DISTRO=OpenJDK
-+HOTSPOT_VM_DISTRO=Dynamic Code Evolution
- COMPANY_NAME=
- PRODUCT_NAME=OpenJDK
-diff --git a/src/share/vm/ci/ciObjectFactory.cpp b/src/share/vm/ci/ciObjectFactory.cpp
---- a/src/share/vm/ci/ciObjectFactory.cpp
-+++ b/src/share/vm/ci/ciObjectFactory.cpp
+diff -r 8a6717910608 src/share/vm/ci/ciObjectFactory.cpp
+--- a/src/share/vm/ci/ciObjectFactory.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/ci/ciObjectFactory.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -750,3 +750,27 @@
               _unloaded_instances->length(),
               _unloaded_klasses->length());
@@ -43,9 +29,9 @@ diff --git a/src/share/vm/ci/ciObjectFactory.cpp b/src/share/vm/ci/ciObjectFacto
 +#endif // ASSERT
 +}
 +
-diff --git a/src/share/vm/ci/ciObjectFactory.hpp b/src/share/vm/ci/ciObjectFactory.hpp
---- a/src/share/vm/ci/ciObjectFactory.hpp
-+++ b/src/share/vm/ci/ciObjectFactory.hpp
+diff -r 8a6717910608 src/share/vm/ci/ciObjectFactory.hpp
+--- a/src/share/vm/ci/ciObjectFactory.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/ci/ciObjectFactory.hpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -90,6 +90,7 @@
  
    ciInstance* get_unloaded_instance(ciInstanceKlass* klass);
@@ -63,9 +49,9 @@ diff --git a/src/share/vm/ci/ciObjectFactory.hpp b/src/share/vm/ci/ciObjectFacto
  };
  
  #endif // SHARE_VM_CI_CIOBJECTFACTORY_HPP
-diff --git a/src/share/vm/classfile/classFileParser.cpp b/src/share/vm/classfile/classFileParser.cpp
---- a/src/share/vm/classfile/classFileParser.cpp
-+++ b/src/share/vm/classfile/classFileParser.cpp
+diff -r 8a6717910608 src/share/vm/classfile/classFileParser.cpp
+--- a/src/share/vm/classfile/classFileParser.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/classFileParser.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -759,6 +759,7 @@
  Array<Klass*>* ClassFileParser::parse_interfaces(int length,
                                                   Handle protection_domain,
@@ -237,9 +223,9 @@ diff --git a/src/share/vm/classfile/classFileParser.cpp b/src/share/vm/classfile
        k->set_is_cloneable();
      }
    }
-diff --git a/src/share/vm/classfile/classFileParser.hpp b/src/share/vm/classfile/classFileParser.hpp
---- a/src/share/vm/classfile/classFileParser.hpp
-+++ b/src/share/vm/classfile/classFileParser.hpp
+diff -r 8a6717910608 src/share/vm/classfile/classFileParser.hpp
+--- a/src/share/vm/classfile/classFileParser.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/classFileParser.hpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -214,11 +214,12 @@
    Array<Klass*>* parse_interfaces(int length,
                                    Handle protection_domain,
@@ -285,9 +271,9 @@ diff --git a/src/share/vm/classfile/classFileParser.hpp b/src/share/vm/classfile
                                       TempNewSymbol& parsed_name,
                                       bool verify,
                                       TRAPS);
-diff --git a/src/share/vm/classfile/classLoader.cpp b/src/share/vm/classfile/classLoader.cpp
---- a/src/share/vm/classfile/classLoader.cpp
-+++ b/src/share/vm/classfile/classLoader.cpp
+diff -r 8a6717910608 src/share/vm/classfile/classLoader.cpp
+--- a/src/share/vm/classfile/classLoader.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/classLoader.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -926,6 +926,7 @@
      instanceKlassHandle result = parser.parseClassFile(h_name,
                                                         loader_data,
@@ -296,9 +282,9 @@ diff --git a/src/share/vm/classfile/classLoader.cpp b/src/share/vm/classfile/cla
                                                         parsed_name,
                                                         false,
                                                         CHECK_(h));
-diff --git a/src/share/vm/classfile/dictionary.cpp b/src/share/vm/classfile/dictionary.cpp
---- a/src/share/vm/classfile/dictionary.cpp
-+++ b/src/share/vm/classfile/dictionary.cpp
+diff -r 8a6717910608 src/share/vm/classfile/dictionary.cpp
+--- a/src/share/vm/classfile/dictionary.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/dictionary.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -145,7 +145,7 @@
        InstanceKlass* ik = InstanceKlass::cast(e);
  
@@ -368,9 +354,9 @@ diff --git a/src/share/vm/classfile/dictionary.cpp b/src/share/vm/classfile/dict
  }
  
  
-diff --git a/src/share/vm/classfile/dictionary.hpp b/src/share/vm/classfile/dictionary.hpp
---- a/src/share/vm/classfile/dictionary.hpp
-+++ b/src/share/vm/classfile/dictionary.hpp
+diff -r 8a6717910608 src/share/vm/classfile/dictionary.hpp
+--- a/src/share/vm/classfile/dictionary.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/dictionary.hpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -78,6 +78,10 @@
  
    void add_klass(Symbol* class_name, ClassLoaderData* loader_data,KlassHandle obj);
@@ -394,9 +380,9 @@ diff --git a/src/share/vm/classfile/dictionary.hpp b/src/share/vm/classfile/dict
    // Unload (that is, break root links to) all unmarked classes and
    // loaders.  Returns "true" iff something was unloaded.
    bool do_unloading();
-diff --git a/src/share/vm/classfile/javaClasses.cpp b/src/share/vm/classfile/javaClasses.cpp
---- a/src/share/vm/classfile/javaClasses.cpp
-+++ b/src/share/vm/classfile/javaClasses.cpp
+diff -r 8a6717910608 src/share/vm/classfile/javaClasses.cpp
+--- a/src/share/vm/classfile/javaClasses.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/javaClasses.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -1629,6 +1629,8 @@
          skip_throwableInit_check = true;
        }
@@ -406,9 +392,9 @@ diff --git a/src/share/vm/classfile/javaClasses.cpp b/src/share/vm/classfile/jav
      if (method->is_hidden()) {
        if (skip_hidden)  continue;
      }
-diff --git a/src/share/vm/classfile/loaderConstraints.cpp b/src/share/vm/classfile/loaderConstraints.cpp
---- a/src/share/vm/classfile/loaderConstraints.cpp
-+++ b/src/share/vm/classfile/loaderConstraints.cpp
+diff -r 8a6717910608 src/share/vm/classfile/loaderConstraints.cpp
+--- a/src/share/vm/classfile/loaderConstraints.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/loaderConstraints.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -446,7 +446,7 @@
          if (k != NULL) {
            // We found the class in the system dictionary, so we should
@@ -418,9 +404,9 @@ diff --git a/src/share/vm/classfile/loaderConstraints.cpp b/src/share/vm/classfi
          } else {
            // If we don't find the class in the system dictionary, it
            // has to be in the placeholders table.
-diff --git a/src/share/vm/classfile/systemDictionary.cpp b/src/share/vm/classfile/systemDictionary.cpp
---- a/src/share/vm/classfile/systemDictionary.cpp
-+++ b/src/share/vm/classfile/systemDictionary.cpp
+diff -r 8a6717910608 src/share/vm/classfile/systemDictionary.cpp
+--- a/src/share/vm/classfile/systemDictionary.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/systemDictionary.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -174,6 +174,7 @@
      // can return a null klass
      klass = handle_resolution_exception(class_name, class_loader, protection_domain, throw_error, k_h, THREAD);
@@ -572,9 +558,9 @@ diff --git a/src/share/vm/classfile/systemDictionary.cpp b/src/share/vm/classfil
          linkage_error = "loader (instance of  %s): attempted  duplicate class "
            "definition for name: \"%s\"";
        } else {
-diff --git a/src/share/vm/classfile/systemDictionary.hpp b/src/share/vm/classfile/systemDictionary.hpp
---- a/src/share/vm/classfile/systemDictionary.hpp
-+++ b/src/share/vm/classfile/systemDictionary.hpp
+diff -r 8a6717910608 src/share/vm/classfile/systemDictionary.hpp
+--- a/src/share/vm/classfile/systemDictionary.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/systemDictionary.hpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -269,7 +269,7 @@
    // Resolve from stream (called by jni_DefineClass and JVM_DefineClass)
    static Klass* resolve_from_stream(Symbol* class_name, Handle class_loader,
@@ -612,9 +598,9 @@ diff --git a/src/share/vm/classfile/systemDictionary.hpp b/src/share/vm/classfil
    static instanceKlassHandle find_or_define_instance_class(Symbol* class_name,
                                                  Handle class_loader,
                                                  instanceKlassHandle k, TRAPS);
-diff --git a/src/share/vm/classfile/verifier.cpp b/src/share/vm/classfile/verifier.cpp
---- a/src/share/vm/classfile/verifier.cpp
-+++ b/src/share/vm/classfile/verifier.cpp
+diff -r 8a6717910608 src/share/vm/classfile/verifier.cpp
+--- a/src/share/vm/classfile/verifier.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/verifier.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -189,7 +189,7 @@
    Symbol* name = klass->name();
    Klass* refl_magic_klass = SystemDictionary::reflect_MagicAccessorImpl_klass();
@@ -642,9 +628,9 @@ diff --git a/src/share/vm/classfile/verifier.cpp b/src/share/vm/classfile/verifi
    int num_methods = methods->length();
  
    for (int index = 0; index < num_methods; index++) {
-diff --git a/src/share/vm/classfile/verifier.hpp b/src/share/vm/classfile/verifier.hpp
---- a/src/share/vm/classfile/verifier.hpp
-+++ b/src/share/vm/classfile/verifier.hpp
+diff -r 8a6717910608 src/share/vm/classfile/verifier.hpp
+--- a/src/share/vm/classfile/verifier.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/classfile/verifier.hpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -331,6 +331,7 @@
  
    VerificationType object_type() const;
@@ -653,193 +639,9 @@ diff --git a/src/share/vm/classfile/verifier.hpp b/src/share/vm/classfile/verifi
    instanceKlassHandle _klass;  // the class being verified
    methodHandle        _method; // current method being verified
    VerificationType    _this_type; // the verification type of the current class
-diff --git a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp
---- a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp
-+++ b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp
-@@ -161,6 +161,12 @@
-   }
- }
- 
-+HeapWord* CompactibleFreeListSpace::forward_compact_top(size_t size,
-+                                    CompactPoint* cp, HeapWord* compact_top) {
-+  ShouldNotReachHere();
-+  return NULL;
-+}
-+
- // Like CompactibleSpace forward() but always calls cross_threshold() to
- // update the block offset table.  Removed initialize_threshold call because
- // CFLS does not use a block offset array for contiguous spaces.
-@@ -2098,7 +2104,7 @@
- // Support for compaction
- 
- void CompactibleFreeListSpace::prepare_for_compaction(CompactPoint* cp) {
--  SCAN_AND_FORWARD(cp,end,block_is_obj,block_size);
-+  SCAN_AND_FORWARD(cp,end,block_is_obj,block_size,false);
-   // prepare_for_compaction() uses the space between live objects
-   // so that later phase can skip dead space quickly.  So verification
-   // of the free lists doesn't work after.
-@@ -2119,7 +2125,7 @@
- }
- 
- void CompactibleFreeListSpace::compact() {
--  SCAN_AND_COMPACT(obj_size);
-+  SCAN_AND_COMPACT(obj_size, false);
- }
- 
- // fragmentation_metric = 1 - [sum of (fbs**2) / (sum of fbs)**2]
-diff --git a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp
---- a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp
-+++ b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp
-@@ -150,6 +150,7 @@
- 
-   // Support for compacting cms
-   HeapWord* cross_threshold(HeapWord* start, HeapWord* end);
-+  HeapWord* forward_compact_top(size_t size, CompactPoint* cp, HeapWord* compact_top);
-   HeapWord* forward(oop q, size_t size, CompactPoint* cp, HeapWord* compact_top);
- 
-   // Initialization helpers.
-diff --git a/src/share/vm/gc_implementation/shared/markSweep.cpp b/src/share/vm/gc_implementation/shared/markSweep.cpp
---- a/src/share/vm/gc_implementation/shared/markSweep.cpp
-+++ b/src/share/vm/gc_implementation/shared/markSweep.cpp
-@@ -32,6 +32,8 @@
- #include "oops/objArrayKlass.inline.hpp"
- #include "oops/oop.inline.hpp"
- 
-+GrowableArray<HeapWord*>*   MarkSweep::_rescued_oops       = NULL;
-+
- uint                    MarkSweep::_total_invocations = 0;
- 
- Stack<oop, mtGC>              MarkSweep::_marking_stack;
-@@ -171,3 +173,100 @@
- }
- 
- #endif
-+
-+// (DCEVM) Copy the rescued objects to their destination address after compaction.
-+void MarkSweep::copy_rescued_objects_back() {
-+
-+  if (_rescued_oops != NULL) {
-+
-+    for (int i=0; i<_rescued_oops->length(); i++) {
-+      HeapWord* rescued_ptr = _rescued_oops->at(i);
-+      oop rescued_obj = (oop) rescued_ptr;
-+
-+      int size = rescued_obj->size();
-+      oop new_obj = rescued_obj->forwardee();
-+
-+      assert(rescued_obj->klass()->new_version() != NULL, "just checking");
-+
-+      if (rescued_obj->klass()->new_version()->update_information() != NULL) {
-+        MarkSweep::update_fields(rescued_obj, new_obj);
-+      } else {
-+        rescued_obj->set_klass(rescued_obj->klass()->new_version());
-+        Copy::aligned_disjoint_words((HeapWord*)rescued_obj, (HeapWord*)new_obj, size);
-+      }
-+
-+      FREE_RESOURCE_ARRAY(HeapWord, rescued_ptr, size);
-+
-+      new_obj->init_mark();
-+      assert(new_obj->is_oop(), "must be a valid oop");
-+    }
-+    _rescued_oops->clear();
-+    _rescued_oops = NULL;
-+  }
-+}
-+
-+// (DCEVM) Update instances of a class whose fields changed.
-+void MarkSweep::update_fields(oop q, oop new_location) {
-+
-+  assert(q->klass()->new_version() != NULL, "class of old object must have new version");
-+
-+  Klass* old_klass_oop = q->klass();
-+  Klass* new_klass_oop = q->klass()->new_version();
-+
-+  InstanceKlass *old_klass = InstanceKlass::cast(old_klass_oop);
-+  InstanceKlass *new_klass = InstanceKlass::cast(new_klass_oop);
-+
-+  int size = q->size_given_klass(old_klass);
-+  int new_size = q->size_given_klass(new_klass);
-+
-+  HeapWord* tmp = NULL;
-+  oop tmp_obj = q;
-+
-+  // Save object somewhere, there is an overlap in fields
-+  if (new_klass_oop->is_copying_backwards()) {
-+    if (((HeapWord *)q >= (HeapWord *)new_location && (HeapWord *)q < (HeapWord *)new_location + new_size) || 
-+        ((HeapWord *)new_location >= (HeapWord *)q && (HeapWord *)new_location < (HeapWord *)q + size)) {
-+       tmp = NEW_RESOURCE_ARRAY(HeapWord, size);
-+       q = (oop) tmp;
-+       Copy::aligned_disjoint_words((HeapWord*)q, (HeapWord*)tmp_obj, size);
-+    }
-+  }
-+
-+  q->set_klass(new_klass_oop);
-+  int *cur = new_klass_oop->update_information();
-+  assert(cur != NULL, "just checking");
-+  MarkSweep::update_fields(new_location, q, cur);
-+  
-+  if (tmp != NULL) {
-+    FREE_RESOURCE_ARRAY(HeapWord, tmp, size);
-+  }
-+}
-+ 
-+void MarkSweep::update_fields(oop new_location, oop tmp_obj, int *cur) {
-+  assert(cur != NULL, "just checking");
-+  char* to = (char*)(HeapWord*)new_location;
-+  while (*cur != 0) {
-+    int size = *cur;
-+    if (size > 0) {
-+      cur++;
-+      int offset = *cur;
-+      HeapWord* from = (HeapWord*)(((char *)(HeapWord*)tmp_obj) + offset);
-+      if (size == HeapWordSize) {
-+        *((HeapWord*)to) = *from;
-+      } else if (size == HeapWordSize * 2) {
-+        *((HeapWord*)to) = *from;
-+        *(((HeapWord*)to) + 1) = *(from + 1);
-+      } else {
-+        Copy::conjoint_jbytes(from, to, size);
-+      }
-+      to += size;
-+      cur++;
-+    } else {
-+      assert(size < 0, "");
-+      int skip = -*cur;
-+      Copy::fill_to_bytes(to, skip, 0);
-+      to += skip;
-+      cur++;
-+    }
-+  }
-+}
-diff --git a/src/share/vm/gc_implementation/shared/markSweep.hpp b/src/share/vm/gc_implementation/shared/markSweep.hpp
---- a/src/share/vm/gc_implementation/shared/markSweep.hpp
-+++ b/src/share/vm/gc_implementation/shared/markSweep.hpp
-@@ -107,8 +107,12 @@
-   friend class AdjustPointerClosure;
-   friend class KeepAliveClosure;
-   friend class VM_MarkSweep;
-+  friend class GenMarkSweep;
-   friend void marksweep_init();
- 
-+public:
-+  static GrowableArray<HeapWord*>*             _rescued_oops;
-+
-   //
-   // Vars
-   //
-@@ -169,6 +173,9 @@
- 
-   static inline void push_objarray(oop obj, size_t index);
- 
-+  static void copy_rescued_objects_back();
-+  static void update_fields(oop q, oop new_location);
-+  static void update_fields(oop new_location, oop tmp_obj, int *cur);
-   static void follow_stack();   // Empty marking stack.
- 
-   static void follow_klass(Klass* klass);
-diff --git a/src/share/vm/interpreter/linkResolver.cpp b/src/share/vm/interpreter/linkResolver.cpp
---- a/src/share/vm/interpreter/linkResolver.cpp
-+++ b/src/share/vm/interpreter/linkResolver.cpp
+diff -r 8a6717910608 src/share/vm/interpreter/linkResolver.cpp
+--- a/src/share/vm/interpreter/linkResolver.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/interpreter/linkResolver.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -215,8 +215,8 @@
  // Klass resolution
  
@@ -869,434 +671,18 @@ diff --git a/src/share/vm/interpreter/linkResolver.cpp b/src/share/vm/interprete
      THROW(vmSymbols::java_lang_IllegalAccessError());
    }
  
-@@ -1199,6 +1199,16 @@
+@@ -1199,6 +1199,8 @@
        // recv_klass might be an arrayKlassOop but all vtables start at
        // the same place. The cast is to avoid virtual call and assertion.
        InstanceKlass* inst = (InstanceKlass*)recv_klass();
-+
 +      // (DCEVM) Check that the receiver is a subtype of the holder of the resolved method.
-+      if (!inst->is_subtype_of(resolved_method->method_holder())) {
-+        inst->print();
-+        tty->print_cr("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-+        resolved_method->method_holder()->print();
-+        tty->print_cr("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-+        resolved_method->print();
-+      }
 +      assert(inst->is_subtype_of(resolved_method->method_holder()), "receiver and resolved method holder are inconsistent");
        selected_method = methodHandle(THREAD, inst->method_at_vtable(vtable_index));
      }
    }
-diff --git a/src/share/vm/memory/genMarkSweep.cpp b/src/share/vm/memory/genMarkSweep.cpp
---- a/src/share/vm/memory/genMarkSweep.cpp
-+++ b/src/share/vm/memory/genMarkSweep.cpp
-@@ -334,11 +334,16 @@
-   // in the same order in phase2, phase3 and phase4. We don't quite do that
-   // here (perm_gen first rather than last), so we tell the validate code
-   // to use a higher index (saved from phase2) when verifying perm_gen.
-+  assert(_rescued_oops == NULL, "must be empty before processing");
-   GenCollectedHeap* gch = GenCollectedHeap::heap();
- 
-   GCTraceTime tm("phase 4", PrintGC && Verbose, true, _gc_timer);
-   trace("4");
- 
-+  MarkSweep::copy_rescued_objects_back();
-+
-   GenCompactClosure blk;
-   gch->generation_iterate(&blk, true);
-+
-+  MarkSweep::copy_rescued_objects_back();
- }
-diff --git a/src/share/vm/memory/space.cpp b/src/share/vm/memory/space.cpp
---- a/src/share/vm/memory/space.cpp
-+++ b/src/share/vm/memory/space.cpp
-@@ -379,9 +379,8 @@
-   _compaction_top = bottom();
- }
- 
--HeapWord* CompactibleSpace::forward(oop q, size_t size,
--                                    CompactPoint* cp, HeapWord* compact_top) {
--  // q is alive
-+// (DCEVM) Calculates the compact_top that will be used for placing the next object with the giving size on the heap.
-+HeapWord* CompactibleSpace::forward_compact_top(size_t size, CompactPoint* cp, HeapWord* compact_top) {
-   // First check if we should switch compaction space
-   assert(this == cp->space, "'this' should be current compaction space.");
-   size_t compaction_max_size = pointer_delta(end(), compact_top);
-@@ -401,8 +400,15 @@
-     compaction_max_size = pointer_delta(cp->space->end(), compact_top);
-   }
- 
-+  return compact_top;
-+}
-+
-+HeapWord* CompactibleSpace::forward(oop q, size_t size,
-+                                    CompactPoint* cp, HeapWord* compact_top) {
-+  compact_top = forward_compact_top(size, cp, compact_top);
-+
-   // store the forwarding pointer into the mark word
--  if ((HeapWord*)q != compact_top) {
-+  if ((HeapWord*)q != compact_top || (size_t)q->size() != size) {
-     q->forward_to(oop(compact_top));
-     assert(q->is_gc_marked(), "encoding the pointer should preserve the mark");
-   } else {
-@@ -423,6 +429,58 @@
-   return compact_top;
- }
- 
-+// Compute the forward sizes and leave out objects whose position could
-+// possibly overlap other objects.
-+HeapWord* CompactibleSpace::forward_with_rescue(HeapWord* q, size_t size,
-+                                                CompactPoint* cp, HeapWord* compact_top) {
-+  size_t forward_size = size;
-+
-+  // (DCEVM) There is a new version of the class of q => different size
-+  if (oop(q)->klass()->new_version() != NULL && oop(q)->klass()->new_version()->update_information() != NULL) {
-+
-+    size_t new_size = oop(q)->size_given_klass(oop(q)->klass()->new_version());
-+    assert(size != new_size, "instances without changed size have to be updated prior to GC run");
-+    forward_size = new_size;
-+  }
-+
-+  compact_top = forward_compact_top(forward_size, cp, compact_top);
-+
-+  if (must_rescue(oop(q), oop(compact_top))) {
-+    if (MarkSweep::_rescued_oops == NULL) {
-+      MarkSweep::_rescued_oops = new GrowableArray<HeapWord*>(128);
-+    }
-+    MarkSweep::_rescued_oops->append(q);
-+    return compact_top;
-+  }
-+
-+  return forward(oop(q), forward_size, cp, compact_top);
-+}
-+
-+// Compute the forwarding addresses for the objects that need to be rescued.
-+HeapWord* CompactibleSpace::forward_rescued(CompactPoint* cp, HeapWord* compact_top) {
-+  // TODO: empty the _rescued_oops after ALL spaces are compacted!
-+  if (MarkSweep::_rescued_oops != NULL) {
-+    for (int i=0; i<MarkSweep::_rescued_oops->length(); i++) {
-+      HeapWord* q = MarkSweep::_rescued_oops->at(i);
-+
-+      /* size_t size = oop(q)->size();  changing this for cms for perm gen */
-+      size_t size = block_size(q);
-+
-+      // (DCEVM) There is a new version of the class of q => different size
-+      if (oop(q)->klass()->new_version() != NULL) {
-+        size_t new_size = oop(q)->size_given_klass(oop(q)->klass()->new_version());
-+        assert(size != new_size, "instances without changed size have to be updated prior to GC run");
-+        size = new_size;
-+      }
-+
-+      compact_top = cp->space->forward(oop(q), size, cp, compact_top);
-+      assert(compact_top <= end(), "must not write over end of space!");
-+    }
-+    MarkSweep::_rescued_oops->clear();
-+    MarkSweep::_rescued_oops = NULL;
-+  }
-+  return compact_top;
-+}
- 
- bool CompactibleSpace::insert_deadspace(size_t& allowed_deadspace_words,
-                                         HeapWord* q, size_t deadlength) {
-@@ -444,12 +502,17 @@
- #define adjust_obj_size(s) s
- 
- void CompactibleSpace::prepare_for_compaction(CompactPoint* cp) {
--  SCAN_AND_FORWARD(cp, end, block_is_obj, block_size);
-+  SCAN_AND_FORWARD(cp, end, block_is_obj, block_size, false);
- }
- 
- // Faster object search.
- void ContiguousSpace::prepare_for_compaction(CompactPoint* cp) {
--  SCAN_AND_FORWARD(cp, top, block_is_always_obj, obj_size);
-+  if (!Universe::is_redefining_gc_run()) {
-+    SCAN_AND_FORWARD(cp, top, block_is_always_obj, obj_size, false);
-+  } else {
-+    // Redefinition run
-+    SCAN_AND_FORWARD(cp, top, block_is_always_obj, obj_size, true);
-+  }
- }
- 
- void Space::adjust_pointers() {
-@@ -487,6 +550,111 @@
-   assert(q == t, "just checking");
- }
- 
-+
-+#ifdef ASSERT
-+
-+int CompactibleSpace::space_index(oop obj) {
-+  GenCollectedHeap* heap = GenCollectedHeap::heap();
-+
-+  //if (heap->is_in_permanent(obj)) {
-+  //  return -1;
-+  //}
-+
-+  int index = 0;
-+  for (int i = heap->n_gens() - 1; i >= 0; i--) {
-+    Generation* gen = heap->get_gen(i);
-+    CompactibleSpace* space = gen->first_compaction_space();
-+    while (space != NULL) {
-+      if (space->is_in_reserved(obj)) {
-+        return index;
-+      }
-+      space = space->next_compaction_space();
-+      index++;
-+    }
-+  }
-+
-+  tty->print_cr("could not compute space_index for %08xh", (HeapWord*)obj);
-+  index = 0;
-+  for (int i = heap->n_gens() - 1; i >= 0; i--) {
-+    Generation* gen = heap->get_gen(i);
-+    tty->print_cr("  generation %s: %08xh - %08xh", gen->name(), gen->reserved().start(), gen->reserved().end());
-+
-+    CompactibleSpace* space = gen->first_compaction_space();
-+    while (space != NULL) {
-+      tty->print_cr("    %2d space %08xh - %08xh", index, space->bottom(), space->end());
-+      space = space->next_compaction_space();
-+      index++;
-+    }
-+  }
-+
-+  ShouldNotReachHere();
-+  return 0;
-+}
-+#endif
-+
-+bool CompactibleSpace::must_rescue(oop old_obj, oop new_obj) {
-+  // Only redefined objects can have the need to be rescued.
-+  if (oop(old_obj)->klass()->new_version() == NULL) return false;
-+
-+  //if (old_obj->is_perm()) {
-+  //  // This object is in perm gen: Always rescue to satisfy invariant obj->klass() <= obj.
-+  //  return true;
-+  //}
-+
-+  int new_size = old_obj->size_given_klass(oop(old_obj)->klass()->new_version());
-+  int original_size = old_obj->size();
-+  
-+  Generation* tenured_gen = GenCollectedHeap::heap()->get_gen(1);
-+  bool old_in_tenured = tenured_gen->is_in_reserved(old_obj);
-+  bool new_in_tenured = tenured_gen->is_in_reserved(new_obj);
-+  if (old_in_tenured == new_in_tenured) {
-+    // Rescue if object may overlap with a higher memory address.
-+    bool overlap = ((HeapWord*)old_obj + original_size < (HeapWord*)new_obj + new_size);
-+    if (old_in_tenured) {
-+      // Old and new address are in same space, so just compare the address.
-+      // Must rescue if object moves towards the top of the space.
-+      assert(space_index(old_obj) == space_index(new_obj), "old_obj and new_obj must be in same space");
-+    } else {
-+      // In the new generation, eden is located before the from space, so a
-+      // simple pointer comparison is sufficient.
-+      assert(GenCollectedHeap::heap()->get_gen(0)->is_in_reserved(old_obj), "old_obj must be in DefNewGeneration");
-+      assert(GenCollectedHeap::heap()->get_gen(0)->is_in_reserved(new_obj), "new_obj must be in DefNewGeneration");
-+      assert(overlap == (space_index(old_obj) < space_index(new_obj)), "slow and fast computation must yield same result");
-+    }
-+    return overlap;
-+
-+  } else {
-+    assert(space_index(old_obj) != space_index(new_obj), "old_obj and new_obj must be in different spaces");
-+    if (tenured_gen->is_in_reserved(new_obj)) {
-+      // Must never rescue when moving from the new into the old generation.
-+      assert(GenCollectedHeap::heap()->get_gen(0)->is_in_reserved(old_obj), "old_obj must be in DefNewGeneration");
-+      assert(space_index(old_obj) > space_index(new_obj), "must be");
-+      return false;
-+
-+    } else /* if (tenured_gen->is_in_reserved(old_obj)) */ {
-+      // Must always rescue when moving from the old into the new generation.
-+      assert(GenCollectedHeap::heap()->get_gen(0)->is_in_reserved(new_obj), "new_obj must be in DefNewGeneration");
-+      assert(space_index(old_obj) < space_index(new_obj), "must be");
-+      return true;
-+    }
-+  }
-+}
-+
-+HeapWord* CompactibleSpace::rescue(HeapWord* old_obj) {
-+  assert(must_rescue(oop(old_obj), oop(old_obj)->forwardee()), "do not call otherwise");
-+
-+  int size = oop(old_obj)->size();
-+  HeapWord* rescued_obj = NEW_RESOURCE_ARRAY(HeapWord, size);
-+  Copy::aligned_disjoint_words(old_obj, rescued_obj, size);
-+
-+  if (MarkSweep::_rescued_oops == NULL) {
-+    MarkSweep::_rescued_oops = new GrowableArray<HeapWord*>(128);
-+  }
-+
-+  MarkSweep::_rescued_oops->append(rescued_obj);
-+  return rescued_obj;
-+}
-+
- void CompactibleSpace::adjust_pointers() {
-   // Check first is there is any work to do.
-   if (used() == 0) {
-@@ -497,7 +665,12 @@
- }
- 
- void CompactibleSpace::compact() {
--  SCAN_AND_COMPACT(obj_size);
-+  if(!Universe::is_redefining_gc_run()) {
-+    SCAN_AND_COMPACT(obj_size, false);
-+  } else {
-+    // Redefinition run
-+    SCAN_AND_COMPACT(obj_size, true)
-+  }
- }
- 
- void Space::print_short() const { print_short_on(tty); }
-diff --git a/src/share/vm/memory/space.hpp b/src/share/vm/memory/space.hpp
---- a/src/share/vm/memory/space.hpp
-+++ b/src/share/vm/memory/space.hpp
-@@ -450,6 +450,9 @@
-   // indicates when the next such action should be taken.
-   virtual void prepare_for_compaction(CompactPoint* cp);
-   // MarkSweep support phase3
-+  DEBUG_ONLY(int space_index(oop obj));
-+  bool must_rescue(oop old_obj, oop new_obj);
-+  HeapWord* rescue(HeapWord* old_obj);
-   virtual void adjust_pointers();
-   // MarkSweep support phase4
-   virtual void compact();
-@@ -479,6 +482,15 @@
-   // accordingly".
-   virtual HeapWord* forward(oop q, size_t size, CompactPoint* cp,
-                     HeapWord* compact_top);
-+  // (DCEVM) same as forwad, but can rescue objects. Invoked only during
-+  // redefinition runs
-+  HeapWord* forward_with_rescue(HeapWord* q, size_t size, CompactPoint* cp,
-+                                HeapWord* compact_top);
-+
-+  HeapWord* forward_rescued(CompactPoint* cp, HeapWord* compact_top);
-+
-+  // (tw) Compute new compact top without actually forwarding the object.
-+  virtual HeapWord* forward_compact_top(size_t size, CompactPoint* cp, HeapWord* compact_top);
- 
-   // Return a size with adjusments as required of the space.
-   virtual size_t adjust_object_size_v(size_t size) const { return size; }
-@@ -509,7 +521,7 @@
-                         size_t word_len);
- };
- 
--#define SCAN_AND_FORWARD(cp,scan_limit,block_is_obj,block_size) {            \
-+#define SCAN_AND_FORWARD(cp,scan_limit,block_is_obj,block_size,redefinition_run) { \
-   /* Compute the new addresses for the live objects and store it in the mark \
-    * Used by universe::mark_sweep_phase2()                                   \
-    */                                                                        \
-@@ -567,7 +579,17 @@
-       /* prefetch beyond q */                                                \
-       Prefetch::write(q, interval);                                          \
-       size_t size = block_size(q);                                           \
-+      if (redefinition_run) {                                                \
-+        compact_top = cp->space->forward_with_rescue(q, size,                \
-+                                                     cp, compact_top);       \
-+        if (q < first_dead && oop(q)->is_gc_marked()) {                      \
-+          /* Was moved (otherwise, forward would reset mark),                \
-+             set first_dead to here */                                       \
-+          first_dead = q;                                                    \
-+        }                                                                    \
-+      } else {                                                               \
-       compact_top = cp->space->forward(oop(q), size, cp, compact_top);       \
-+      }                                                                      \
-       q += size;                                                             \
-       end_of_live = q;                                                       \
-     } else {                                                                 \
-@@ -616,6 +638,8 @@
-     }                                                                        \
-   }                                                                          \
-                                                                              \
-+  if (redefinition_run) { compact_top = forward_rescued(cp, compact_top); }  \
-+                                                                             \
-   assert(q == t, "just checking");                                           \
-   if (liveRange != NULL) {                                                   \
-     liveRange->set_end(q);                                                   \
-@@ -662,13 +686,8 @@
-       q += size;                                                                \
-     }                                                                           \
-                                                                                 \
--    if (_first_dead == t) {                                                     \
--      q = t;                                                                    \
--    } else {                                                                    \
--      /* $$$ This is funky.  Using this to read the previously written          \
--       * LiveRange.  See also use below. */                                     \
--      q = (HeapWord*)oop(_first_dead)->mark()->decode_pointer();                \
--    }                                                                           \
-+    /* (DCEVM) first_dead can be live object if we move/rescue resized objects */ \
-+    q = _first_dead;                                                            \
-   }                                                                             \
-                                                                                 \
-   const intx interval = PrefetchScanIntervalInBytes;                            \
-@@ -696,7 +715,7 @@
-   assert(q == t, "just checking");                                              \
- }
- 
--#define SCAN_AND_COMPACT(obj_size) {                                            \
-+#define SCAN_AND_COMPACT(obj_size, redefinition_run) {                          \
-   /* Copy all live objects to their new location                                \
-    * Used by MarkSweep::mark_sweep_phase4() */                                  \
-                                                                                 \
-@@ -721,13 +740,9 @@
-     }                                                                           \
-     )  /* debug_only */                                                         \
-                                                                                 \
--    if (_first_dead == t) {                                                     \
--      q = t;                                                                    \
--    } else {                                                                    \
--      /* $$$ Funky */                                                           \
--      q = (HeapWord*) oop(_first_dead)->mark()->decode_pointer();               \
-+    /* (DCEVM) first_dead can be live object if we move/rescue resized objects */ \
-+    q = _first_dead;                                                            \
-     }                                                                           \
--  }                                                                             \
-                                                                                 \
-   const intx scan_interval = PrefetchScanIntervalInBytes;                       \
-   const intx copy_interval = PrefetchCopyIntervalInBytes;                       \
-@@ -745,11 +760,34 @@
-       size_t size = obj_size(q);                                                \
-       HeapWord* compaction_top = (HeapWord*)oop(q)->forwardee();                \
-                                                                                 \
-+      if (redefinition_run && must_rescue(oop(q), oop(q)->forwardee())) {       \
-+        rescue(q);                                                              \
-+        debug_only(Copy::fill_to_words(q, size, 0));                            \
-+        q += size;                                                              \
-+        continue;                                                               \
-+      }                                                                         \
-+                                                                                \
-       /* prefetch beyond compaction_top */                                      \
-       Prefetch::write(compaction_top, copy_interval);                           \
-                                                                                 \
-       /* copy object and reinit its mark */                                     \
--      assert(q != compaction_top, "everything in this pass should be moving");  \
-+      assert(q != compaction_top || oop(q)->klass()->new_version() != NULL,     \
-+             "everything in this pass should be moving");                       \
-+      if (redefinition_run && oop(q)->klass()->new_version() != NULL) {         \
-+        Klass* new_version = oop(q)->klass()->new_version();                    \
-+        if (new_version->update_information() == NULL) {                        \
-+          Copy::aligned_conjoint_words(q, compaction_top, size);                \
-+          oop(compaction_top)->set_klass(new_version);                          \
-+        } else {                                                                \
-+          MarkSweep::update_fields(oop(q), oop(compaction_top));                \
-+        }                                                                       \
-+        oop(compaction_top)->init_mark();                                       \
-+        assert(oop(compaction_top)->klass() != NULL, "should have a class");    \
-+                                                                                \
-+        debug_only(prev_q = q);                                                 \
-+        q += size;                                                              \
-+        continue;                                                               \
-+      }                                                                         \
-       Copy::aligned_conjoint_words(q, compaction_top, size);                    \
-       oop(compaction_top)->init_mark();                                         \
-       assert(oop(compaction_top)->klass() != NULL, "should have a class");      \
-diff --git a/src/share/vm/memory/universe.cpp b/src/share/vm/memory/universe.cpp
---- a/src/share/vm/memory/universe.cpp
-+++ b/src/share/vm/memory/universe.cpp
-@@ -78,6 +78,8 @@
- #include "gc_implementation/parallelScavenge/parallelScavengeHeap.hpp"
- #endif // INCLUDE_ALL_GCS
- 
-+bool Universe::_is_redefining_gc_run = false;
-+
- // Known objects
- Klass* Universe::_boolArrayKlassObj                 = NULL;
- Klass* Universe::_byteArrayKlassObj                 = NULL;
+diff -r 8a6717910608 src/share/vm/memory/universe.cpp
+--- a/src/share/vm/memory/universe.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/memory/universe.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -157,6 +159,42 @@
    f(doubleArrayKlassObj());
  }
@@ -1340,23 +726,9 @@ diff --git a/src/share/vm/memory/universe.cpp b/src/share/vm/memory/universe.cpp
  void Universe::oops_do(OopClosure* f, bool do_all) {
  
    f->do_oop((oop*) &_int_mirror);
-diff --git a/src/share/vm/memory/universe.hpp b/src/share/vm/memory/universe.hpp
---- a/src/share/vm/memory/universe.hpp
-+++ b/src/share/vm/memory/universe.hpp
-@@ -248,7 +248,13 @@
- 
-   static void compute_verify_oop_data();
- 
-+  static bool _is_redefining_gc_run;
-+
-  public:
-+
-+   static bool is_redefining_gc_run()               { return _is_redefining_gc_run; }
-+   static void set_redefining_gc_run(bool b)        { _is_redefining_gc_run = b;    }
-+
-   // Known classes in the VM
-   static Klass* boolArrayKlassObj()                 { return _boolArrayKlassObj;   }
-   static Klass* byteArrayKlassObj()                 { return _byteArrayKlassObj;   }
+diff -r 8a6717910608 src/share/vm/memory/universe.hpp
+--- a/src/share/vm/memory/universe.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/memory/universe.hpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -401,6 +407,7 @@
    static void run_finalizers_on_exit();
  
@@ -1365,9 +737,9 @@ diff --git a/src/share/vm/memory/universe.hpp b/src/share/vm/memory/universe.hpp
  
    // Apply "f" to the addresses of all the direct heap pointers maintained
    // as static fields of "Universe".
-diff --git a/src/share/vm/oops/cpCache.cpp b/src/share/vm/oops/cpCache.cpp
---- a/src/share/vm/oops/cpCache.cpp
-+++ b/src/share/vm/oops/cpCache.cpp
+diff -r 8a6717910608 src/share/vm/oops/cpCache.cpp
+--- a/src/share/vm/oops/cpCache.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/cpCache.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -336,7 +336,8 @@
    if (has_appendix) {
      const int appendix_index = f2_as_index() + _indy_resolved_references_appendix_offset;
@@ -1430,9 +802,9 @@ diff --git a/src/share/vm/oops/cpCache.cpp b/src/share/vm/oops/cpCache.cpp
  #endif // INCLUDE_JVMTI
  
  
-diff --git a/src/share/vm/oops/cpCache.hpp b/src/share/vm/oops/cpCache.hpp
---- a/src/share/vm/oops/cpCache.hpp
-+++ b/src/share/vm/oops/cpCache.hpp
+diff -r 8a6717910608 src/share/vm/oops/cpCache.hpp
+--- a/src/share/vm/oops/cpCache.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/cpCache.hpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -373,6 +373,10 @@
           bool * trace_name_printed);
    bool check_no_old_or_obsolete_entries();
@@ -1455,9 +827,9 @@ diff --git a/src/share/vm/oops/cpCache.hpp b/src/share/vm/oops/cpCache.hpp
  #endif // INCLUDE_JVMTI
  
    // Deallocate - no fields to deallocate
-diff --git a/src/share/vm/oops/instanceKlass.cpp b/src/share/vm/oops/instanceKlass.cpp
---- a/src/share/vm/oops/instanceKlass.cpp
-+++ b/src/share/vm/oops/instanceKlass.cpp
+diff -r 8a6717910608 src/share/vm/oops/instanceKlass.cpp
+--- a/src/share/vm/oops/instanceKlass.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/instanceKlass.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -718,7 +718,8 @@
        }
  #endif
@@ -1601,9 +973,9 @@ diff --git a/src/share/vm/oops/instanceKlass.cpp b/src/share/vm/oops/instanceKla
  } // end has_previous_version()
  
  
-diff --git a/src/share/vm/oops/instanceKlass.hpp b/src/share/vm/oops/instanceKlass.hpp
---- a/src/share/vm/oops/instanceKlass.hpp
-+++ b/src/share/vm/oops/instanceKlass.hpp
+diff -r 8a6717910608 src/share/vm/oops/instanceKlass.hpp
+--- a/src/share/vm/oops/instanceKlass.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/instanceKlass.hpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -139,6 +139,7 @@
    friend class VMStructs;
    friend class ClassFileParser;
@@ -1648,9 +1020,9 @@ diff --git a/src/share/vm/oops/instanceKlass.hpp b/src/share/vm/oops/instanceKla
    void methods_do(void f(Method* method));
    void array_klasses_do(void f(Klass* k));
    void array_klasses_do(void f(Klass* k, TRAPS), TRAPS);
-diff --git a/src/share/vm/oops/klass.cpp b/src/share/vm/oops/klass.cpp
---- a/src/share/vm/oops/klass.cpp
-+++ b/src/share/vm/oops/klass.cpp
+diff -r 8a6717910608 src/share/vm/oops/klass.cpp
+--- a/src/share/vm/oops/klass.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/klass.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -170,6 +170,13 @@
    set_next_link(NULL);
    TRACE_INIT_ID(this);
@@ -1690,9 +1062,9 @@ diff --git a/src/share/vm/oops/klass.cpp b/src/share/vm/oops/klass.cpp
  bool Klass::is_loader_alive(BoolObjectClosure* is_alive) {
    assert(ClassLoaderDataGraph::contains((address)this), "is in the metaspace");
  
-diff --git a/src/share/vm/oops/klass.hpp b/src/share/vm/oops/klass.hpp
---- a/src/share/vm/oops/klass.hpp
-+++ b/src/share/vm/oops/klass.hpp
+diff -r 8a6717910608 src/share/vm/oops/klass.hpp
+--- a/src/share/vm/oops/klass.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/klass.hpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -149,6 +149,10 @@
    oop       _java_mirror;
    // Superclass
@@ -1800,9 +1172,9 @@ diff --git a/src/share/vm/oops/klass.hpp b/src/share/vm/oops/klass.hpp
  
    // Compiler support
    static ByteSize super_offset()                 { return in_ByteSize(offset_of(Klass, _super)); }
-diff --git a/src/share/vm/oops/klassVtable.cpp b/src/share/vm/oops/klassVtable.cpp
---- a/src/share/vm/oops/klassVtable.cpp
-+++ b/src/share/vm/oops/klassVtable.cpp
+diff -r 8a6717910608 src/share/vm/oops/klassVtable.cpp
+--- a/src/share/vm/oops/klassVtable.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/klassVtable.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -1409,6 +1409,8 @@
  
  void klassVtable::verify_against(outputStream* st, klassVtable* vt, int index) {
@@ -1832,9 +1204,9 @@ diff --git a/src/share/vm/oops/klassVtable.cpp b/src/share/vm/oops/klassVtable.c
    }
  }
  
-diff --git a/src/share/vm/oops/method.cpp b/src/share/vm/oops/method.cpp
---- a/src/share/vm/oops/method.cpp
-+++ b/src/share/vm/oops/method.cpp
+diff -r 8a6717910608 src/share/vm/oops/method.cpp
+--- a/src/share/vm/oops/method.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/method.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -1185,6 +1185,8 @@
  
    // Reset correct method/const method, method size, and parameter info
@@ -1855,9 +1227,9 @@ diff --git a/src/share/vm/oops/method.cpp b/src/share/vm/oops/method.cpp
    ClassLoaderData* cld = loader_data;
  
    if (!SafepointSynchronize::is_at_safepoint()) {
-diff --git a/src/share/vm/oops/method.hpp b/src/share/vm/oops/method.hpp
---- a/src/share/vm/oops/method.hpp
-+++ b/src/share/vm/oops/method.hpp
+diff -r 8a6717910608 src/share/vm/oops/method.hpp
+--- a/src/share/vm/oops/method.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/oops/method.hpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -105,6 +105,10 @@
    AccessFlags       _access_flags;               // Access flags
    int               _vtable_index;               // vtable index of this method (see VtableIndexFlag)
@@ -1893,9 +1265,9 @@ diff --git a/src/share/vm/oops/method.hpp b/src/share/vm/oops/method.hpp
    // signature
    Symbol* signature() const                      { return constants()->symbol_at(signature_index()); }
    int signature_index() const                    { return constMethod()->signature_index();         }
-diff --git a/src/share/vm/prims/jni.cpp b/src/share/vm/prims/jni.cpp
---- a/src/share/vm/prims/jni.cpp
-+++ b/src/share/vm/prims/jni.cpp
+diff -r 8a6717910608 src/share/vm/prims/jni.cpp
+--- a/src/share/vm/prims/jni.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/prims/jni.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -406,6 +406,7 @@
    }
    Klass* k = SystemDictionary::resolve_from_stream(class_name, class_loader,
@@ -1904,9 +1276,9 @@ diff --git a/src/share/vm/prims/jni.cpp b/src/share/vm/prims/jni.cpp
                                                       CHECK_NULL);
  
    if (TraceClassResolution && k != NULL) {
-diff --git a/src/share/vm/prims/jvm.cpp b/src/share/vm/prims/jvm.cpp
---- a/src/share/vm/prims/jvm.cpp
-+++ b/src/share/vm/prims/jvm.cpp
+diff -r 8a6717910608 src/share/vm/prims/jvm.cpp
+--- a/src/share/vm/prims/jvm.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/prims/jvm.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -904,6 +904,7 @@
    Klass* k = SystemDictionary::resolve_from_stream(class_name, class_loader,
                                                       protection_domain, &st,
@@ -1915,9 +1287,9 @@ diff --git a/src/share/vm/prims/jvm.cpp b/src/share/vm/prims/jvm.cpp
                                                       CHECK_NULL);
  
    if (TraceClassResolution && k != NULL) {
-diff --git a/src/share/vm/prims/jvmtiEnv.cpp b/src/share/vm/prims/jvmtiEnv.cpp
---- a/src/share/vm/prims/jvmtiEnv.cpp
-+++ b/src/share/vm/prims/jvmtiEnv.cpp
+diff -r 8a6717910608 src/share/vm/prims/jvmtiEnv.cpp
+--- a/src/share/vm/prims/jvmtiEnv.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/prims/jvmtiEnv.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -42,6 +42,7 @@
  #include "prims/jvmtiManageCapabilities.hpp"
  #include "prims/jvmtiRawMonitor.hpp"
@@ -1963,9 +1335,9 @@ diff --git a/src/share/vm/prims/jvmtiEnv.cpp b/src/share/vm/prims/jvmtiEnv.cpp
    VM_RedefineClasses op(class_count, class_definitions, jvmti_class_load_kind_redefine);
    VMThread::execute(&op);
    return (op.check_error());
-diff --git a/src/share/vm/prims/jvmtiExport.hpp b/src/share/vm/prims/jvmtiExport.hpp
---- a/src/share/vm/prims/jvmtiExport.hpp
-+++ b/src/share/vm/prims/jvmtiExport.hpp
+diff -r 8a6717910608 src/share/vm/prims/jvmtiExport.hpp
+--- a/src/share/vm/prims/jvmtiExport.hpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/prims/jvmtiExport.hpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -188,6 +188,7 @@
    // systems as needed to relax invariant checks.
    static bool _has_redefined_a_class;
@@ -1974,9 +1346,9 @@ diff --git a/src/share/vm/prims/jvmtiExport.hpp b/src/share/vm/prims/jvmtiExport
    inline static void set_has_redefined_a_class() {
      JVMTI_ONLY(_has_redefined_a_class = true;)
    }
-diff --git a/src/share/vm/prims/jvmtiImpl.cpp b/src/share/vm/prims/jvmtiImpl.cpp
---- a/src/share/vm/prims/jvmtiImpl.cpp
-+++ b/src/share/vm/prims/jvmtiImpl.cpp
+diff -r 8a6717910608 src/share/vm/prims/jvmtiImpl.cpp
+--- a/src/share/vm/prims/jvmtiImpl.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/prims/jvmtiImpl.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -289,6 +289,11 @@
    Symbol* m_name = _method->name();
    Symbol* m_signature = _method->signature();
@@ -1989,10 +1361,9 @@ diff --git a/src/share/vm/prims/jvmtiImpl.cpp b/src/share/vm/prims/jvmtiImpl.cpp
    // search previous versions if they exist
    PreviousVersionWalker pvw(thread, (InstanceKlass *)ikh());
    for (PreviousVersionNode * pv_node = pvw.next_previous_version();
-diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.cpp b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
-new file mode 100644
---- /dev/null
-+++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
+diff -r 8a6717910608 src/share/vm/prims/jvmtiRedefineClasses2.cpp
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -0,0 +1,2034 @@
 +/*
 + * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
@@ -4028,10 +3399,9 @@ new file mode 100644
 +  transfer.transfer_registrations(old_klass, _deleted_methods, _deleted_methods_length);
 +  transfer.transfer_registrations(old_klass, _matching_old_methods, _matching_methods_length);
 +}
-diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.hpp b/src/share/vm/prims/jvmtiRedefineClasses2.hpp
-new file mode 100644
---- /dev/null
-+++ b/src/share/vm/prims/jvmtiRedefineClasses2.hpp
+diff -r 8a6717910608 src/share/vm/prims/jvmtiRedefineClasses2.hpp
+--- /dev/null	Thu Jan 01 00:00:00 1970 +0000
++++ b/src/share/vm/prims/jvmtiRedefineClasses2.hpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -0,0 +1,156 @@
 +/*
 + * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
@@ -4189,65 +3559,9 @@ new file mode 100644
 +};
 +
 +#endif // SHARE_VM_PRIMS_JVMTIENHANCEDREDEFINECLASSES_HPP
-diff --git a/src/share/vm/runtime/arguments.cpp b/src/share/vm/runtime/arguments.cpp
---- a/src/share/vm/runtime/arguments.cpp
-+++ b/src/share/vm/runtime/arguments.cpp
-@@ -59,8 +59,8 @@
- #include "gc_implementation/parallelScavenge/parallelScavengeHeap.hpp"
- #endif // INCLUDE_ALL_GCS
- 
--// Note: This is a special bug reporting site for the JVM
--#define DEFAULT_VENDOR_URL_BUG "http://bugreport.sun.com/bugreport/crash.jsp"
-+// (DCEVM) The DCE VM has its own JIRA bug tracking system.
-+#define DEFAULT_VENDOR_URL_BUG "https://github.com/Guidewire/DCEVM/issues"
- #define DEFAULT_JAVA_LAUNCHER  "generic"
- 
- // Disable options not supported in this release, with a warning if they
-@@ -1507,6 +1507,10 @@
- 
- void Arguments::set_ergonomics_flags() {
- 
-+  if (AllowEnhancedClassRedefinition) {
-+    // (DCEVM) enforces serial GC
-+    FLAG_SET_ERGO(bool, UseSerialGC, true);
-+  }
-   if (os::is_server_class_machine()) {
-     // If no other collector is requested explicitly,
-     // let the VM select the collector based on
-@@ -1948,6 +1952,17 @@
-   if (UseConcMarkSweepGC || UseParNewGC) i++;
-   if (UseParallelGC || UseParallelOldGC) i++;
-   if (UseG1GC)                           i++;
-+
-+  if (AllowEnhancedClassRedefinition) {
-+    // (DCEVM) Must use serial GC. This limitation applies because the instance size changing GC modifications
-+    // are only built into the mark and compact algorithm.
-+    if (!UseSerialGC && i >= 1) {
-+      jio_fprintf(defaultStream::error_stream(),
-+                    "Must use the serial GC in the DCEVM\n");
-+      status = false;
-+    }
-+  }
-+
-   if (i > 1) {
-     jio_fprintf(defaultStream::error_stream(),
-                 "Conflicting collector combinations in option list; "
-diff --git a/src/share/vm/runtime/globals.hpp b/src/share/vm/runtime/globals.hpp
---- a/src/share/vm/runtime/globals.hpp
-+++ b/src/share/vm/runtime/globals.hpp
-@@ -1273,6 +1273,9 @@
-   product(intx, TraceRedefineClasses, 0,                                    \
-           "Trace level for JVMTI RedefineClasses")                          \
-                                                                             \
-+  product(bool, AllowEnhancedClassRedefinition, true,                       \
-+          "Allow enhanced class redefinition beyond swapping method bodies")\
-+                                                                            \
-   develop(bool, StressMethodComparator, false,                              \
-           "Run the MethodComparator on all loaded methods")                 \
-                                                                             \
-diff --git a/src/share/vm/runtime/reflection.cpp b/src/share/vm/runtime/reflection.cpp
---- a/src/share/vm/runtime/reflection.cpp
-+++ b/src/share/vm/runtime/reflection.cpp
+diff -r 8a6717910608 src/share/vm/runtime/reflection.cpp
+--- a/src/share/vm/runtime/reflection.cpp	Tue Mar 11 13:02:13 2014 -0700
++++ b/src/share/vm/runtime/reflection.cpp	Wed Apr 30 11:27:18 2014 -0700
 @@ -519,6 +519,12 @@
                                       AccessFlags access,
                                       bool classloader_only,

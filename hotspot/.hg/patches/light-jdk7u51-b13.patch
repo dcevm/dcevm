@@ -1,15 +1,3 @@
-diff --git a/make/openjdk_distro b/make/openjdk_distro
-index 520b33d..ea7eff0 100644
---- a/make/openjdk_distro
-+++ b/make/openjdk_distro
-@@ -27,6 +27,6 @@
- #
- 
- # Don't put quotes (fail windows build).
--HOTSPOT_VM_DISTRO=OpenJDK
-+HOTSPOT_VM_DISTRO=Dynamic Code Evolution
- COMPANY_NAME=
- PRODUCT_NAME=OpenJDK
 diff --git a/src/cpu/x86/vm/interp_masm_x86_32.cpp b/src/cpu/x86/vm/interp_masm_x86_32.cpp
 index b0ebcfd..6366d68 100644
 --- a/src/cpu/x86/vm/interp_masm_x86_32.cpp

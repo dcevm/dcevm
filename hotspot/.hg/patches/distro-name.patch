@@ -1,0 +1,13 @@
+Changes name of VM.
+diff -r 8a6717910608 make/openjdk_distro
+--- a/make/openjdk_distro	Tue Mar 11 13:02:13 2014 -0700
++++ b/make/openjdk_distro	Wed Apr 30 11:27:18 2014 -0700
+@@ -27,6 +27,6 @@
+ #
+ 
+ # Don't put quotes (fail windows build).
+-HOTSPOT_VM_DISTRO=OpenJDK
++HOTSPOT_VM_DISTRO=Dynamic Code Evolution
+ COMPANY_NAME=
+ PRODUCT_NAME=OpenJDK
+

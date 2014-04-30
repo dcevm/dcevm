@@ -33,47 +33,63 @@ project('hotspot') {
         }
     }
 
-    task clone(description: 'Clone HotSpot repository') {
-        onlyIf { !file('hotspot').exists() }
+    task init(description: 'Initialize HotSpot repository') << {
+        file('hotspot').mkdir()
+        exec {
+            executable 'hg'
+            args 'init'
+            ignoreExitValue = true
+        }
+    }
+
+    task pull(description: 'Pull OpenJDK HotSpot changes') {
         doLast {
             def hotspotRepository = hotspotTag.contains('jdk7') ?
                 'http://hg.openjdk.java.net/jdk7u/jdk7u/hotspot' :
                 'http://hg.openjdk.java.net/jdk8u/jdk8u/hotspot'
             exec {
-                workingDir '..'
                 executable 'hg'
-                args 'clone', hotspotRepository
+                args 'pull', hotspotRepository
             }
         }
     }
 
-    task patch(description: 'Patch HotSpot sources', dependsOn: clone) << {
-        exec {
-            executable 'hg'
-            args 'pull'
-        }
-        exec {
-            executable 'hg'
-            args 'update', '-C', '-r', hotspotTag
-        }
-        new ByteArrayOutputStream().withStream { os ->
+    task patch(description: 'Patch HotSpot sources', dependsOn: pull) {
+
+        doLast {
             exec {
-                workingDir 'hotspot'
                 executable 'hg'
-                args 'status'
-                standardOutput os
+                args 'qpop', '-a'
             }
-            // Purge unversioned files
-            def str = os.toString()
-            def matcher = str =~ /(?m)^\?\s+(.*)$/
-            matcher.each {
-                ant.delete(file: new File(file('hotspot'), it[1]))
+            exec {
+                executable 'hg'
+                args 'update', '-C', '-r', hotspotTag
             }
-        }
-        // Use hg import since ant.patchfile requires 'patch' to be installed
-        exec {
-            executable 'hg'
-            args 'import', '--no-commit', "../patches/${flavor}-${hotspotTag}.patch"
+            new ByteArrayOutputStream().withStream { os ->
+                exec {
+                    workingDir 'hotspot'
+                    executable 'hg'
+                    args 'status'
+                    standardOutput os
+                }
+                // Purge unversioned files
+                def str = os.toString()
+                def matcher = str =~ /(?m)^\?\s+(.*)$/
+                matcher.each {
+                    ant.delete(file: new File(file('hotspot'), it[1]))
+                }
+            }
+            def guards = [flavor, hotspotTag.contains('jdk7') ? 'jdk7' : 'jdk8',
+                          hotspotTag, flavor + '-' + hotspotTag]
+            exec {
+                executable 'hg'
+                args 'qselect'
+                args guards
+            }
+            exec {
+                executable 'hg'
+                args 'qpush', '-a'
+            }
         }
     }
 

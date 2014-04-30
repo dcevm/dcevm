@@ -95,7 +95,6 @@ public class MethodHandleTest {
     MethodHandles.Lookup lookup = MethodHandles.lookup();
     MethodHandle handle = lookup.findStatic(A.class, "staticMethod", MethodType.methodType(int.class));
 
-    A a = new A();
     assertEquals(3, handle.invoke());
 
     __toVersion__(1);

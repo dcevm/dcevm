@@ -43,22 +43,22 @@ public class MethodHandleTest {
 
   // Version 0
   public static class A {
-    public int value() {
+    public int method() {
       return 1;
     }
 
-    public static int staticValue() {
+    public static int staticMethod() {
       return 3;
     }
   }
 
   // Version 1
   public static class A___1 {
-    public int value() {
+    public int method() {
       return 2;
     }
 
-    public static int staticValue() {
+    public static int staticMethod() {
       return 4;
     }
   }
@@ -74,7 +74,7 @@ public class MethodHandleTest {
     assert __version__() == 0;
 
     MethodHandles.Lookup lookup = MethodHandles.lookup();
-    MethodHandle handle = lookup.findVirtual(A.class, "value", MethodType.methodType(int.class));
+    MethodHandle handle = lookup.findVirtual(A.class, "method", MethodType.methodType(int.class));
 
     A a = new A();
     assertEquals(1, handle.invoke(a));
@@ -93,7 +93,7 @@ public class MethodHandleTest {
     assert __version__() == 0;
 
     MethodHandles.Lookup lookup = MethodHandles.lookup();
-    MethodHandle handle = lookup.findStatic(A.class, "staticValue", MethodType.methodType(int.class));
+    MethodHandle handle = lookup.findStatic(A.class, "staticMethod", MethodType.methodType(int.class));
 
     A a = new A();
     assertEquals(3, handle.invoke());

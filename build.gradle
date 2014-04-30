@@ -18,7 +18,7 @@ def jreFile = file(jre)
 // HotSpot itself
 project('hotspot') {
     task clean(type: InvokeMake) {
-        onlyIf { file('hotspot').exists() }
+        onlyIf { file('hotspot/make').exists() }
         args 'clean'
     }
 
@@ -42,7 +42,7 @@ project('hotspot') {
         }
     }
 
-    task pull(description: 'Pull OpenJDK HotSpot changes') {
+    task pull(description: 'Pull OpenJDK HotSpot changes', dependsOn: init) {
         doLast {
             def hotspotRepository = hotspotTag.contains('jdk7') ?
                 'http://hg.openjdk.java.net/jdk7u/jdk7u/hotspot' :

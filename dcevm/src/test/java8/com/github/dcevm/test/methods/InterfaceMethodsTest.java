@@ -56,7 +56,7 @@ public class InterfaceMethodsTest {
 
   // Version 1
   public static interface A___1 {
-    public static long staticMethod() {
+    public static int staticMethod() {
       return 2;
     }
   }

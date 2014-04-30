@@ -21,90 +21,89 @@
  * questions.
  *
  */
-
 package com.github.dcevm.test.methods;
 
 import org.junit.Before;
 import org.junit.Test;
+
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.assertEquals;
 
 /**
- * Tests for replacing default methods with instance methods.
+ * Test for replacing method with MethodHandle pointing to it.
  *
  * @author Ivan Dubrov
  */
-public class DefaultMethodsTest {
+public class MethodHandleTest {
+
+  // Version 0
+  public static class A {
+    public int value() {
+      return 1;
+    }
+
+    public static int staticValue() {
+      return 3;
+    }
+  }
+
+  // Version 1
+  public static class A___1 {
+    public int value() {
+      return 2;
+    }
+
+    public static int staticValue() {
+      return 4;
+    }
+  }
 
   @Before
   public void setUp() throws Exception {
     __toVersion__(0);
   }
 
-  // Version 0
-  public static interface A {
-    default int value() {
-      __toVersion__(1);
-      return 1 + value();
-    }
-  }
+  @Test
+  public void testMethodHandleUpdated() throws Throwable {
 
-  public static class B implements A {
-  }
+    assert __version__() == 0;
 
-  public static interface C {
-    int value();
-  }
+    MethodHandles.Lookup lookup = MethodHandles.lookup();
+    MethodHandle handle = lookup.findVirtual(A.class, "value", MethodType.methodType(int.class));
 
-  public static class D implements C {
-    @Override
-    public int value() {
-      __toVersion__(2);
-      return 3 + value();
-    }
-  }
+    A a = new A();
+    assertEquals(1, handle.invoke(a));
 
-  // Version 1
-  public static interface A___1 {
-    int value();
-  }
+    __toVersion__(1);
 
+    assertEquals(2, handle.invoke(a));
 
-  public static class B___1 implements A {
-    public int value() {
-      return 2;
-    }
-  }
-
-  // Version 2
-  public static interface C___2 {
-    default int value() {
-      return 5;
-    }
-  }
-
-  public static class D___2 implements C___2 {
+    __toVersion__(0);
+    assert __version__() == 0;
   }
 
   @Test
-  public void testDefaultMethodReplacedWithInstance() {
+  public void testStaticMethodHandleUpdated() throws Throwable {
+
     assert __version__() == 0;
 
-    A a = new B();
-    assertEquals(3, a.value());
+    MethodHandles.Lookup lookup = MethodHandles.lookup();
+    MethodHandle handle = lookup.findStatic(A.class, "staticValue", MethodType.methodType(int.class));
+
+    A a = new A();
+    assertEquals(3, handle.invoke());
+
+    __toVersion__(1);
+
+    assertEquals(4, handle.invoke());
 
     __toVersion__(0);
-  }
-
-  @Test
-  public void testInstanceMethodReplacedWithDefault() {
     assert __version__() == 0;
-
-    C c = new D();
-    assertEquals(8, c.value());
-
-    __toVersion__(0);
   }
+
 }

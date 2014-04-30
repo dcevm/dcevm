@@ -1,6 +1,12 @@
 /.gradle
 /.idea
-/hotspot
+/hotspot/*
+/hotspot/.hg/*
+/hotspot/.hg/patches/*
+!/hotspot/.hg/
+!/hotspot/.hg/patches
+!/hotspot/.hg/patches/*.patch
+!/hotspot/.hg/patches/series
 build
 *.iml
 hs_err*

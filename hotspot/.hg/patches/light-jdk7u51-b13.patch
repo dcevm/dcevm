@@ -4918,7 +4918,7 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses.cpp b/src/share/vm/prims/jv
        ++oi; // advance to next old method
        break;
      default:
-@@ -750,2065 +920,1316 @@
+@@ -750,2065 +920,1332 @@
    return JVMTI_ERROR_NONE;
  }
  
@@ -5720,6 +5720,22 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses.cpp b/src/share/vm/prims/jv
 +          //instanceMirrorKlass::oop_fields_iterate(obj, _closure);
 +        } else {
 +          obj->oop_iterate(_closure);
++        }
++
++        // Update method handles
++        // FIXME: should we also update fields?
++        if (java_lang_invoke_MemberName::is_instance(obj)) {
++          oop target = java_lang_invoke_MemberName::vmtarget(obj);
++          if (target != NULL && target->is_method()) {
++            methodOop m = (methodOop) target;
++            klassOop holder = m->method_holder();
++            if (!holder->klass_part()->is_newest_version()) {
++              // Let's try to re-resolve method
++              klassOop newest = holder->klass_part()->newest_version();
++              methodOop new_method = instanceKlass::cast(newest)->find_method(m->name(), m->signature());
++              java_lang_invoke_MemberName::set_vmtarget(obj, new_method);
++            }
++          }
 +        }
 +
 +        if (obj->blueprint()->new_version() != NULL) {
@@ -8191,7 +8207,7 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses.cpp b/src/share/vm/prims/jv
  }
  
  // This internal class transfers the native function registration from old methods
-@@ -2832,7 +2253,7 @@
+@@ -2832,7 +2269,7 @@
  // Same, caused by prefix removal only  3_2_1_m ->  3_2_m
  //
  class TransferNativeFunctionRegistration {
@@ -8200,7 +8216,7 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses.cpp b/src/share/vm/prims/jv
    instanceKlassHandle the_class;
    int prefix_count;
    char** prefixes;
-@@ -2845,42 +2266,42 @@
+@@ -2845,42 +2282,42 @@
    //    (2) with the prefix.
    // where 'prefix' is the prefix at that 'depth' (first prefix, second prefix,...)
    methodOop search_prefix_name_space(int depth, char* name_str, size_t name_len,
@@ -8274,7 +8290,7 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses.cpp b/src/share/vm/prims/jv
    }
  
    // Return the method name with old prefixes stripped away.
-@@ -2905,10 +2326,10 @@
+@@ -2905,10 +2342,10 @@
      ResourceMark rm;
      char* name_str = method_name_without_prefixes(method);
      return search_prefix_name_space(0, name_str, strlen(name_str),
@@ -8287,7 +8303,7 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses.cpp b/src/share/vm/prims/jv
  
    // Construct a native method transfer processor for this class.
    TransferNativeFunctionRegistration(instanceKlassHandle _the_class) {
-@@ -2919,9 +2340,9 @@
+@@ -2919,9 +2356,9 @@
    }
  
    // Attempt to transfer any of the old or deleted methods that are native
@@ -8299,7 +8315,7 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses.cpp b/src/share/vm/prims/jv
  
        if (old_method->is_native() && old_method->has_native_function()) {
          methodOop new_method = strip_and_search_for_new_native(old_method);
-@@ -2930,7 +2351,9 @@
+@@ -2930,7 +2367,9 @@
            // Redefine does not send events (except CFLH), certainly not this
            // behind the scenes re-registration.
            new_method->set_native_function(old_method->native_function(),
@@ -8310,7 +8326,7 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses.cpp b/src/share/vm/prims/jv
          }
        }
      }
-@@ -2938,534 +2361,8 @@
+@@ -2938,534 +2377,8 @@
  };
  
  // Don't lose the association between a native method and its JNI function.

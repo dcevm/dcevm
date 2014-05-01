@@ -2,7 +2,7 @@
 distro-name.patch
 
 # Add AllowEnhancedRedefinition argument
-arguments-java8.patch
+arguments-java8.patch #+jdk8
 
 # GC changes to allow modifying instances during redefinition run
 gc-java8.patch #+jdk8

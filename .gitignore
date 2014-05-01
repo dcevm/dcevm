@@ -11,3 +11,4 @@ build
 *.iml
 hs_err*
 core
+hotspot.log

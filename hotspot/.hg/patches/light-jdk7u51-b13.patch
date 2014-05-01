@@ -2063,7 +2063,7 @@ diff --git a/src/share/vm/oops/cpCacheOop.cpp b/src/share/vm/oops/cpCacheOop.cpp
  void ConstantPoolCacheEntry::print(outputStream* st, int index) const {
    // print separator
    if (index == 0) st->print_cr("                 -------------");
-@@ -663,60 +559,10 @@
+@@ -663,60 +559,12 @@
    }
  }
  
@@ -2104,7 +2104,9 @@ diff --git a/src/share/vm/oops/cpCacheOop.cpp b/src/share/vm/oops/cpCacheOop.cpp
 -        break;
 -      }
 -    }
-+     entry_at(i)->initialize_entry(entry_at(i)->constant_pool_index());
++     if (!entry_at(i)->is_secondary_entry()) {
++       entry_at(i)->initialize_entry(entry_at(i)->constant_pool_index());
++     }
    }
  }
  

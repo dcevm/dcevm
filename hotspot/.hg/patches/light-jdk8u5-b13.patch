@@ -958,7 +958,7 @@ diff --git a/src/share/vm/oops/cpCache.cpp b/src/share/vm/oops/cpCache.cpp
      resolved_references->obj_at_put(method_type_index, method_type());
    }
  
-@@ -532,6 +534,26 @@
+@@ -532,6 +534,27 @@
    // the method is in the interesting class so the entry is interesting
    return true;
  }
@@ -980,12 +980,13 @@ diff --git a/src/share/vm/oops/cpCache.cpp b/src/share/vm/oops/cpCache.cpp
 +  // FIXME: (DCEVM) we want to clear flags, but parameter size is actually used
 +  // after we return from the method, before entry is re-initialized. So let's
 +  // keep parameter size the same.
++  // For example, it's used in TemplateInterpreterGenerator::generate_return_entry_for
 +  _flags &= 0x0000000f;
 +}
  #endif // INCLUDE_JVMTI
  
  void ConstantPoolCacheEntry::print(outputStream* st, int index) const {
-@@ -660,6 +682,14 @@
+@@ -660,6 +683,14 @@
      }
    }
  }
@@ -1563,7 +1564,7 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.cpp b/src/share/vm/prims/j
 new file mode 100644
 --- /dev/null
 +++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
-@@ -0,0 +1,2085 @@
+@@ -0,0 +1,2086 @@
 +/*
 + * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
 + * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
@@ -1708,6 +1709,7 @@ new file mode 100644
 +    instanceKlassHandle klass_handle(Thread::current(), java_lang_Class::as_Klass(mirror));
 +    klass_handle->set_redefinition_flag(Klass::MarkedAsAffected);
 +    assert(klass_handle->new_version() == NULL, "Must be new class");
++    RC_TRACE(0x00000001, ("Class being reloaded: %s", klass_handle->name()->as_C_string()));
 +  }
 +
 +  // Find classes not directly redefined, but affected by a redefinition (because one of its supertypes is redefined)

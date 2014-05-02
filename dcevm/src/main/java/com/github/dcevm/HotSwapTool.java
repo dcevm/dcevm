@@ -131,7 +131,7 @@ public class HotSwapTool {
      * @param outerClass    the outer class whose inner classes should be redefined
      * @param versionNumber the target version number
      */
-    public static void toVersion(Class<?> outerClass, int versionNumber) {
+    public static void toVersion(Class<?> outerClass, int versionNumber, Class<?>... extraClasses) {
         assert versionNumber >= 0;
 
         if (versionNumber == getCurrentVersion(outerClass)) {
@@ -140,6 +140,18 @@ public class HotSwapTool {
         }
 
         Map<String, File> files = findClassesWithVersion(outerClass, versionNumber);
+
+        for (Class<?> extra : extraClasses) {
+            if (parseClassVersion(extra.getSimpleName()) == versionNumber) {
+                String packageName = extra.getPackage().getName().replace('.', '/');
+                URL url = extra.getClassLoader().getResource(packageName);
+                if (url == null) {
+                    throw new IllegalArgumentException("Cannot find URL corresponding to the package '" + packageName + "'");
+                }
+                File file = new File(url.getFile(), extra.getSimpleName() + ".class");
+                files.put(extra.getName(), file);
+            }
+        }
 
         try {
             Map<Class<?>, byte[]> map = buildRedefinitionMap(files);
@@ -171,11 +183,10 @@ public class HotSwapTool {
         }
         File folder = new File(url.getFile());
         for (File f : folder.listFiles(IsClassFile.INSTANCE)) {
-            String fileName = f.getName();
             String simpleName = f.getName().substring(0, f.getName().length() - CLASS_FILE_SUFFIX.length());
             String name = baseClass.getPackage().getName() + '.' + simpleName;
 
-            if (isInnerClass(name, baseClass) && parseClassVersion(fileName) == version) {
+            if (isInnerClass(name, baseClass) && parseClassVersion(simpleName) == version) {
                 classes.put(name, f);
             }
         }
@@ -202,12 +213,12 @@ public class HotSwapTool {
     /**
      * Parse version of the class from the class name. Classes are named in the form of [Name]___[Version]
      */
-    private static int parseClassVersion(String name) {
-        int index = name.indexOf(IDENTIFIER);
+    private static int parseClassVersion(String simpleName) {
+        int index = simpleName.indexOf(IDENTIFIER);
         if (index == -1) {
             return 0;
         }
-        return Integer.valueOf(name.substring(index + IDENTIFIER.length(), name.length() - CLASS_FILE_SUFFIX.length()));
+        return Integer.valueOf(simpleName.substring(index + IDENTIFIER.length(), simpleName.length()));
     }
 
     private static String stripVersion(String className) {

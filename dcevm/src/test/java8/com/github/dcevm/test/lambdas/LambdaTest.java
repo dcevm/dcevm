@@ -36,7 +36,11 @@ import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
 import static org.junit.Assert.assertEquals;
 
 /**
- * Tests for lambda expressions
+ * Tests for lambda expressions.
+ *
+ * These lambdas are sneaky. First, it seems like generated lambda method names are arbitrary and depend
+ * on the compilation order. However, for redefinition test we want to make sure that generated method names would
+ * actually match in old and new versions, so we have keep classes being redefined outside of this inner class.
  *
  * @author Ivan Dubrov
  */
@@ -48,39 +52,16 @@ public class LambdaTest {
     __toVersion__(0);
   }
 
-  // Version 0
-  public static class A {
-    public Callable<Integer> createLambda() {
-      return () -> 10;
-    }
-
-    public Callable<Integer> createLambda2() {
-      return () -> 20;
-    }
-  }
-
-  // Version 1
-  public static class A___1 {
-    public Callable<Integer> createLambda2() {
-      return () -> 40;
-    }
-
-    public Callable<Integer> createLambda() {
-      return () -> 30;
-    }
-  }
-
   @Test
-  @Ignore
   public void testMethodLambda() throws Exception {
-    A a = new A();
+    LambdaA a = new LambdaA();
     Callable<Integer> lambda = a.createLambda();
     Callable<Integer> lambda2 = a.createLambda2();
 
     assertEquals(10, (int) lambda.call());
     assertEquals(20, (int) lambda2.call());
 
-    __toVersion__(1);
+    __toVersion__(1, LambdaA___1.class);
 
     assertEquals(30, (int) lambda.call());
     assertEquals(40, (int) lambda2.call());

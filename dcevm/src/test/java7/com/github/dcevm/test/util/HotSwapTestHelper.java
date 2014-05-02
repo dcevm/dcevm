@@ -49,8 +49,8 @@ public class HotSwapTestHelper {
      *
      * @param versionNumber the target version number
      */
-    public static void __toVersion__(int versionNumber) {
-        HotSwapTool.toVersion(determineOuter(0), versionNumber);
+    public static void __toVersion__(int versionNumber, Class<?>... extra) {
+        HotSwapTool.toVersion(determineOuter(0), versionNumber, extra);
     }
 
     /**

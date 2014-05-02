@@ -1564,7 +1564,7 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.cpp b/src/share/vm/prims/j
 new file mode 100644
 --- /dev/null
 +++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
-@@ -0,0 +1,2102 @@
+@@ -0,0 +1,2107 @@
 +/*
 + * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
 + * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
@@ -3048,6 +3048,11 @@ new file mode 100644
 +  HandleMark hm(_thread);
 +  InstanceKlass *ik = InstanceKlass::cast(klass);
 +  constantPoolHandle other_cp = constantPoolHandle(ik->constants());
++
++  // Update host klass of anonymous classes (for example, produced by lambdas) to newest version.
++  if (ik->is_anonymous() && !ik->host_klass()->is_newest_version()) {
++    ik->set_host_klass(ik->host_klass()->newest_version());
++  }
 +
 +  for (int i = 0; i < other_cp->length(); i++) {
 +    if (other_cp->tag_at(i).is_klass()) {

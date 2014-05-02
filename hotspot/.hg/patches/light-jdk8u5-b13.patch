@@ -970,7 +970,7 @@ diff --git a/src/share/vm/oops/cpCache.cpp b/src/share/vm/oops/cpCache.cpp
 +       bytecode_1() == Bytecodes::_invokehandle ||
 +       bytecode_1() == Bytecodes::_invokedynamic) {
 +    // Entry wasn't initialized yet or was initialized for invokehandle/invokedynamic.
-+    // Don't clear it since f2 is not reset when during entry re-resolution.
++    // Don't clear it since f2 will not be reset during entry re-resolution.
 +    return;
 +  }
 +  _indices = constant_pool_index();

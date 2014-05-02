@@ -966,11 +966,11 @@ diff --git a/src/share/vm/oops/cpCache.cpp b/src/share/vm/oops/cpCache.cpp
 +// Enhanced RedefineClasses() API support (DCEVM):
 +// Clear cached entry, let it be re-resolved
 +void ConstantPoolCacheEntry::clear_entry() {
-+  // Clear entry during class redefinition. Note that we still keep flags.
-+  if (has_appendix()) {
-+    // (DCEVM): Now this gets really ugly. If this entry is used by invokehandle, we cannot
-+    // clear it just like that (data is used by _invokehandle bytecode which wouldn't re-resolve anything).
-+    // FIXME: (DCEVM) need to figure out if we need to rewrite it somehow or it should be fine...
++  if (_indices == constant_pool_index() ||
++       bytecode_1() == Bytecodes::_invokehandle ||
++       bytecode_1() == Bytecodes::_invokedynamic) {
++    // Entry wasn't initialized yet or was initialized for invokehandle/invokedynamic.
++    // Don't clear it since f2 is not reset when during entry re-resolution.
 +    return;
 +  }
 +  _indices = constant_pool_index();
@@ -1564,7 +1564,7 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.cpp b/src/share/vm/prims/j
 new file mode 100644
 --- /dev/null
 +++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
-@@ -0,0 +1,2086 @@
+@@ -0,0 +1,2100 @@
 +/*
 + * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
 + * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
@@ -3263,6 +3263,20 @@ new file mode 100644
 +  MemberNameTable* mnt = the_old_class->member_names();
 +  the_new_class->set_member_names(mnt);
 +  the_old_class->set_member_names(NULL);
++
++  // FIXME: should we add field MemberName's in this list and process all of them here?
++//  if (mnt != NULL) {
++//    for (int i = 0; i < mnt->length(); i++) {
++//      oop mem_name = mnt->get_member_name(i);
++//      if (mem_name != NULL) {
++//        Method* method = (Method*) java_lang_invoke_MemberName::vmtarget(mem_name);
++//
++//        // Replace the method with matching one from the new class
++//        Method* new_method = the_new_class->find_method(method->name(), method->signature());
++//        java_lang_invoke_MemberName::set_vmtarget(mem_name, new_method);
++//      }
++//    }
++//  }
 +
 +#ifdef ASSERT
 +

@@ -1564,7 +1564,7 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.cpp b/src/share/vm/prims/j
 new file mode 100644
 --- /dev/null
 +++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
-@@ -0,0 +1,2101 @@
+@@ -0,0 +1,2102 @@
 +/*
 + * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
 + * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
@@ -2395,7 +2395,7 @@ new file mode 100644
 +        result = result | Klass::ModifyClass;
 +      }
 +      {
-+      u2 num = the_class->next_method_idnum();
++      u2 num = new_class->next_method_idnum();
 +      if (num == ConstMethod::UNSET_IDNUM) {
 +        // cannot add any more methods
 +        result = result | Klass::ModifyClass;
@@ -2409,8 +2409,8 @@ new file mode 100644
 +      k_new_method->set_method_idnum(num);
 +      swap_all_method_annotations(k_old_method->constMethod(), k_new_method->constMethod());
 +      }
-+    RC_TRACE(0x00008000, ("Method added: new: %s [%d]",
-+                         k_new_method->name_and_sig_as_C_string(), ni));
++    RC_TRACE(0x00008000, ("Method added: new: %s [%d], idnum %d",
++                         k_new_method->name_and_sig_as_C_string(), ni, k_new_method->method_idnum()));
 +    ++ni; // advance to next new method
 +    break;
 +  case deleted:
@@ -3262,6 +3262,7 @@ new file mode 100644
 +
 +  // Swap method handles
 +  MemberNameTable* mnt = the_old_class->member_names();
++  assert(the_new_class->member_names() == NULL, "");
 +  the_new_class->set_member_names(mnt);
 +  the_old_class->set_member_names(NULL);
 +

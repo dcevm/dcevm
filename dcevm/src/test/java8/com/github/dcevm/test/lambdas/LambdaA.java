@@ -1,13 +1,14 @@
 package com.github.dcevm.test.lambdas;
 
+import java.io.Serializable;
 import java.util.concurrent.Callable;
 
-public class LambdaA {
-    public Callable<Integer> createLambda() {
+public class LambdaA implements Serializable {
+    public SerializableCallable<Integer> createLambda() {
         return () -> 10;
     }
 
-    public Callable<Integer> createLambda2() {
+    public SerializableCallable<Integer> createLambda2() {
         return () -> 20;
     }
 }

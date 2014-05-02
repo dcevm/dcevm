@@ -53,7 +53,6 @@ public class LambdaTest {
   }
 
   @Test
-  @Ignore
   public void testMethodLambda() throws Exception {
     LambdaA a = new LambdaA();
     Callable<Integer> lambda = a.createLambda();

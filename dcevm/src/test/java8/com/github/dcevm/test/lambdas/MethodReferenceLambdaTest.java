@@ -26,7 +26,6 @@ package com.github.dcevm.test.lambdas;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.concurrent.Callable;
@@ -40,7 +39,7 @@ import static org.junit.Assert.assertEquals;
  *
  * @author Ivan Dubrov
  */
-public class LambdaTest {
+public class MethodReferenceLambdaTest {
 
   @Before
   @After
@@ -50,39 +49,59 @@ public class LambdaTest {
 
   // Version 0
   public static class A {
-    public Callable<Integer> createLambda() {
-      return () -> 10;
+    private int fieldA = 10;
+
+    public static Callable<Integer> createLambda() {
+      return A::value;
     }
 
     public Callable<Integer> createLambda2() {
-      return () -> 20;
+      return this::fieldValue;
+    }
+
+    public static int value() {
+      return 1;
+    }
+
+    public int fieldValue() {
+      return -1;
     }
   }
 
   // Version 1
   public static class A___1 {
-    public Callable<Integer> createLambda2() {
-      return () -> 40;
+    private int fieldA;
+
+    public static Callable<Integer> createLambda() {
+      return A::value;
     }
 
-    public Callable<Integer> createLambda() {
-      return () -> 30;
+    public Callable<Integer> createLambda2() {
+      return this::fieldValue;
+    }
+
+    public static int value() {
+      return 2;
+    }
+
+    public int fieldValue() {
+      return fieldA;
     }
   }
 
   @Test
-  @Ignore
   public void testMethodLambda() throws Exception {
-    A a = new A();
-    Callable<Integer> lambda = a.createLambda();
-    Callable<Integer> lambda2 = a.createLambda2();
+    assert __version__() == 0;
 
-    assertEquals(10, (int) lambda.call());
-    assertEquals(20, (int) lambda2.call());
+    Callable<Integer> lambda = A.createLambda();
+    Callable<Integer> lambda2 = new A().createLambda2();
+
+    assertEquals(1, (int) lambda.call());
+    assertEquals(-1, (int) lambda2.call());
 
     __toVersion__(1);
 
-    assertEquals(30, (int) lambda.call());
-    assertEquals(40, (int) lambda2.call());
+    assertEquals(2, (int) lambda.call());
+    assertEquals(10, (int) lambda2.call());
   }
 }

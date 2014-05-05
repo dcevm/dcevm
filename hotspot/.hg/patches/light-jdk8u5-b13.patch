@@ -392,7 +392,7 @@ diff --git a/src/share/vm/classfile/javaClasses.cpp b/src/share/vm/classfile/jav
      if (method->is_hidden()) {
        if (skip_hidden)  continue;
      }
-@@ -2617,10 +2619,55 @@
+@@ -2617,6 +2619,50 @@
    }
  }
  
@@ -443,37 +443,7 @@ diff --git a/src/share/vm/classfile/javaClasses.cpp b/src/share/vm/classfile/jav
  // Support for java_lang_invoke_MethodHandle
  
  int java_lang_invoke_MethodHandle::_type_offset;
- int java_lang_invoke_MethodHandle::_form_offset;
-+int java_lang_invoke_MethodHandle::_as_type_cache_offset;
- 
- int java_lang_invoke_MemberName::_clazz_offset;
- int java_lang_invoke_MemberName::_name_offset;
-@@ -2640,6 +2687,7 @@
-     if (_form_offset == 0) {
-       EnableInvokeDynamic = false;
-     }
-+    compute_offset(_as_type_cache_offset, klass_oop, vmSymbols::as_type_cache_name(), vmSymbols::java_lang_invoke_MethodHandle_signature());
-   }
- }
- 
-@@ -2679,6 +2727,16 @@
-   mh->obj_field_put(_form_offset, lform);
- }
- 
-+oop java_lang_invoke_MethodHandle::as_type_cache(oop mh) {
-+  assert(_as_type_cache_offset != 0, "");
-+  return mh->obj_field(_as_type_cache_offset);
-+}
-+
-+void java_lang_invoke_MethodHandle::set_as_type_cache(oop mh, oop as_type_cache) {
-+  assert(_as_type_cache_offset != 0, "");
-+  mh->obj_field_put(_as_type_cache_offset, as_type_cache);
-+}
-+
- /// MemberName accessors
- 
- oop java_lang_invoke_MemberName::clazz(oop mname) {
-@@ -3269,6 +3327,9 @@
+@@ -3269,6 +3315,9 @@
      java_lang_invoke_LambdaForm::compute_offsets();
      java_lang_invoke_MethodType::compute_offsets();
      java_lang_invoke_CallSite::compute_offsets();
@@ -486,25 +456,7 @@ diff --git a/src/share/vm/classfile/javaClasses.cpp b/src/share/vm/classfile/jav
 diff --git a/src/share/vm/classfile/javaClasses.hpp b/src/share/vm/classfile/javaClasses.hpp
 --- a/src/share/vm/classfile/javaClasses.hpp
 +++ b/src/share/vm/classfile/javaClasses.hpp
-@@ -953,6 +953,7 @@
-  private:
-   static int _type_offset;               // the MethodType of this MH
-   static int _form_offset;               // the LambdaForm of this MH
-+  static int _as_type_cache_offset;      // (DCEVM) internal cache, cleared on redefinition when field is not available
- 
-   static void compute_offsets();
- 
-@@ -964,6 +965,9 @@
-   static oop            form(oop mh);
-   static void       set_form(oop mh, oop lform);
- 
-+  static oop            as_type_cache(oop mh);
-+  static void       set_as_type_cache(oop mh, oop as_type_cache);
-+
-   // Testers
-   static bool is_subclass(Klass* klass) {
-     return klass->is_subclass_of(SystemDictionary::MethodHandle_klass());
-@@ -1003,6 +1007,52 @@
+@@ -1003,6 +1003,52 @@
    static int member_offset_in_bytes()           { return _member_offset; }
  };
  
@@ -1564,7 +1516,7 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.cpp b/src/share/vm/prims/j
 new file mode 100644
 --- /dev/null
 +++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
-@@ -0,0 +1,2122 @@
+@@ -0,0 +1,2128 @@
 +/*
 + * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
 + * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.

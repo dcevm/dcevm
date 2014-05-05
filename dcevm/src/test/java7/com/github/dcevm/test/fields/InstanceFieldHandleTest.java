@@ -24,8 +24,8 @@
 package com.github.dcevm.test.fields;
 
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.lang.invoke.MethodHandle;
@@ -45,13 +45,21 @@ public class InstanceFieldHandleTest {
   public static class A {
     public int fieldA;
     public int fieldB;
+
+    public int getFieldA() {
+      return -1;
+    }
   }
 
   // Version 1 (fields swapped and new one is added)
   public static class A___1 {
-    public String fieldC;
     public int fieldB;
     public int fieldA;
+    public String fieldC;
+
+    public int getFieldA() {
+      return fieldA;
+    }
   }
 
   // Version 2 (fields removed)
@@ -73,41 +81,72 @@ public class InstanceFieldHandleTest {
   @Test
   public void testFieldChangeOrder() throws Throwable {
     A a = new A();
-    MethodHandle handle = MethodHandles.publicLookup().findGetter(A.class, "fieldA", int.class);
+    MethodHandle getter = MethodHandles.publicLookup().findGetter(A.class, "fieldA", int.class);
+    MethodHandle setter = MethodHandles.publicLookup().findSetter(A.class, "fieldA", int.class);
 
     a.fieldA = 3;
-    assertEquals(3, handle.invoke(a));
+    assertEquals(3, getter.invoke(a));
 
     // Swap fields
     __toVersion__(1);
-    assertEquals(3, handle.invoke(a));
+
+    assertEquals(3, getter.invoke(a));
+    setter.invoke(a, 53);
+    assertEquals(53, a.getFieldA());
+    assertEquals(53, getter.invoke(a));
   }
 
   @Test
-  @Ignore
-  public void testStaticFieldRemoved() throws Throwable {
-    MethodHandle handle = MethodHandles.publicLookup().findGetter(A.class, "fieldA", int.class);
+  public void testFieldRemoved() throws Throwable {
     A a = new A();
+    MethodHandle getter = MethodHandles.publicLookup().findGetter(A.class, "fieldA", int.class);
+    MethodHandle setter = MethodHandles.publicLookup().findSetter(A.class, "fieldA", int.class);
+
     a.fieldA = 3;
-    assertEquals(3, handle.invoke(a));
+    assertEquals(3, getter.invoke(a));
 
     // Remove fieldA
     __toVersion__(2);
 
-    handle.invoke(a);
+    try {
+      getter.invoke(a);
+      Assert.fail("Handle should have been cleared!");
+    } catch (NullPointerException e) {
+      // Handle was cleared!
+    }
+
+    try {
+      setter.invoke(a, 10);
+      Assert.fail("Handle should have been cleared!");
+    } catch (NullPointerException e) {
+      // Handle was cleared!
+    }
   }
 
   @Test
-  @Ignore
-  public void testStaticFieldTypeChange() throws Throwable {
-    MethodHandle handle = MethodHandles.publicLookup().findGetter(A.class, "fieldA", int.class);
+  public void testFieldTypeChange() throws Throwable {
     A a = new A();
+    MethodHandle getter = MethodHandles.publicLookup().findGetter(A.class, "fieldA", int.class);
+    MethodHandle setter = MethodHandles.publicLookup().findSetter(A.class, "fieldA", int.class);
+
     a.fieldA = 3;
-    assertEquals(3, handle.invoke(a));
+    assertEquals(3, getter.invoke(a));
 
     // Remove fieldA
     __toVersion__(3);
 
-    handle.invoke(a);
+    try {
+      getter.invoke(a);
+      Assert.fail("Handle should have been cleared!");
+    } catch (NullPointerException e) {
+      // Handle was cleared!
+    }
+
+    try {
+      setter.invoke(a, 10);
+      Assert.fail("Handle should have been cleared!");
+    } catch (NullPointerException e) {
+      // Handle was cleared!
+    }
   }
 }

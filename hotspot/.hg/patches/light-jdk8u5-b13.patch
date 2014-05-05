@@ -1564,7 +1564,7 @@ diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.cpp b/src/share/vm/prims/j
 new file mode 100644
 --- /dev/null
 +++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
-@@ -0,0 +1,2107 @@
+@@ -0,0 +1,2122 @@
 +/*
 + * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
 + * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
@@ -2631,6 +2631,88 @@ new file mode 100644
 +
 +template <class S>
 +class ChangePointersOopClosure : public ExtendedOopClosure {
++  // import java_lang_invoke_MemberName.*
++  enum {
++    REFERENCE_KIND_SHIFT = java_lang_invoke_MemberName::MN_REFERENCE_KIND_SHIFT,
++    REFERENCE_KIND_MASK  = java_lang_invoke_MemberName::MN_REFERENCE_KIND_MASK,
++  };
++
++
++  bool update_member_name(oop obj) {
++    int flags    =       java_lang_invoke_MemberName::flags(obj);
++    int ref_kind =       (flags >> REFERENCE_KIND_SHIFT) & REFERENCE_KIND_MASK;
++    if (MethodHandles::ref_kind_is_method(ref_kind)) {
++      Method* m = (Method*) java_lang_invoke_MemberName::vmtarget(obj);
++      if (m != NULL && !m->method_holder()->is_newest_version()) {
++        // Let's try to re-resolve method
++        InstanceKlass* newest = InstanceKlass::cast(m->method_holder()->newest_version());
++        Method* new_method = newest->find_method(m->name(), m->signature());
++
++        // Note: we might set NULL at this point, which should force AbstractMethodError at runtime
++        java_lang_invoke_MemberName::set_vmtarget(obj, new_method);
++      }
++    } else if (MethodHandles::ref_kind_is_field(ref_kind)) {
++      Klass* k = (Klass*) java_lang_invoke_MemberName::vmtarget(obj);
++      if (k == NULL) {
++        return false; // Was cleared before, this MemberName is invalid.
++      }
++
++      if (k != NULL && !k->is_newest_version()) {
++        // Let's try to re-resolve field
++        fieldDescriptor fd;
++        int offset = java_lang_invoke_MemberName::vmindex(obj);
++        bool is_static = MethodHandles::ref_kind_is_static(ref_kind);
++        InstanceKlass* ik = InstanceKlass::cast(k);
++        if (ik->find_local_field_from_offset(offset, is_static, &fd)) {
++          InstanceKlass* newest = InstanceKlass::cast(k->newest_version());
++          fieldDescriptor fd_new;
++          if (newest->find_local_field(fd.name(), fd.signature(), &fd_new)) {
++            java_lang_invoke_MemberName::set_vmtarget(obj, newest);
++            java_lang_invoke_MemberName::set_vmindex(obj, fd_new.offset());
++          } else {
++            // Matching field is not found in new version, not much we can do here.
++            // JVM will crash once faulty MH is invoked.
++            // However, to avoid that all DMH's using this faulty MH are cleared (set to NULL)
++            // Eventually, we probably want to replace them with something more meaningful,
++            // like instance throwing NoSuchFieldError or DMH that will resort to dynamic
++            // field resolution (with possibility of type conversion)
++            java_lang_invoke_MemberName::set_vmtarget(obj, NULL);
++            java_lang_invoke_MemberName::set_vmindex(obj, 0);
++            return false;
++          }
++        }
++      }
++    }
++    return true;
++  }
++
++  bool update_direct_method_handle(oop obj) {
++    // Always update member name first.
++    oop mem_name = java_lang_invoke_DirectMethodHandle::member(obj);
++    if (!update_member_name(mem_name)) {
++      return false;
++    }
++
++    // Here we rely on DirectMethodHandle implementation.
++    // The current implementation caches field offset in $StaticAccessor/$Accessor
++    int flags    =       java_lang_invoke_MemberName::flags(mem_name);
++    int ref_kind =       (flags >> REFERENCE_KIND_SHIFT) & REFERENCE_KIND_MASK;
++    if (MethodHandles::ref_kind_is_field(ref_kind)) {
++      // Note: we don't care about staticBase field (which is java.lang.Class)
++      // It should be processed during normal object update.
++      // Update offset in StaticAccessor
++      int offset = java_lang_invoke_MemberName::vmindex(mem_name);
++      if (offset != 0) { // index of 0 means that field no longer exist
++        if (java_lang_invoke_DirectMethodHandle_StaticAccessor::is_instance(obj)) {
++          java_lang_invoke_DirectMethodHandle_StaticAccessor::set_static_offset(obj, offset);
++        } else if (java_lang_invoke_DirectMethodHandle_Accessor::is_instance(obj)) {
++          java_lang_invoke_DirectMethodHandle_Accessor::set_field_offset(obj, offset);
++        }
++      }
++    }
++    return true;
++  }
++
 +  // Forward pointers to InstanceKlass and mirror class to new versions
 +  template <class T>
 +  inline void do_oop_work(T* p) {
@@ -2646,6 +2728,17 @@ new file mode 100644
 +          obj = InstanceKlass::cast(klass->new_version())->java_mirror();
 +          S::oop_store(p, obj);
 +        }
++      }
++    }
++
++    // JSR 292 support, uptade java.lang.invoke.MemberName instances
++    if (java_lang_invoke_MemberName::is_instance(obj)) {
++      update_member_name(obj);
++    } else if (java_lang_invoke_DirectMethodHandle::is_instance(obj)) {
++      if (!update_direct_method_handle(obj)) {
++        // DMH is no longer valid, replace it with null reference.
++        // See note above. We probably want to replace this with something more meaningful.
++        S::oop_store(p, NULL);
 +      }
 +    }
 +  }
@@ -2697,12 +2790,6 @@ new file mode 100644
 +    class ChangePointersObjectClosure : public ObjectClosure {
 +      private:
 +
-+      // import java_lang_invoke_MemberName.*
-+      enum {
-+        REFERENCE_KIND_SHIFT = java_lang_invoke_MemberName::MN_REFERENCE_KIND_SHIFT,
-+        REFERENCE_KIND_MASK  = java_lang_invoke_MemberName::MN_REFERENCE_KIND_MASK,
-+      };
-+
 +      OopClosure *_closure;
 +      bool _needs_instance_update;
 +      oop _tmp_obj;
@@ -2724,73 +2811,7 @@ new file mode 100644
 +        Copy::aligned_disjoint_words((HeapWord*)o, (HeapWord*)_tmp_obj, size);
 +      }
 +
-+      void update_member_name(oop obj) {
-+        int flags    =       java_lang_invoke_MemberName::flags(obj);
-+        int ref_kind =       (flags >> REFERENCE_KIND_SHIFT) & REFERENCE_KIND_MASK;
-+        if (MethodHandles::ref_kind_is_method(ref_kind)) {
-+          Method* m = (Method*) java_lang_invoke_MemberName::vmtarget(obj);
-+          if (m != NULL && !m->method_holder()->is_newest_version()) {
-+            // Let's try to re-resolve method
-+            InstanceKlass* newest = InstanceKlass::cast(m->method_holder()->newest_version());
-+            Method* new_method = newest->find_method(m->name(), m->signature());
-+
-+            // Note: we might set NULL at this point, which should force AbstractMethodError at runtime
-+            java_lang_invoke_MemberName::set_vmtarget(obj, new_method);
-+          }
-+        } else if (MethodHandles::ref_kind_is_field(ref_kind)) {
-+          Klass* k = (Klass*) java_lang_invoke_MemberName::vmtarget(obj);
-+          if (k != NULL && !k->is_newest_version()) {
-+            // Let's try to re-resolve field
-+            fieldDescriptor fd;
-+            int offset = java_lang_invoke_MemberName::vmindex(obj);
-+            bool is_static = MethodHandles::ref_kind_is_static(ref_kind);
-+            InstanceKlass* ik = InstanceKlass::cast(k);
-+            if (ik->find_local_field_from_offset(offset, is_static, &fd)) {
-+              InstanceKlass* newest = InstanceKlass::cast(k->newest_version());
-+              fieldDescriptor fd_new;
-+              if (newest->find_local_field(fd.name(), fd.signature(), &fd_new)) {
-+                java_lang_invoke_MemberName::set_vmtarget(obj, newest);
-+                java_lang_invoke_MemberName::set_vmindex(obj, fd_new.offset());
-+              } else {
-+                // Well, not much we can do here. JVM will crash once faulty MH is invoked.
-+              }
-+            }
-+          }
-+        }
-+      }
-+
-+      void update_direct_method_handle(oop obj) {
-+        // Always update member name first.
-+        oop mem_name = java_lang_invoke_DirectMethodHandle::member(obj);
-+        update_member_name(mem_name);
-+
-+        // Here we rely on DirectMethodHandle implementation.
-+        // The current implementation caches field offset in $StaticAccessor/$Accessor
-+        int flags    =       java_lang_invoke_MemberName::flags(mem_name);
-+        int ref_kind =       (flags >> REFERENCE_KIND_SHIFT) & REFERENCE_KIND_MASK;
-+        if (MethodHandles::ref_kind_is_field(ref_kind)) {
-+          // Note: we don't care about staticBase field (which is java.lang.Class)
-+          // It should be processed during normal object update.
-+          // Update offset in StaticAccessor
-+          int offset = java_lang_invoke_MemberName::vmindex(mem_name);
-+          if (offset != 0) { // index of 0 means that field no longer exist
-+            if (java_lang_invoke_DirectMethodHandle_StaticAccessor::is_instance(obj)) {
-+              java_lang_invoke_DirectMethodHandle_StaticAccessor::set_static_offset(obj, offset);
-+            } else if (java_lang_invoke_DirectMethodHandle_Accessor::is_instance(obj)) {
-+              java_lang_invoke_DirectMethodHandle_Accessor::set_field_offset(obj, offset);
-+            }
-+          }
-+        }
-+      }
-+
 +      virtual void do_object(oop obj) {
-+        // JSR 292 support, uptade java.lang.invoke.MemberName instances
-+        if (java_lang_invoke_MemberName::is_instance(obj)) {
-+          update_member_name(obj);
-+        } else if (java_lang_invoke_DirectMethodHandle::is_instance(obj)) {
-+          update_direct_method_handle(obj);
-+        }
-+
 +        // FIXME: if (obj->is_instanceKlass()) return;
 +        if (obj->is_instanceMirror()) {
 +          // static fields may have references to old java.lang.Class instances, update them

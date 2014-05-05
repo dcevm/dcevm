@@ -7,6 +7,9 @@ arguments-java8.patch #+jdk8
 # GC changes to allow modifying instances during redefinition run
 gc-java8.patch #+jdk8
 
+# Add support for certain DMH implementations
+dmh-field-accessors-java8.patch #+jdk8
+
 # Rest of the changes
 full-jdk7u11-b21.patch  #+full-jdk7u11-b21
 full-jdk7u45-b08.patch  #+full-jdk7u45-b08

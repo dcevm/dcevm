@@ -3650,7 +3650,7 @@ new file mode 100644
 +  // and redefine implementation
 +  static bool is_modifiable_class(oop klass_mirror);
 +
-+  // Utility methods for transfering field access flags
++  // Utility methods for transferring field access flags
 +
 +  static void transfer_special_access_flags(JavaFieldStream *from, JavaFieldStream *to);
 +  static void transfer_special_access_flags(fieldDescriptor *from, fieldDescriptor *to);

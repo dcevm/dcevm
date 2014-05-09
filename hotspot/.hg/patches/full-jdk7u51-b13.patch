@@ -1822,7 +1822,7 @@ diff -r 6c6a2299029a src/share/vm/interpreter/interpreterRuntime.cpp
 +    
 +    int new_bci = m->calculate_forward_bci(next_bci, forward_method);
 +    if (TraceRedefineClasses >= 2) {
-+      tty->print_cr("Transfering execution of %s to new method old_bci=%d new_bci=%d", forward_method->name()->as_C_string(), bci, new_bci);
++      tty->print_cr("Transferring execution of %s to new method old_bci=%d new_bci=%d", forward_method->name()->as_C_string(), bci, new_bci);
 +    }
 +    RegisterMap reg_map(thread);
 +    vframe* vf = vframe::new_vframe(&f, &reg_map, thread);
@@ -7374,7 +7374,7 @@ diff -r 6c6a2299029a src/share/vm/prims/jvmtiRedefineClasses.cpp
 +                    // We must transfer now and cannot delay until next NOP.
 +                    int new_bci = m->calculate_forward_bci(bci, new_method);
 +                    interpretedVFrame* iframe = interpretedVFrame::cast(jvf);
-+                    RC_TRACE(0x00000002, ("Transfering execution of %s to new method old_bci=%d new_bci=%d",
++                    RC_TRACE(0x00000002, ("Transferring execution of %s to new method old_bci=%d new_bci=%d",
 +                      new_method->name()->as_C_string(),
 +                      bci,
 +                      new_bci));
@@ -10212,7 +10212,7 @@ diff -r 6c6a2299029a src/share/vm/prims/jvmtiRedefineClasses.cpp
 +  to->set_is_field_modification_watched(from->is_field_modification_watched());
 +  to->set_is_field_access_watched(from->is_field_access_watched());
 +  if (from->is_field_modification_watched() || from->is_field_access_watched()) {
-+    RC_TRACE(0x00000002, ("Transfered watch for field %s",
++    RC_TRACE(0x00000002, ("Transferred watch for field %s",
 +      from->name()->as_C_string()));
 +  }
 +  update_klass_field_access_flag(to);
@@ -10344,7 +10344,7 @@ diff -r 6c6a2299029a src/share/vm/prims/jvmtiRedefineClasses.cpp
 -                              !methodOopDesc::native_bind_event_is_interesting);
 +            !methodOopDesc::native_bind_event_is_interesting);
 +
-+          RC_TRACE(0x00008000, ("Transfering native function for method %s", old_method->name()->as_C_string()));
++          RC_TRACE(0x00008000, ("Transferring native function for method %s", old_method->name()->as_C_string()));
          }
        }
      }
@@ -11488,7 +11488,7 @@ diff -r 6c6a2299029a src/share/vm/prims/jvmtiRedefineClasses.hpp
 +  // Method used during garbage collection, the VM operation must iterate over all oops.
 +  void oops_do(OopClosure* f);
 +
-+  // Utility methods for transfering field access flags
++  // Utility methods for transferring field access flags
 +
 +  static void transfer_special_access_flags(fieldDescriptor *from, fieldDescriptor *to);
 +  static void update_klass_field_access_flag(fieldDescriptor *fd);
@@ -11638,7 +11638,7 @@ diff -r 6c6a2299029a src/share/vm/runtime/deoptimization.cpp
 +      if (forward_method != NULL && method->is_in_code_section(bci)) {
 +        int new_bci = method->calculate_forward_bci(bci, forward_method);
 +        if (TraceRedefineClasses >= 2) {
-+          tty->print_cr("Transfering execution of %s to new method old_bci=%d new_bci=%d", forward_method->name()->as_C_string(), bci, new_bci);
++          tty->print_cr("Transferring execution of %s to new method old_bci=%d new_bci=%d", forward_method->name()->as_C_string(), bci, new_bci);
 +        }
 +        iframe->set_method(forward_method, new_bci);
 +      }

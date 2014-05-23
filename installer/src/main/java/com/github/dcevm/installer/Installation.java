@@ -31,6 +31,7 @@ import java.util.Observable;
  * @author Kerstin Breiteneder
  * @author Christoph Wimberger
  * @author Ivan Dubrov
+ * @author Jiri Bubnik
  */
 public class Installation extends Observable {
 
@@ -38,9 +39,20 @@ public class Installation extends Observable {
     private final ConfigurationInfo config;
 
     private final boolean isJDK;
+
+    // DCEVM is installed over default JVM (either server or client)
     private boolean installed;
+
+    // DCEVM is installed as an alternative DCEVM (in separate dcevm directory)
+    private boolean installedAltjvm;
+
+    // version of Java
     private String version;
-    private String dceVersion;
+    // version of DCEVM in main location (client/server)
+    private String versionDcevm;
+    // version of DCEVM in alternative location (dcevm altjvm)
+    private String versionDcevmAltjvm;
+
     private boolean is64Bit;
 
     public Installation(ConfigurationInfo config, Path path) throws IOException {
@@ -50,6 +62,7 @@ public class Installation extends Observable {
         } catch (IOException ex) {
             throw new IllegalArgumentException(path.toAbsolutePath() + " is no JRE or JDK-directory.");
         }
+
         isJDK = config.isJDK(file);
         if (!isJDK && !config.isJRE(file)) {
             throw new IllegalArgumentException(path.toAbsolutePath() + " is no JRE or JDK-directory.");
@@ -60,10 +73,12 @@ public class Installation extends Observable {
     }
 
     final public void update() throws IOException {
-        installed = config.isDCEInstalled(file);
-        if (installed) {
-            dceVersion = config.getDCEVersion(file);
-        }
+        installed = config.isDCEInstalled(file, false);
+        versionDcevm = installed ? config.getDCEVersion(file, false) : "";
+
+        installedAltjvm = config.isDCEInstalled(file, true);
+        versionDcevmAltjvm = installedAltjvm ? config.getDCEVersion(file, true) : "";
+
         is64Bit = config.is64Bit(file);
     }
 
@@ -75,8 +90,12 @@ public class Installation extends Observable {
         return version;
     }
 
-    public String getDCEVersion() {
-        return dceVersion;
+    public String getVersionDcevm() {
+        return versionDcevm;
+    }
+
+    public String getVersionDcevmAltjvm() {
+        return versionDcevmAltjvm;
     }
 
     public boolean isJDK() {
@@ -87,9 +106,8 @@ public class Installation extends Observable {
         return is64Bit;
     }
 
-    public void installDCE() throws IOException {
-        new Installer(config).install(file, is64Bit);
-        installed = true;
+    public void installDCE(boolean altjvm) throws IOException {
+        new Installer(config).install(file, is64Bit, altjvm);
         update();
         setChanged();
         notifyObservers();
@@ -98,6 +116,7 @@ public class Installation extends Observable {
     public void uninstallDCE() throws IOException {
         new Installer(config).uninstall(file, is64Bit);
         installed = false;
+        installedAltjvm = false;
         update();
         setChanged();
         notifyObservers();
@@ -105,6 +124,10 @@ public class Installation extends Observable {
 
     public boolean isDCEInstalled() {
         return installed;
+    }
+
+    public boolean isDCEInstalledAltjvm() {
+        return installedAltjvm;
     }
 
     @Override

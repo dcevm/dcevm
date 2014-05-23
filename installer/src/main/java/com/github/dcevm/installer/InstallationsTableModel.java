@@ -46,7 +46,7 @@ class InstallationsTableModel extends AbstractTableModel implements Observer {
     }
 
     public int getColumnCount() {
-        return 4;
+        return 5;
     }
 
     public Object getValueAt(int rowIndex, int columnIndex) {

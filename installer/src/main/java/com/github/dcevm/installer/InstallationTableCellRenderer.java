@@ -57,7 +57,14 @@ class InstallationTableCellRenderer extends DefaultTableCellRenderer {
                     break;
                 case 3:
                     if (inst.isDCEInstalled()) {
-                        l.setText("Yes (" + inst.getDCEVersion() + ")");
+                        l.setText("Yes (" + inst.getVersionDcevm() + ")");
+                    } else {
+                        l.setText("No");
+                    }
+                    break;
+                case 4:
+                    if (inst.isDCEInstalledAltjvm()) {
+                        l.setText("Yes (" + inst.getVersionDcevmAltjvm() + ")");
                     } else {
                         l.setText("No");
                     }

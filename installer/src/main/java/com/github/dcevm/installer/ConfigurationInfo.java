@@ -36,15 +36,16 @@ import java.util.regex.Pattern;
  * @author Kerstin Breiteneder
  * @author Christoph Wimberger
  * @author Ivan Dubrov
+ * @author Jiri Bubnik
  */
 public enum ConfigurationInfo {
 
     // Note: 32-bit is not supported on Mac OS X
     MAC_OS(null, "bsd_amd64_compiler2",
-            "lib/client", "lib/server", "lib/server",
+            "lib/client", "lib/server", "lib/dcevm", "lib/server", "lib/dcevm",
             "bin/java", "libjvm.dylib"),
     LINUX("linux_i486_compiler2", "linux_amd64_compiler2",
-            "lib/i386/client", "lib/i386/server", "lib/amd64/server",
+            "lib/i386/client", "lib/i386/server", "lib/i386/dcevm", "lib/amd64/server", "lib/amd64/dcevm",
             "bin/java", "libjvm.so") {
         @Override
         public String[] paths() {
@@ -52,7 +53,7 @@ public enum ConfigurationInfo {
         }
     },
     WINDOWS("windows_i486_compiler2", "windows_amd64_compiler2",
-            "bin/client", "bin/server", "bin/server",
+            "bin/client", "bin/server", "bin/dcevm", "bin/server", "bin/dcevm",
             "bin/java.exe", "jvm.dll") {
         @Override
         public String[] paths() {
@@ -60,6 +61,7 @@ public enum ConfigurationInfo {
                     System.getenv("JAVA_HOME") + "/..",
                     System.getenv("PROGRAMW6432") + "/JAVA",
                     System.getenv("PROGRAMFILES") + "/JAVA",
+                    System.getenv("PROGRAMFILES(X86)") + "/JAVA",
                     System.getenv("SYSTEMDRIVE") + "/JAVA"};
         }
     };
@@ -69,19 +71,25 @@ public enum ConfigurationInfo {
 
     private final String clientPath;
     private final String server32Path;
+    private final String dcevm32Path;
     private final String server64Path;
+    private final String dcevm64Path;
 
     private final String javaExecutable;
     private final String libraryName;
 
     private ConfigurationInfo(String resourcePath32, String resourcePath64,
-                              String clientPath, String server32Path, String server64Path,
+                              String clientPath,
+                              String server32Path, String dcevm32Path,
+                              String server64Path, String dcevm64Path,
                               String javaExecutable, String libraryName) {
         this.resourcePath32 = resourcePath32;
         this.resourcePath64 = resourcePath64;
         this.clientPath = clientPath;
         this.server32Path = server32Path;
+        this.dcevm32Path = dcevm32Path;
         this.server64Path = server64Path;
+        this.dcevm64Path = dcevm64Path;
         this.javaExecutable = javaExecutable;
         this.libraryName = libraryName;
     }
@@ -112,6 +120,14 @@ public enum ConfigurationInfo {
 
     public String getServer64Path() {
         return server64Path;
+    }
+
+    public String getDcevm32Path() {
+        return dcevm32Path;
+    }
+
+    public String getDcevm64Path() {
+        return dcevm64Path;
     }
 
     public String getJavaExecutable() {
@@ -195,54 +211,70 @@ public enum ConfigurationInfo {
         return result.toString();
     }
 
-    public boolean isDCEInstalled(Path dir) throws IOException {
+    public boolean isDCEInstalled(Path dir, boolean altjvm) throws IOException {
         Path jreDir;
         if (isJDK(dir)) {
             jreDir = dir.resolve("jre");
         } else {
             jreDir = dir;
         }
-        Path clientPath = jreDir.resolve(getClientPath());
-        Path clientBackup = clientPath.resolve(getBackupLibraryName());
 
-        Path serverPath = jreDir.resolve(getServer32Path());
-        if (!Files.exists(serverPath)) {
-            serverPath = jreDir.resolve(getServer64Path());
-        }
-        Path serverBackup = serverPath.resolve(getBackupLibraryName());
+        if (altjvm) {
+            Path altvm32Path = jreDir.resolve(getDcevm32Path());
+            Path altvm64Path = jreDir.resolve(getDcevm64Path());
 
-        if (Files.exists(clientPath) && Files.exists(serverPath)) {
-            if (Files.exists(clientBackup) != Files.exists(serverBackup)) {
-                throw new IllegalStateException(jreDir.toAbsolutePath() + " has invalid state.");
+            return Files.exists(altvm32Path) || Files.exists(altvm64Path);
+        } else {
+            Path clientPath = jreDir.resolve(getClientPath());
+            Path clientBackup = clientPath.resolve(getBackupLibraryName());
+
+            Path serverPath = jreDir.resolve(getServer32Path());
+            if (!Files.exists(serverPath)) {
+                serverPath = jreDir.resolve(getServer64Path());
             }
+            Path serverBackup = serverPath.resolve(getBackupLibraryName());
+
+            if (Files.exists(clientPath) && Files.exists(serverPath)) {
+                if (Files.exists(clientBackup) != Files.exists(serverBackup)) {
+                    throw new IllegalStateException(jreDir.toAbsolutePath() + " has invalid state.");
+                }
+            }
+            return Files.exists(clientBackup) || Files.exists(serverBackup);
         }
-        return Files.exists(clientBackup) || Files.exists(serverBackup);
     }
 
-    public String getVersionString(Path jreDir) throws IOException {
-        return executeJava(jreDir, "-version");
+    public String getVersionString(Path jreDir, boolean altjvm) throws IOException {
+        try {
+            if (altjvm) {
+                return executeJava(jreDir,  "-XXaltjvm=dcevm", "-version");
+            } else {
+                return executeJava(jreDir, "-version");
+            }
+        } catch (Throwable e) {
+            return e.getMessage();
+        }
     }
 
     public boolean is64Bit(Path jreDir) throws IOException {
-        return getVersionString(jreDir).contains("64-Bit");
+        return getVersionString(jreDir, false).contains("64-Bit");
     }
 
     public String getJavaVersion(Path jreDir) throws IOException {
-        return getVersionHelper(jreDir, ".*java version.*\"(.*)\".*", true);
+        return getVersionHelper(jreDir, ".*java version.*\"(.*)\".*", true, false);
     }
 
-    final public String getDCEVersion(Path jreDir) throws IOException {
-        return getVersionHelper(jreDir, ".*Dynamic Code Evolution.*build ([^,]+),.*", false);
+    final public String getDCEVersion(Path jreDir, boolean altjvm) throws IOException {
+        return getVersionHelper(jreDir, ".*Dynamic Code Evolution.*build ([^,]+),.*", false, altjvm);
     }
 
-    private String getVersionHelper(Path jreDir, String regex, boolean javaVersion) throws IOException {
-        String version = getVersionString(jreDir);
+    private String getVersionHelper(Path jreDir, String regex, boolean javaVersion, boolean altjvm) throws IOException {
+        String version = getVersionString(jreDir, altjvm);
         version = version.replaceAll("\n", "");
         Matcher matcher = Pattern.compile(regex).matcher(version);
 
         if (!matcher.matches()) {
-            throw new IllegalArgumentException("Could not get " + (javaVersion ? "java" : "dce") +
-                    "version of " + jreDir.toAbsolutePath() + ".");
+            return "Could not get " + (javaVersion ? "java" : "dce") +
+                    "version of " + jreDir.toAbsolutePath() + ".";
         }
 
         version = matcher.replaceFirst("$1");

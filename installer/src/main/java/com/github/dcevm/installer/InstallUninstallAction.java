@@ -35,16 +35,36 @@ import java.util.Observer;
  * @author Kerstin Breiteneder
  * @author Christoph Wimberger
  * @author Ivan Dubrov
+ * @author Jiri Bubnik
  */
 class InstallUninstallAction extends AbstractAction implements ListSelectionListener, Observer {
 
+    /**
+     * Buttons to add/remove DCEVM.
+     */
+    public static enum Type {
+        UNINSTALL("Uninstall"),
+        INSTALL("Replace by DCEVM"),
+        INSTALL_ALTJVM("Install DCEVM as altjvm");
+
+        String label;
+
+        Type(String label) {
+            this.label = label;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+    }
+
     private final JTable table;
-    private final boolean install;
+    private final Type type;
     private Installation installation;
 
-    public InstallUninstallAction(boolean install, JTable t) {
-        super(install ? "Install" : "Uninstall");
-        this.install = install;
+    public InstallUninstallAction(Type type, JTable t) {
+        super(type.getLabel());
+        this.type = type;
         setEnabled(false);
         table = t;
         t.getSelectionModel().addListSelectionListener(this);
@@ -62,8 +82,11 @@ class InstallUninstallAction extends AbstractAction implements ListSelectionList
 
     public void actionPerformed(ActionEvent e) {
         try {
-            if (install) {
-                getSelectedInstallation().installDCE();
+            if (type.equals(Type.INSTALL)) {
+                getSelectedInstallation().installDCE(false);
+            }
+            else if (type.equals(Type.INSTALL_ALTJVM)) {
+                getSelectedInstallation().installDCE(true);
             } else {
                 getSelectedInstallation().uninstallDCE();
             }
@@ -89,10 +112,12 @@ class InstallUninstallAction extends AbstractAction implements ListSelectionList
     }
 
     private void update() {
-        if (install) {
+        if (type.equals(Type.INSTALL)) {
             setEnabled(installation != null && !installation.isDCEInstalled());
+        } else if (type.equals(Type.INSTALL_ALTJVM)) {
+            setEnabled(installation != null && !installation.isDCEInstalledAltjvm());
         } else {
-            setEnabled(installation != null && installation.isDCEInstalled());
+            setEnabled(installation != null && (installation.isDCEInstalled() || installation.isDCEInstalledAltjvm()));
         }
     }
 

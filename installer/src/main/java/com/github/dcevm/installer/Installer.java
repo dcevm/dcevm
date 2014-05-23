@@ -33,6 +33,7 @@ import java.util.List;
  * @author Kerstin Breiteneder
  * @author Christoph Wimberger
  * @author Ivan Dubrov
+ * @author Jiri Bubnik
  */
 public class Installer {
 
@@ -42,22 +43,33 @@ public class Installer {
         this.config = config;
     }
 
-    public void install(Path dir, boolean bit64) throws IOException {
+    public void install(Path dir, boolean bit64, boolean altjvm) throws IOException {
         if (config.isJDK(dir)) {
             dir = dir.resolve(config.getJREDirectory());
         }
 
-        Path serverPath = dir.resolve(config.getServerPath(bit64));
-        if (Files.exists(serverPath)) {
-            installClientServer(serverPath, bit64);
-        }
+        if (!altjvm) {
+            Path serverPath = dir.resolve(config.getServerPath(bit64));
+            if (Files.exists(serverPath)) {
+                installClientServer(serverPath, bit64);
+            }
 
-        Path clientPath = dir.resolve(config.getClientPath());
-        if (Files.exists(clientPath) && !bit64) {
-            installClientServer(clientPath, false);
+            Path clientPath = dir.resolve(config.getClientPath());
+            if (Files.exists(clientPath) && !bit64) {
+                installClientServer(clientPath, false);
+            }
+        } else {
+            Path altjvmPath = dir.resolve(bit64 ? config.getDcevm64Path() : config.getDcevm32Path());
+            if (!Files.exists(altjvmPath)) {
+                Files.createDirectory(altjvmPath);
+            }
+            installClientServer(altjvmPath, bit64);
         }
     }
 
+    /**
+     * Try to uninstall DCEVM from all locations (skip if not exists).
+     */
     public void uninstall(Path dir, boolean bit64) throws IOException {
         if (config.isJDK(dir)) {
             dir = dir.resolve(config.getJREDirectory());
@@ -72,6 +84,21 @@ public class Installer {
         if (Files.exists(clientPath) && !bit64) {
             uninstallClientServer(clientPath);
         }
+
+        Path dcevm32Path = dir.resolve(config.getDcevm32Path());
+        if (Files.exists(dcevm32Path)) {
+            Files.deleteIfExists(dcevm32Path.resolve(config.getLibraryName()));
+            Files.deleteIfExists(dcevm32Path.resolve(config.getBackupLibraryName()));
+            Files.delete(dcevm32Path);
+        }
+
+        Path dcevm64Path = dir.resolve(config.getDcevm64Path());
+        if (Files.exists(dcevm64Path)) {
+            Files.deleteIfExists(dcevm64Path.resolve(config.getLibraryName()));
+            Files.deleteIfExists(dcevm64Path.resolve(config.getBackupLibraryName()));
+            Files.delete(dcevm64Path);
+        }
+
     }
 
     public List<Installation> listInstallations() {
@@ -88,14 +115,25 @@ public class Installer {
         Path library = path.resolve(config.getLibraryName());
         Path backup = path.resolve(config.getBackupLibraryName());
 
+        // backup any existing library (assume original JVM file)
+        if (Files.exists(library)) {
+            Files.move(library, backup);
+        }
 
-        Files.move(library, backup);
         try {
+            // install actual DCEVM file
             try (InputStream in = getClass().getClassLoader().getResourceAsStream(resource)) {
+                if (in == null) {
+                    throw new IOException("DCEVM not available for java at '" + path + "'. Missing resource " + resource);
+                }
+
                 Files.copy(in, library);
             }
-        } catch (IOException e) {
-            Files.move(backup, library, StandardCopyOption.REPLACE_EXISTING);
+        } catch (NullPointerException | IOException e) {
+            // try to restore original file
+            if (Files.exists(backup)) {
+                Files.move(backup, library, StandardCopyOption.REPLACE_EXISTING);
+            }
             throw e;
         }
     }
@@ -104,8 +142,10 @@ public class Installer {
         Path library = path.resolve(config.getLibraryName());
         Path backup = path.resolve(config.getBackupLibraryName());
 
-        Files.delete(library);
-        Files.move(backup, library); // FIXME: if fails, JRE is inconsistent!
+        if (Files.exists(backup)) {
+            Files.delete(library);
+            Files.move(backup, library);
+        }
     }
 
     private List<Installation> scanPaths(String... dirPaths) {
@@ -117,6 +157,7 @@ public class Installer {
                     scanDirectory(stream, installations);
                 } catch (Exception ex) {
                     // Ignore, try different directory
+                    ex.printStackTrace();
                 }
             }
         }
@@ -125,14 +166,18 @@ public class Installer {
 
     private void scanDirectory(DirectoryStream<Path> stream, List<Installation> installations) {
         for (Path path : stream) {
-            try {
-                Installation inst = new Installation(config, path);
-                if (!installations.contains(inst)) {
-                    installations.add(inst);
+            if (Files.isDirectory(path) && (config.isJDK(path) || config.isJRE(path))) {
+                try {
+                    Installation inst = new Installation(config, path);
+                    if (!installations.contains(inst)) {
+                        installations.add(inst);
+                    }
+                } catch (Exception ex) {
+                    // FIXME: just ignore the installation for now..
+                    ex.printStackTrace();
                 }
-            } catch (Exception e) {
-                // FIXME: just ignore the installation for now..
             }
         }
     }
+
 }

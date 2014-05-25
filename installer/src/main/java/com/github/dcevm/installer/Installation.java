@@ -106,8 +106,8 @@ public class Installation extends Observable {
         return is64Bit;
     }
 
-    public void installDCE(boolean altjvm) throws IOException {
-        new Installer(config).install(file, is64Bit, altjvm);
+    public void installDCE(boolean altjvm) throws IOException, DcevmPatchNotFoundException {
+        new Installer(config).install(getVersion(), file, is64Bit, altjvm);
         update();
         setChanged();
         notifyObservers();

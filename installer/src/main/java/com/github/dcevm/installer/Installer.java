@@ -43,7 +43,7 @@ public class Installer {
         this.config = config;
     }
 
-    public void install(Path dir, boolean bit64, boolean altjvm) throws IOException {
+    public void install(String javaVersion, Path dir, boolean bit64, boolean altjvm) throws IOException, DcevmPatchNotFoundException {
         if (config.isJDK(dir)) {
             dir = dir.resolve(config.getJREDirectory());
         }
@@ -51,19 +51,19 @@ public class Installer {
         if (!altjvm) {
             Path serverPath = dir.resolve(config.getServerPath(bit64));
             if (Files.exists(serverPath)) {
-                installClientServer(serverPath, bit64);
+                installClientServer(javaVersion, serverPath, bit64);
             }
 
             Path clientPath = dir.resolve(config.getClientPath());
             if (Files.exists(clientPath) && !bit64) {
-                installClientServer(clientPath, false);
+                installClientServer(javaVersion, clientPath, false);
             }
         } else {
             Path altjvmPath = dir.resolve(bit64 ? config.getDcevm64Path() : config.getDcevm32Path());
             if (!Files.exists(altjvmPath)) {
                 Files.createDirectory(altjvmPath);
             }
-            installClientServer(altjvmPath, bit64);
+            installClientServer(javaVersion, altjvmPath, bit64);
         }
     }
 
@@ -109,24 +109,26 @@ public class Installer {
         return config;
     }
 
-    private void installClientServer(Path path, boolean bit64) throws IOException {
-        String resource = config.getResourcePath(bit64) + "/product/" + config.getLibraryName();
+    private void installClientServer(String javaVersion, Path path, boolean bit64) throws IOException, DcevmPatchNotFoundException {
+        String resource = getVersionDir(javaVersion) + "/" + config.getResourcePath(bit64) + "/product/" + config.getLibraryName();
 
         Path library = path.resolve(config.getLibraryName());
         Path backup = path.resolve(config.getBackupLibraryName());
-
-        // backup any existing library (assume original JVM file)
-        if (Files.exists(library)) {
-            Files.move(library, backup);
-        }
 
         try {
             // install actual DCEVM file
             try (InputStream in = getClass().getClassLoader().getResourceAsStream(resource)) {
                 if (in == null) {
-                    throw new IOException("DCEVM not available for java at '" + path + "'. Missing resource " + resource);
+                    String version = javaVersion + (bit64 ? " (64 bit)" : "");
+                    throw new DcevmPatchNotFoundException(version, path.toString());
                 }
 
+                // backup any existing library (assume original JVM file)
+                if (Files.exists(library)) {
+                    Files.move(library, backup);
+                }
+
+                // install the new file
                 Files.copy(in, library);
             }
         } catch (NullPointerException | IOException e) {
@@ -136,6 +138,17 @@ public class Installer {
             }
             throw e;
         }
+    }
+
+    /**
+     * Convert java version to a directory name containing associated installation resources.
+     *
+     * @param javaVersion full java version (such as 1.7.0_45)
+     * @return directory in which the installer is available (such as 1.7)
+     */
+    private String getVersionDir(String javaVersion) {
+        String[] version = javaVersion.split("[\\.\\_]");
+        return version[0] + "." + version[1];
     }
 
     private void uninstallClientServer(Path path) throws IOException {

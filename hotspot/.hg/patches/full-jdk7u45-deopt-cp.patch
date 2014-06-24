@@ -169,10 +169,19 @@ index d086b5d..0719b90 100644
    jint revision_number() const {
      return _revision_number;
 diff --git a/src/share/vm/prims/jvmtiRedefineClasses.cpp b/src/share/vm/prims/jvmtiRedefineClasses.cpp
-index ef4f380..d134534 100644
+index ef4f380..5d2382c 100644
 --- a/src/share/vm/prims/jvmtiRedefineClasses.cpp
 +++ b/src/share/vm/prims/jvmtiRedefineClasses.cpp
-@@ -2580,7 +2580,8 @@
+@@ -435,6 +435,8 @@
+ 
+     new_class->set_redefinition_flags(redefinition_flags);
+ 
++    new_class->set_deoptimization_incl(true);
++
+     _max_redefinition_flags = _max_redefinition_flags | redefinition_flags;
+ 
+     if ((redefinition_flags & Klass::ModifyInstances) != 0) {
+@@ -2580,7 +2582,8 @@
      }*/
  
      Klass *k = k_oop->klass_part();
@@ -182,7 +191,7 @@ index ef4f380..d134534 100644
        HandleMark hm(THREAD);
        instanceKlass *ik = (instanceKlass *) k;
  
-@@ -2683,7 +2684,11 @@
+@@ -2683,7 +2686,11 @@
    if (0 && JvmtiExport::all_dependencies_are_recorded()) {
      Universe::flush_evol_dependents_on(k_h);
    } else {

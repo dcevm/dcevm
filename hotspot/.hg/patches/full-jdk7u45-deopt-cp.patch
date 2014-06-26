@@ -68,7 +68,7 @@ index a670805..0206b48 100644
    static void make_marked_nmethods_zombies();
    static void make_marked_nmethods_not_entrant();
 diff --git a/src/share/vm/code/nmethod.cpp b/src/share/vm/code/nmethod.cpp
-index 21c9413..0c3a9a0 100644
+index 21c9413..583bac2 100644
 --- a/src/share/vm/code/nmethod.cpp
 +++ b/src/share/vm/code/nmethod.cpp
 @@ -465,6 +465,7 @@
@@ -79,6 +79,36 @@ index 21c9413..0c3a9a0 100644
    _lock_count                 = 0;
    _stack_traversal_mark       = 0;
    _unload_reported            = false;           // jvmti state
+@@ -673,6 +674,9 @@
+     _exception_cache         = NULL;
+     _pc_desc_cache.reset_to(NULL);
+ 
++    if (method != NULL)
++      _deoptimization_incl = Klass::cast(method->method_holder())->is_deoptimization_incl();
++
+     code_buffer->copy_oops_to(this);
+     if (ScavengeRootsInCode && detect_scavenge_root_oops()) {
+       CodeCache::add_scavenge_root_nmethod(this);
+@@ -754,6 +758,9 @@
+     _osr_entry_point         = NULL;
+     _exception_cache         = NULL;
+     _pc_desc_cache.reset_to(NULL);
++
++    if (method != NULL)
++      _deoptimization_incl = Klass::cast(method->method_holder())->is_deoptimization_incl();
+ 
+     code_buffer->copy_oops_to(this);
+     debug_only(verify_scavenge_root_oops());
+@@ -863,6 +870,9 @@
+     _exception_cache         = NULL;
+     _pc_desc_cache.reset_to(scopes_pcs_begin());
+ 
++    if (method != NULL)
++      _deoptimization_incl = Klass::cast(method->method_holder())->is_deoptimization_incl();
++
+     // Copy contents of ScopeDescRecorder to nmethod
+     code_buffer->copy_oops_to(this);
+     debug_info->copy_to(this);
 diff --git a/src/share/vm/code/nmethod.hpp b/src/share/vm/code/nmethod.hpp
 index 8d76afb..d2d1acc 100644
 --- a/src/share/vm/code/nmethod.hpp
@@ -223,15 +253,3 @@ index 634c589..eeb0558 100644
  
  /*
   *  Macros for factoring of globals
-diff --git a/src/share/vm/runtime/sharedRuntime.cpp b/src/share/vm/runtime/sharedRuntime.cpp
-index e0e19b1..84ace41 100644
---- a/src/share/vm/runtime/sharedRuntime.cpp
-+++ b/src/share/vm/runtime/sharedRuntime.cpp
-@@ -2630,6 +2630,7 @@
-                                                   sig_bt,
-                                                   regs,
-                                                   ret_type);
-+      nm->set_deoptimization_incl(method->method_holder()->klass_part()->is_deoptimization_incl());
-     }
-   }
- 

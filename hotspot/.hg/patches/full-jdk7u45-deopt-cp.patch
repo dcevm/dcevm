@@ -135,22 +135,23 @@ index 8d76afb..d2d1acc 100644
  
    bool has_dependencies()                         { return dependencies_size() != 0; }
 diff --git a/src/share/vm/oops/klass.cpp b/src/share/vm/oops/klass.cpp
-index 767588c..6a195ab 100644
+index 767588c..59d9448 100644
 --- a/src/share/vm/oops/klass.cpp
 +++ b/src/share/vm/oops/klass.cpp
-@@ -57,7 +57,10 @@
+@@ -57,7 +57,11 @@
  
  void Klass::update_supers_to_newest_version() {
  
 -  if (super() != NULL) set_super(super()->klass_part()->newest_version());
 +  if (super() != NULL) {
 +    set_super(super()->klass_part()->newest_version());
-+    set_deoptimization_incl(super()->klass_part()->is_deoptimization_incl());
++    if (super()->klass_part()->is_deoptimization_incl())
++      set_deoptimization_incl(true);
 +  }
    
    for (uint i=0; i<primary_super_limit(); i++) {
      klassOop cur = _primary_supers[i];
-@@ -183,6 +186,7 @@
+@@ -183,6 +187,7 @@
  
    kl->set_redefinition_flags(Klass::NoRedefinition);
    kl->set_redefining(false);
@@ -158,21 +159,21 @@ index 767588c..6a195ab 100644
    kl->set_new_version(NULL);
    kl->set_old_version(NULL);
    kl->set_redefinition_index(-1);
-@@ -256,6 +260,9 @@
+@@ -256,6 +261,8 @@
    if (FastSuperclassLimit == 0) {
      // None of the other machinery matters.
      set_super(k);
-+    if (k != NULL) {
-+    	set_deoptimization_incl(k->klass_part()->is_deoptimization_incl());
-+    }
++    if (k != NULL && k->klass_part()->is_deoptimization_incl())
++      set_deoptimization_incl(true);
      return;
    }
    if (k == NULL) {
-@@ -267,6 +274,7 @@
+@@ -267,6 +274,8 @@
             "initialize this only once to a non-trivial value");
      set_super(k);
      Klass* sup = k->klass_part();
-+  	set_deoptimization_incl(sup->is_deoptimization_incl());
++    if (sup->is_deoptimization_incl())
++      set_deoptimization_incl(true);
      int sup_depth = sup->super_depth();
      juint my_depth  = MIN2(sup_depth + 1, (int)primary_super_limit());
      if (!can_be_primary_super_slow())

@@ -1,13 +1,13 @@
 diff --git a/src/share/vm/classfile/classFileParser.cpp b/src/share/vm/classfile/classFileParser.cpp
-index a6d138b..731c75b 100644
+index 8590ad1..7e35b1a 100644
 --- a/src/share/vm/classfile/classFileParser.cpp
 +++ b/src/share/vm/classfile/classFileParser.cpp
-@@ -3942,6 +3942,11 @@
+@@ -3798,6 +3798,11 @@
        }
      }
  
 +    if (cfs->source() != NULL && HotswapDeoptClassPath != NULL) {
-+      if (strstr(cfs->source(), HotswapDeoptClassPath) != NULL)
++      if (strstr(cfs->source(), HotswapDeoptClassPath) != NULL) 
 +        this_klass->set_deoptimization_incl(true);
 +    }
 +
@@ -15,10 +15,10 @@ index a6d138b..731c75b 100644
        // print out the superclass.
        const char * from = Klass::cast(this_klass())->external_name();
 diff --git a/src/share/vm/classfile/systemDictionary.cpp b/src/share/vm/classfile/systemDictionary.cpp
-index fa45c6d..6de52ce 100644
+index 3f64268..124c39c 100644
 --- a/src/share/vm/classfile/systemDictionary.cpp
 +++ b/src/share/vm/classfile/systemDictionary.cpp
-@@ -1255,6 +1255,11 @@
+@@ -1256,6 +1256,11 @@
        }
      }
  
@@ -31,24 +31,23 @@ index fa45c6d..6de52ce 100644
        ResourceMark rm;
        tty->print("[Loaded %s", ik->external_name());
 diff --git a/src/share/vm/code/codeCache.cpp b/src/share/vm/code/codeCache.cpp
-index 70574bc..b28cb02 100644
+index 70574bc..722ecfd 100644
 --- a/src/share/vm/code/codeCache.cpp
 +++ b/src/share/vm/code/codeCache.cpp
-@@ -715,6 +715,14 @@
+@@ -713,6 +713,13 @@
+ }
+ #endif // HOTSWAP
  
- 
- // Deoptimize all methods
++// Deoptimize all methods having deopt-include flag
 +void CodeCache::mark_all_incl_nmethods_for_deoptimization() {
 +  MutexLockerEx mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
 +  FOR_ALL_ALIVE_NMETHODS(nm) {
 +    nm->mark_for_deoptimization_incl();
 +  }
 +}
-+
-+// Deoptimize all methods
+ 
+ // Deoptimize all methods
  void CodeCache::mark_all_nmethods_for_deoptimization() {
-   MutexLockerEx mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
-   FOR_ALL_ALIVE_NMETHODS(nm) {
 diff --git a/src/share/vm/code/codeCache.hpp b/src/share/vm/code/codeCache.hpp
 index a670805..0206b48 100644
 --- a/src/share/vm/code/codeCache.hpp
@@ -62,7 +61,7 @@ index a670805..0206b48 100644
    static void make_marked_nmethods_zombies();
    static void make_marked_nmethods_not_entrant();
 diff --git a/src/share/vm/code/nmethod.cpp b/src/share/vm/code/nmethod.cpp
-index 21c9413..583bac2 100644
+index 59f5f7e..b7d0742 100644
 --- a/src/share/vm/code/nmethod.cpp
 +++ b/src/share/vm/code/nmethod.cpp
 @@ -465,6 +465,7 @@
@@ -129,23 +128,10 @@ index 8d76afb..d2d1acc 100644
  
    bool has_dependencies()                         { return dependencies_size() != 0; }
 diff --git a/src/share/vm/oops/klass.cpp b/src/share/vm/oops/klass.cpp
-index 767588c..59d9448 100644
+index a928777..d3714b7 100644
 --- a/src/share/vm/oops/klass.cpp
 +++ b/src/share/vm/oops/klass.cpp
-@@ -57,7 +57,11 @@
- 
- void Klass::update_supers_to_newest_version() {
- 
--  if (super() != NULL) set_super(super()->klass_part()->newest_version());
-+  if (super() != NULL) {
-+    set_super(super()->klass_part()->newest_version());
-+    if (super()->klass_part()->is_deoptimization_incl())
-+      set_deoptimization_incl(true);
-+  }
-   
-   for (uint i=0; i<primary_super_limit(); i++) {
-     klassOop cur = _primary_supers[i];
-@@ -183,6 +187,7 @@
+@@ -163,6 +163,7 @@
  
    kl->set_redefinition_flags(Klass::NoRedefinition);
    kl->set_redefining(false);
@@ -153,7 +139,7 @@ index 767588c..59d9448 100644
    kl->set_new_version(NULL);
    kl->set_old_version(NULL);
    kl->set_redefinition_index(-1);
-@@ -256,6 +261,8 @@
+@@ -233,6 +234,8 @@
    if (FastSuperclassLimit == 0) {
      // None of the other machinery matters.
      set_super(k);
@@ -162,7 +148,7 @@ index 767588c..59d9448 100644
      return;
    }
    if (k == NULL) {
-@@ -267,6 +274,8 @@
+@@ -244,6 +247,8 @@
             "initialize this only once to a non-trivial value");
      set_super(k);
      Klass* sup = k->klass_part();
@@ -172,18 +158,18 @@ index 767588c..59d9448 100644
      juint my_depth  = MIN2(sup_depth + 1, (int)primary_super_limit());
      if (!can_be_primary_super_slow())
 diff --git a/src/share/vm/oops/klass.hpp b/src/share/vm/oops/klass.hpp
-index d086b5d..0719b90 100644
+index bf242d9..884deae 100644
 --- a/src/share/vm/oops/klass.hpp
 +++ b/src/share/vm/oops/klass.hpp
-@@ -303,6 +303,7 @@
-   char                  _field_redefinition_policy;
-   char                  _static_field_redefinition_policy;
+@@ -292,6 +292,7 @@
+   bool                  _original_field_offsets_changed; // Did the original field offsets of this class change during class redefinition?
+   int *                 _update_information;     // Update information
    bool                  _is_redefining;
 +  bool                  _deoptimization_incl; // True if class methods are included in deoptimization
  
  #ifndef PRODUCT
    int           _verify_count;  // to avoid redundant verifies
-@@ -387,6 +388,9 @@
+@@ -376,6 +377,9 @@
      else { return _old_version->klass_part()->is_same_or_older_version(klass); }
    }
  
@@ -194,10 +180,10 @@ index d086b5d..0719b90 100644
    jint revision_number() const {
      return _revision_number;
 diff --git a/src/share/vm/prims/jvmtiRedefineClasses.cpp b/src/share/vm/prims/jvmtiRedefineClasses.cpp
-index ef4f380..5d2382c 100644
+index cb90823..6836fae 100644
 --- a/src/share/vm/prims/jvmtiRedefineClasses.cpp
 +++ b/src/share/vm/prims/jvmtiRedefineClasses.cpp
-@@ -435,6 +435,8 @@
+@@ -482,6 +482,8 @@
  
      new_class->set_redefinition_flags(redefinition_flags);
  
@@ -206,22 +192,11 @@ index ef4f380..5d2382c 100644
      _max_redefinition_flags = _max_redefinition_flags | redefinition_flags;
  
      if ((redefinition_flags & Klass::ModifyInstances) != 0) {
-@@ -2580,7 +2582,8 @@
-     }*/
- 
-     Klass *k = k_oop->klass_part();
--    if (k->oop_is_instance()) {
-+
-+    if (k->oop_is_instance() && (HotswapDeoptClassPath == NULL || k->is_deoptimization_incl())) {
-       HandleMark hm(THREAD);
-       instanceKlass *ik = (instanceKlass *) k;
- 
-@@ -2683,7 +2686,11 @@
+@@ -1857,7 +1859,10 @@
    if (0 && JvmtiExport::all_dependencies_are_recorded()) {
      Universe::flush_evol_dependents_on(k_h);
    } else {
 -    CodeCache::mark_all_nmethods_for_deoptimization();
-+
 +  	if (HotswapDeoptClassPath == NULL)
 +  		CodeCache::mark_all_nmethods_for_deoptimization();
 +  	else
@@ -230,10 +205,10 @@ index ef4f380..5d2382c 100644
      ResourceMark rm(THREAD);
      DeoptimizationMarker dm;
 diff --git a/src/share/vm/runtime/globals.hpp b/src/share/vm/runtime/globals.hpp
-index 634c589..5ccc302 100644
+index 341b399..1e8b1b0 100644
 --- a/src/share/vm/runtime/globals.hpp
 +++ b/src/share/vm/runtime/globals.hpp
-@@ -3659,7 +3659,13 @@
+@@ -3650,7 +3650,13 @@
    product(bool, EnableTracing, false,                                       \
                    "Enable event-based tracing")                             \
    product(bool, UseLockedTracing, false,                                    \

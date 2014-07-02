@@ -1,36 +1,30 @@
 diff --git a/src/share/vm/classfile/classFileParser.cpp b/src/share/vm/classfile/classFileParser.cpp
-index a6d138b..f7e4e81 100644
+index 4ea4e2b..03e3e68 100644
 --- a/src/share/vm/classfile/classFileParser.cpp
 +++ b/src/share/vm/classfile/classFileParser.cpp
-@@ -3942,6 +3942,14 @@
+@@ -3942,6 +3942,11 @@
        }
      }
  
-+    if (cfs->source() != NULL && HotswapDeoptClassPath != NULL)
-+    {
++    if (cfs->source() != NULL && HotswapDeoptClassPath != NULL) {
 +      if (strstr(cfs->source(), HotswapDeoptClassPath) != NULL)
-+      {
 +        this_klass->set_deoptimization_incl(true);
-+      }
 +    }
 +
      if (TraceClassResolution) {
        // print out the superclass.
        const char * from = Klass::cast(this_klass())->external_name();
 diff --git a/src/share/vm/classfile/systemDictionary.cpp b/src/share/vm/classfile/systemDictionary.cpp
-index fa45c6d..a28504d 100644
+index fa45c6d..6de52ce 100644
 --- a/src/share/vm/classfile/systemDictionary.cpp
 +++ b/src/share/vm/classfile/systemDictionary.cpp
-@@ -1255,6 +1255,14 @@
+@@ -1255,6 +1255,11 @@
        }
      }
  
-+    if (HotswapDeoptClassPath != NULL)
-+    {
++    if (HotswapDeoptClassPath != NULL) {
 +      if (strstr(HotswapDeoptClassPath, ik->external_name()) != NULL)
-+      {
 +        ik->set_deoptimization_incl(true);
-+      }
 +    }
 +
      if (TraceClassLoading) {
@@ -200,7 +194,7 @@ index d086b5d..0719b90 100644
    jint revision_number() const {
      return _revision_number;
 diff --git a/src/share/vm/prims/jvmtiRedefineClasses.cpp b/src/share/vm/prims/jvmtiRedefineClasses.cpp
-index ef4f380..5d2382c 100644
+index 640e7da..a20cea2 100644
 --- a/src/share/vm/prims/jvmtiRedefineClasses.cpp
 +++ b/src/share/vm/prims/jvmtiRedefineClasses.cpp
 @@ -435,6 +435,8 @@
@@ -236,7 +230,7 @@ index ef4f380..5d2382c 100644
      ResourceMark rm(THREAD);
      DeoptimizationMarker dm;
 diff --git a/src/share/vm/runtime/globals.hpp b/src/share/vm/runtime/globals.hpp
-index 634c589..eeb0558 100644
+index 634c589..5ccc302 100644
 --- a/src/share/vm/runtime/globals.hpp
 +++ b/src/share/vm/runtime/globals.hpp
 @@ -3659,7 +3659,13 @@
@@ -250,7 +244,7 @@ index 634c589..eeb0558 100644
 +          "classes allowed to be deoptimized on hotswap. If is not "        \
 +          "defined then all classes will be deoptimized on hotswap. "       \
 +          "That's default behaviour. Using this option the performance "    \
-+          "of hotswap can considerably increased. ")
++          "of hotswap can be considerably increased. ")
  
  /*
   *  Macros for factoring of globals

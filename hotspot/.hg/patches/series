@@ -16,6 +16,7 @@ full-jdk7u45-b08.patch  #+full-jdk7u45-b08
 full-jdk7u51-b13.patch  #+full-jdk7u51-b13
 light-jdk7u40-b43.patch #+light-jdk7u40-b43
 light-jdk7u51-b13.patch #+light-jdk7u51-b13 #+light-jdk7u55-b13
+light-jdk7u60-b09.patch #+light-jdk7u60-b09
 light-jdk8u5-b13.patch  #+light-jdk8u5-b13
 full-jdk7u45-deopt-cp.patch #+full-jdk7u45-b08
 full-jdk7u51-deopt-cp.patch #+full-jdk7u51-b13

@@ -1,0 +1,239 @@
+diff --git a/src/share/vm/classfile/classFileParser.cpp b/src/share/vm/classfile/classFileParser.cpp
+index 70dac6d..4634cf8 100644
+--- a/src/share/vm/classfile/classFileParser.cpp
++++ b/src/share/vm/classfile/classFileParser.cpp
+@@ -4168,6 +4168,11 @@
+       }
+     }
+ 
++    if (cfs->source() != NULL && HotswapDeoptClassPath != NULL) {
++      if (strstr(cfs->source(), HotswapDeoptClassPath) != NULL) 
++        this_klass->set_deoptimization_incl(true);
++    }
++
+     if (TraceClassResolution) {
+       ResourceMark rm;
+       // print out the superclass.
+diff --git a/src/share/vm/classfile/systemDictionary.cpp b/src/share/vm/classfile/systemDictionary.cpp
+index 56c1085..d602ced 100644
+--- a/src/share/vm/classfile/systemDictionary.cpp
++++ b/src/share/vm/classfile/systemDictionary.cpp
+@@ -1228,6 +1228,11 @@
+       ik->restore_unshareable_info(CHECK_(nh));
+     }
+ 
++    if (HotswapDeoptClassPath != NULL) {
++      if (strstr(HotswapDeoptClassPath, ik->external_name()) != NULL)
++        ik->set_deoptimization_incl(true);
++    }
++
+     if (TraceClassLoading) {
+       ResourceMark rm;
+       tty->print("[Loaded %s", ik->external_name());
+diff --git a/src/share/vm/code/codeCache.cpp b/src/share/vm/code/codeCache.cpp
+index 9ba6ef0..984b660 100644
+--- a/src/share/vm/code/codeCache.cpp
++++ b/src/share/vm/code/codeCache.cpp
+@@ -682,6 +682,13 @@
+ }
+ #endif // HOTSWAP
+ 
++// Deoptimize all methods having deopt-include flag
++void CodeCache::mark_all_incl_nmethods_for_deoptimization() {
++  MutexLockerEx mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
++  FOR_ALL_ALIVE_NMETHODS(nm) {
++    nm->mark_for_deoptimization_incl();
++  }
++}
+ 
+ // Deoptimize all methods
+ void CodeCache::mark_all_nmethods_for_deoptimization() {
+diff --git a/src/share/vm/code/codeCache.hpp b/src/share/vm/code/codeCache.hpp
+index e190b11..60fa139 100644
+--- a/src/share/vm/code/codeCache.hpp
++++ b/src/share/vm/code/codeCache.hpp
+@@ -186,6 +186,7 @@
+     // tells how many nmethods have dependencies
+   static int number_of_nmethods_with_dependencies();
+ 
++  static void mark_all_incl_nmethods_for_deoptimization();
+   static int get_codemem_full_count() { return _codemem_full_count; }
+ };
+ 
+diff --git a/src/share/vm/code/nmethod.cpp b/src/share/vm/code/nmethod.cpp
+index 003bb30..9078132 100644
+--- a/src/share/vm/code/nmethod.cpp
++++ b/src/share/vm/code/nmethod.cpp
+@@ -469,6 +469,7 @@
+   _lazy_critical_native       = 0;
+   _has_wide_vectors           = 0;
+   _marked_for_deoptimization  = 0;
++  _deoptimization_incl        = false;
+   _lock_count                 = 0;
+   _stack_traversal_mark       = 0;
+   _unload_reported            = false;           // jvmti state
+@@ -677,6 +678,7 @@
+     _dependencies_offset     = _scopes_pcs_offset;
+     _handler_table_offset    = _dependencies_offset;
+     _nul_chk_table_offset    = _handler_table_offset;
++
+     _nmethod_end_offset      = _nul_chk_table_offset;
+     _compile_id              = compile_id;
+     _comp_level              = CompLevel_none;
+@@ -686,6 +688,8 @@
+     _exception_cache         = NULL;
+     _pc_desc_cache.reset_to(NULL);
+     _hotness_counter         = NMethodSweeper::hotness_counter_reset_val();
++    if (method != NULL)
++      _deoptimization_incl = method->method_holder()->is_deoptimization_incl();
+ 
+     code_buffer->copy_values_to(this);
+     if (ScavengeRootsInCode && detect_scavenge_root_oops()) {
+@@ -759,6 +763,7 @@
+     _metadata_offset         = _oops_offset         + round_to(code_buffer->total_oop_size(), oopSize);
+     _scopes_data_offset      = _metadata_offset     + round_to(code_buffer->total_metadata_size(), wordSize);
+     _scopes_pcs_offset       = _scopes_data_offset;
++
+     _dependencies_offset     = _scopes_pcs_offset;
+     _handler_table_offset    = _dependencies_offset;
+     _nul_chk_table_offset    = _handler_table_offset;
+@@ -771,6 +776,8 @@
+     _exception_cache         = NULL;
+     _pc_desc_cache.reset_to(NULL);
+     _hotness_counter         = NMethodSweeper::hotness_counter_reset_val();
++    if (method != NULL)
++      _deoptimization_incl = method->method_holder()->is_deoptimization_incl();
+ 
+     code_buffer->copy_values_to(this);
+     if (ScavengeRootsInCode && detect_scavenge_root_oops()) {
+@@ -885,6 +892,9 @@
+     _exception_cache         = NULL;
+     _pc_desc_cache.reset_to(scopes_pcs_begin());
+ 
++    if (method != NULL)
++      _deoptimization_incl = method->method_holder()->is_deoptimization_incl();
++
+     // Copy contents of ScopeDescRecorder to nmethod
+     code_buffer->copy_values_to(this);
+     debug_info->copy_to(this);
+diff --git a/src/share/vm/code/nmethod.hpp b/src/share/vm/code/nmethod.hpp
+index e1793ce..059509a 100644
+--- a/src/share/vm/code/nmethod.hpp
++++ b/src/share/vm/code/nmethod.hpp
+@@ -168,6 +168,8 @@
+   bool _marked_for_reclamation;              // Used by NMethodSweeper (set only by sweeper)
+   bool _marked_for_deoptimization;           // Used for stack deoptimization
+ 
++  bool _deoptimization_incl;
++
+   // used by jvmti to track if an unload event has been posted for this nmethod.
+   bool _unload_reported;
+ 
+@@ -440,6 +442,11 @@
+   bool  is_marked_for_deoptimization() const      { return _marked_for_deoptimization; }
+   void  mark_for_deoptimization()                 { _marked_for_deoptimization = true; }
+ 
++  bool  is_deoptimization_incl() const            { return _deoptimization_incl; }
++  void  set_deoptimization_incl(bool z)           { _deoptimization_incl = z; }
++
++  void  mark_for_deoptimization_incl()            { if (_deoptimization_incl) _marked_for_deoptimization = true; }
++
+   void  make_unloaded(BoolObjectClosure* is_alive, oop cause);
+ 
+   bool has_dependencies()                         { return dependencies_size() != 0; }
+diff --git a/src/share/vm/oops/klass.cpp b/src/share/vm/oops/klass.cpp
+index 90e017e..4fd9e64 100644
+--- a/src/share/vm/oops/klass.cpp
++++ b/src/share/vm/oops/klass.cpp
+@@ -172,6 +172,7 @@
+ 
+   set_redefinition_flags(Klass::NoRedefinition);
+   set_redefining(false);
++  set_deoptimization_incl(false);
+   set_new_version(NULL);
+   set_old_version(NULL);
+   set_redefinition_index(-1);
+@@ -219,6 +220,8 @@
+   if (FastSuperclassLimit == 0) {
+     // None of the other machinery matters.
+     set_super(k);
++    if (k != NULL && k->is_deoptimization_incl())
++      set_deoptimization_incl(true);
+     return;
+   }
+   if (k == NULL) {
+@@ -230,6 +233,8 @@
+            "initialize this only once to a non-trivial value");
+     set_super(k);
+     Klass* sup = k;
++    if (sup->is_deoptimization_incl())
++      set_deoptimization_incl(true);
+     int sup_depth = sup->super_depth();
+     juint my_depth  = MIN2(sup_depth + 1, (int)primary_super_limit());
+     if (!can_be_primary_super_slow())
+diff --git a/src/share/vm/oops/klass.hpp b/src/share/vm/oops/klass.hpp
+index e0da996..a976694 100644
+--- a/src/share/vm/oops/klass.hpp
++++ b/src/share/vm/oops/klass.hpp
+@@ -177,6 +177,7 @@
+   bool        _original_field_offsets_changed; // Did the original field offsets of this class change during class redefinition?
+   int *       _update_information;     // Update information
+   bool        _is_redefining;
++  bool        _deoptimization_incl; // True if class methods are included in deoptimization
+ 
+   // Biased locking implementation and statistics
+   // (the 64-bit chunk goes first, to avoid some fragmentation)
+@@ -253,6 +254,9 @@
+   int *update_information() const                      { return _update_information; }
+   void set_update_information(int *info)               { _update_information = info; }
+ 
++  bool  is_deoptimization_incl() const                 { return _deoptimization_incl; }
++  void  set_deoptimization_incl(bool z)                { _deoptimization_incl = z; }
++
+   // Revision number for redefined classes, -1 for originally loaded classes
+   bool was_redefined() const            { return _revision_number != -1; }
+   jint revision_number() const          { return _revision_number; }
+diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.cpp b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
+index 1a0406e..f6b3cc6 100644
+--- a/src/share/vm/prims/jvmtiRedefineClasses2.cpp
++++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
+@@ -465,6 +465,8 @@
+ 
+     new_class->set_redefinition_flags(redefinition_flags);
+ 
++    new_class->set_deoptimization_incl(true);
++
+     _max_redefinition_flags = _max_redefinition_flags | redefinition_flags;
+ 
+     if ((redefinition_flags & Klass::ModifyInstances) != 0) {
+@@ -1587,7 +1589,10 @@
+   if (0 && JvmtiExport::all_dependencies_are_recorded()) {
+     Universe::flush_evol_dependents_on(k_h);
+   } else {
+-    CodeCache::mark_all_nmethods_for_deoptimization();
++  	if (HotswapDeoptClassPath == NULL)
++  		CodeCache::mark_all_nmethods_for_deoptimization();
++  	else
++    	CodeCache::mark_all_incl_nmethods_for_deoptimization();
+ 
+     ResourceMark rm(THREAD);
+     DeoptimizationMarker dm;
+diff --git a/src/share/vm/runtime/globals.hpp b/src/share/vm/runtime/globals.hpp
+index b6d297e..22207e8 100644
+--- a/src/share/vm/runtime/globals.hpp
++++ b/src/share/vm/runtime/globals.hpp
+@@ -3883,7 +3883,13 @@
+           "Enable event-based tracing")                                     \
+                                                                             \
+   product(bool, UseLockedTracing, false,                                    \
+-          "Use locked-tracing when doing event-based tracing")
++          "Use locked-tracing when doing event-based tracing")              \
++  product(ccstr, HotswapDeoptClassPath, NULL,                               \
++          "Class path or fragment of the class path to a folder with "      \
++          "classes allowed to be deoptimized on hotswap. If is not "        \
++          "defined then all classes will be deoptimized on hotswap. "       \
++          "That's default behaviour. Using this option the performance "    \
++          "of hotswap can be considerably increased. ")
+ 
+ /*
+  *  Macros for factoring of globals

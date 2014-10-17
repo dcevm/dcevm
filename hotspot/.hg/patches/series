@@ -23,8 +23,8 @@ light-jdk7u51-deopt-cp.patch #+light-jdk7u51-b13
 full-jdk7u51-b13.patch  #+full-jdk7u51-b13
 full-jdk7u51-deopt-cp.patch #+full-jdk7u51-b13
 
-light-jdk7u60-b09.patch #+light-jdk7u60-b09
-light-jdk7u60-deopt-cp.patch #+light-jdk7u60-b09
+light-jdk7u60-b09.patch #+light-jdk7u60-b09 #+light-jdk7u71-b01
+light-jdk7u60-deopt-cp.patch #+light-jdk7u60-b09 #+light-jdk7u71-b01
 full-jdk7u60-b09.patch  #+full-jdk7u60-b09
 full-jdk7u60-deopt-cp.patch #+full-jdk7u60-b09
 

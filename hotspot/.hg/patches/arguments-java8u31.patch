@@ -1,0 +1,58 @@
+diff --git a/src/share/vm/runtime/arguments.cpp b/src/share/vm/runtime/arguments.cpp
+index 1565f88..5982b58 100644
+--- a/src/share/vm/runtime/arguments.cpp
++++ b/src/share/vm/runtime/arguments.cpp
+@@ -62,8 +62,8 @@
+ #include "gc_implementation/parallelScavenge/parallelScavengeHeap.hpp"
+ #endif // INCLUDE_ALL_GCS
+ 
+-// Note: This is a special bug reporting site for the JVM
+-#define DEFAULT_VENDOR_URL_BUG "http://bugreport.java.com/bugreport/crash.jsp"
++// (DCEVM) The DCE VM has its own JIRA bug tracking system.
++#define DEFAULT_VENDOR_URL_BUG "https://github.com/Guidewire/DCEVM/issues"
+ #define DEFAULT_JAVA_LAUNCHER  "generic"
+ 
+ // Disable options not supported in this release, with a warning if they
+@@ -1511,6 +1511,10 @@
+ 
+ void Arguments::set_ergonomics_flags() {
+ 
++  if (AllowEnhancedClassRedefinition) {
++    // (DCEVM) enforces serial GC
++    FLAG_SET_ERGO(bool, UseSerialGC, true);
++  }
+   if (os::is_server_class_machine()) {
+     // If no other collector is requested explicitly,
+     // let the VM select the collector based on
+@@ -1988,6 +1992,17 @@
+   if (UseConcMarkSweepGC || UseParNewGC) i++;
+   if (UseParallelGC || UseParallelOldGC) i++;
+   if (UseG1GC)                           i++;
++
++  if (AllowEnhancedClassRedefinition) {
++    // (DCEVM) Must use serial GC. This limitation applies because the instance size changing GC modifications
++    // are only built into the mark and compact algorithm.
++    if (!UseSerialGC && i >= 1) {
++      jio_fprintf(defaultStream::error_stream(),
++                    "Must use the serial GC in the DCEVM\n");
++      status = false;
++    }
++  }
++
+   if (i > 1) {
+     jio_fprintf(defaultStream::error_stream(),
+                 "Conflicting collector combinations in option list; "
+diff --git a/src/share/vm/runtime/globals.hpp b/src/share/vm/runtime/globals.hpp
+index 63222af..7597eda 100644
+--- a/src/share/vm/runtime/globals.hpp
++++ b/src/share/vm/runtime/globals.hpp
+@@ -1283,6 +1283,9 @@
+   product(intx, TraceRedefineClasses, 0,                                    \
+           "Trace level for JVMTI RedefineClasses")                          \
+                                                                             \
++  product(bool, AllowEnhancedClassRedefinition, true,                       \
++          "Allow enhanced class redefinition beyond swapping method bodies")\
++                                                                            \
+   develop(bool, StressMethodComparator, false,                              \
+           "Run the MethodComparator on all loaded methods")                 \
+                                                                             \

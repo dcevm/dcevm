@@ -1394,7 +1394,7 @@ index 0d6d00d..3b1866a 100644
    for (PreviousVersionNode * pv_node = pvw.next_previous_version();
 diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.cpp b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
 new file mode 100644
-index 0000000..1a0406e
+index 0000000..dc76c3d
 --- /dev/null
 +++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
 @@ -0,0 +1,2128 @@
@@ -2935,7 +2935,7 @@ index 0000000..1a0406e
 +  for (int j = 0; j < _matching_methods_length; ++j) {
 +    Method* old_method = _old_methods->at(_matching_old_methods[j]);
 +    jmethodID jmid = old_method->find_jmethod_id_or_null();
-+    RC_TRACE(0x00008000, ("matching method %s, jmid %d", old_method->name_and_sig_as_C_string(), jmid));
++    RC_TRACE(0x00008000, ("matching method %s, jmid %d", old_method->name_and_sig_as_C_string(), *((int *)&jmid)));
 +    if (old_method->new_version() != NULL && jmid == NULL) {
 +       // (DCEVM) Have to create jmethodID in this case
 +       jmid = old_method->jmethod_id();

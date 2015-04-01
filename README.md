@@ -22,7 +22,21 @@ You need the following software to build DCEVM:
 
 * Java 7 or later. If you intend to run tests, it should be one of the supported versions (see list of [patches/](patches/))
 * C++ compiler toolchain (gcc). There is no strict version requirement except that it should be supported by HotSpot build scripts.
-* Mercurial
+* Mercurial with [Mercurial Queues Extension](mercurial.selenic.com/wiki/MqExtension) enabled.
+
+#### Mac OS X specific requirements
+
+Currently the build is not compatible with Clang on Mac OS X, you need to install gcc 4.8 using the [Homebrew](http://brew.sh/):
+
+* brew tap homebrew/versions
+* brew install gcc48
+
+Then set the following environmental properties:
+
+* export CC=/usr/local/bin/gcc-4.8
+* export CFLAGS=-fobjc-exceptions
+* export CXX=/usr/local/bin/g++-4.8
+* export SA_LDFLAGS=-fobjc-exceptions
 
 ### Compiling DCEVM
 
@@ -30,7 +44,7 @@ You need the following software to build DCEVM:
 * Run `./gradlew patch` to retrieve HotSpot sources and patch them.
 * Run `./gradlew compileFastdebug` to build `fastdebug` version or `./gradlew compileProduct` to build `product` version.
 * Compiled libraries are placed in `hotspot/build/fastdebug` or `hotspot/build/product`.
-* 
+
 ### Installing DCEVM
 
 * Replace `libjvm.so/jvm.dll/libjvm.dylib` in the target JRE.

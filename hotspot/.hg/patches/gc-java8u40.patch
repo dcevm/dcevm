@@ -1,10 +1,10 @@
 # HG changeset patch
-# Parent  8f44f8a7e50563e6c9a82fb0ed6c7bce4925bd3b
+# Parent  dc85548673e78358fc7a3dcbe2f51cad5a91201f
 Change MarkAndSweep garbage collector to allow changing instances during redefinition.
 
-diff -r 8f44f8a7e505 src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp
---- a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp	Tue Mar 31 18:01:20 2015 -0700
-+++ b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp	Tue Mar 31 18:05:19 2015 -0700
+diff -r dc85548673e7 src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp
+--- a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp	Tue Mar 31 18:13:48 2015 -0700
++++ b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.cpp	Wed Apr 01 11:22:01 2015 -0700
 @@ -163,6 +163,12 @@
    }
  }
@@ -36,9 +36,9 @@ diff -r 8f44f8a7e505 src/share/vm/gc_implementation/concurrentMarkSweep/compacti
  }
  
  // fragmentation_metric = 1 - [sum of (fbs**2) / (sum of fbs)**2]
-diff -r 8f44f8a7e505 src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp
---- a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp	Tue Mar 31 18:01:20 2015 -0700
-+++ b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp	Tue Mar 31 18:05:19 2015 -0700
+diff -r dc85548673e7 src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp
+--- a/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp	Tue Mar 31 18:13:48 2015 -0700
++++ b/src/share/vm/gc_implementation/concurrentMarkSweep/compactibleFreeListSpace.hpp	Wed Apr 01 11:22:01 2015 -0700
 @@ -150,6 +150,7 @@
  
    // Support for compacting cms
@@ -47,9 +47,21 @@ diff -r 8f44f8a7e505 src/share/vm/gc_implementation/concurrentMarkSweep/compacti
    HeapWord* forward(oop q, size_t size, CompactPoint* cp, HeapWord* compact_top);
  
    // Initialization helpers.
-diff -r 8f44f8a7e505 src/share/vm/gc_implementation/shared/markSweep.cpp
---- a/src/share/vm/gc_implementation/shared/markSweep.cpp	Tue Mar 31 18:01:20 2015 -0700
-+++ b/src/share/vm/gc_implementation/shared/markSweep.cpp	Tue Mar 31 18:05:19 2015 -0700
+diff -r dc85548673e7 src/share/vm/gc_implementation/g1/heapRegion.cpp
+--- a/src/share/vm/gc_implementation/g1/heapRegion.cpp	Tue Mar 31 18:13:48 2015 -0700
++++ b/src/share/vm/gc_implementation/g1/heapRegion.cpp	Wed Apr 01 11:22:01 2015 -0700
+@@ -1063,7 +1063,7 @@
+ 
+ #define block_is_always_obj(q) true
+ void G1OffsetTableContigSpace::prepare_for_compaction(CompactPoint* cp) {
+-  SCAN_AND_FORWARD(cp, top, block_is_always_obj, block_size);
++  SCAN_AND_FORWARD(cp, top, block_is_always_obj, block_size, false);
+ }
+ #undef block_is_always_obj
+ 
+diff -r dc85548673e7 src/share/vm/gc_implementation/shared/markSweep.cpp
+--- a/src/share/vm/gc_implementation/shared/markSweep.cpp	Tue Mar 31 18:13:48 2015 -0700
++++ b/src/share/vm/gc_implementation/shared/markSweep.cpp	Wed Apr 01 11:22:01 2015 -0700
 @@ -48,6 +48,8 @@
  STWGCTimer*             MarkSweep::_gc_timer        = NULL;
  SerialOldTracer*        MarkSweep::_gc_tracer       = NULL;
@@ -160,9 +172,9 @@ diff -r 8f44f8a7e505 src/share/vm/gc_implementation/shared/markSweep.cpp
 +    }
 +  }
 +}
-diff -r 8f44f8a7e505 src/share/vm/gc_implementation/shared/markSweep.hpp
---- a/src/share/vm/gc_implementation/shared/markSweep.hpp	Tue Mar 31 18:01:20 2015 -0700
-+++ b/src/share/vm/gc_implementation/shared/markSweep.hpp	Tue Mar 31 18:05:19 2015 -0700
+diff -r dc85548673e7 src/share/vm/gc_implementation/shared/markSweep.hpp
+--- a/src/share/vm/gc_implementation/shared/markSweep.hpp	Tue Mar 31 18:13:48 2015 -0700
++++ b/src/share/vm/gc_implementation/shared/markSweep.hpp	Wed Apr 01 11:22:01 2015 -0700
 @@ -96,8 +96,12 @@
    friend class AdjustPointerClosure;
    friend class KeepAliveClosure;
@@ -186,9 +198,9 @@ diff -r 8f44f8a7e505 src/share/vm/gc_implementation/shared/markSweep.hpp
    static void follow_stack();   // Empty marking stack.
  
    static void follow_klass(Klass* klass);
-diff -r 8f44f8a7e505 src/share/vm/memory/genMarkSweep.cpp
---- a/src/share/vm/memory/genMarkSweep.cpp	Tue Mar 31 18:01:20 2015 -0700
-+++ b/src/share/vm/memory/genMarkSweep.cpp	Tue Mar 31 18:05:19 2015 -0700
+diff -r dc85548673e7 src/share/vm/memory/genMarkSweep.cpp
+--- a/src/share/vm/memory/genMarkSweep.cpp	Tue Mar 31 18:13:48 2015 -0700
++++ b/src/share/vm/memory/genMarkSweep.cpp	Wed Apr 01 11:22:01 2015 -0700
 @@ -327,11 +327,16 @@
    // in the same order in phase2, phase3 and phase4. We don't quite do that
    // here (perm_gen first rather than last), so we tell the validate code
@@ -206,9 +218,9 @@ diff -r 8f44f8a7e505 src/share/vm/memory/genMarkSweep.cpp
 +
 +  MarkSweep::copy_rescued_objects_back();
  }
-diff -r 8f44f8a7e505 src/share/vm/memory/space.cpp
---- a/src/share/vm/memory/space.cpp	Tue Mar 31 18:01:20 2015 -0700
-+++ b/src/share/vm/memory/space.cpp	Tue Mar 31 18:05:19 2015 -0700
+diff -r dc85548673e7 src/share/vm/memory/space.cpp
+--- a/src/share/vm/memory/space.cpp	Tue Mar 31 18:13:48 2015 -0700
++++ b/src/share/vm/memory/space.cpp	Wed Apr 01 11:22:01 2015 -0700
 @@ -377,9 +377,8 @@
    _compaction_top = bottom();
  }
@@ -443,9 +455,9 @@ diff -r 8f44f8a7e505 src/share/vm/memory/space.cpp
  }
  
  void Space::print_short() const { print_short_on(tty); }
-diff -r 8f44f8a7e505 src/share/vm/memory/space.hpp
---- a/src/share/vm/memory/space.hpp	Tue Mar 31 18:01:20 2015 -0700
-+++ b/src/share/vm/memory/space.hpp	Tue Mar 31 18:05:19 2015 -0700
+diff -r dc85548673e7 src/share/vm/memory/space.hpp
+--- a/src/share/vm/memory/space.hpp	Tue Mar 31 18:13:48 2015 -0700
++++ b/src/share/vm/memory/space.hpp	Wed Apr 01 11:22:01 2015 -0700
 @@ -392,6 +392,9 @@
    // indicates when the next such action should be taken.
    virtual void prepare_for_compaction(CompactPoint* cp);
@@ -472,9 +484,9 @@ diff -r 8f44f8a7e505 src/share/vm/memory/space.hpp
  
    // Return a size with adjusments as required of the space.
    virtual size_t adjust_object_size_v(size_t size) const { return size; }
-diff -r 8f44f8a7e505 src/share/vm/memory/space.inline.hpp
---- a/src/share/vm/memory/space.inline.hpp	Tue Mar 31 18:01:20 2015 -0700
-+++ b/src/share/vm/memory/space.inline.hpp	Tue Mar 31 18:05:19 2015 -0700
+diff -r dc85548673e7 src/share/vm/memory/space.inline.hpp
+--- a/src/share/vm/memory/space.inline.hpp	Tue Mar 31 18:13:48 2015 -0700
++++ b/src/share/vm/memory/space.inline.hpp	Wed Apr 01 11:22:01 2015 -0700
 @@ -35,7 +35,7 @@
    return block_start_const(p);
  }
@@ -588,9 +600,9 @@ diff -r 8f44f8a7e505 src/share/vm/memory/space.inline.hpp
        Copy::aligned_conjoint_words(q, compaction_top, size);                    \
        oop(compaction_top)->init_mark();                                         \
        assert(oop(compaction_top)->klass() != NULL, "should have a class");      \
-diff -r 8f44f8a7e505 src/share/vm/memory/universe.cpp
---- a/src/share/vm/memory/universe.cpp	Tue Mar 31 18:01:20 2015 -0700
-+++ b/src/share/vm/memory/universe.cpp	Tue Mar 31 18:05:19 2015 -0700
+diff -r dc85548673e7 src/share/vm/memory/universe.cpp
+--- a/src/share/vm/memory/universe.cpp	Tue Mar 31 18:13:48 2015 -0700
++++ b/src/share/vm/memory/universe.cpp	Wed Apr 01 11:22:01 2015 -0700
 @@ -84,6 +84,8 @@
  
  PRAGMA_FORMAT_MUTE_WARNINGS_FOR_GCC
@@ -600,9 +612,9 @@ diff -r 8f44f8a7e505 src/share/vm/memory/universe.cpp
  // Known objects
  Klass* Universe::_boolArrayKlassObj                 = NULL;
  Klass* Universe::_byteArrayKlassObj                 = NULL;
-diff -r 8f44f8a7e505 src/share/vm/memory/universe.hpp
---- a/src/share/vm/memory/universe.hpp	Tue Mar 31 18:01:20 2015 -0700
-+++ b/src/share/vm/memory/universe.hpp	Tue Mar 31 18:05:19 2015 -0700
+diff -r dc85548673e7 src/share/vm/memory/universe.hpp
+--- a/src/share/vm/memory/universe.hpp	Tue Mar 31 18:13:48 2015 -0700
++++ b/src/share/vm/memory/universe.hpp	Wed Apr 01 11:22:01 2015 -0700
 @@ -251,7 +251,13 @@
  
    static void compute_verify_oop_data();

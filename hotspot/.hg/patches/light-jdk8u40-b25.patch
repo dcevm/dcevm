@@ -1,9 +1,9 @@
 # HG changeset patch
-# Parent  baedebca62cc3f71dac54f314721bf525d7910fb
+# Parent  b70d145db1e1c441c51b1d0dd8bc1e83600102e9
 
-diff -r baedebca62cc src/share/vm/ci/ciObjectFactory.cpp
---- a/src/share/vm/ci/ciObjectFactory.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/ci/ciObjectFactory.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/ci/ciObjectFactory.cpp
+--- a/src/share/vm/ci/ciObjectFactory.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/ci/ciObjectFactory.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -799,3 +799,27 @@
               _unloaded_instances->length(),
               _unloaded_klasses->length());
@@ -32,9 +32,9 @@ diff -r baedebca62cc src/share/vm/ci/ciObjectFactory.cpp
 +#endif // ASSERT
 +}
 +
-diff -r baedebca62cc src/share/vm/ci/ciObjectFactory.hpp
---- a/src/share/vm/ci/ciObjectFactory.hpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/ci/ciObjectFactory.hpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/ci/ciObjectFactory.hpp
+--- a/src/share/vm/ci/ciObjectFactory.hpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/ci/ciObjectFactory.hpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -92,6 +92,7 @@
  
    ciInstance* get_unloaded_instance(ciInstanceKlass* klass);
@@ -52,9 +52,9 @@ diff -r baedebca62cc src/share/vm/ci/ciObjectFactory.hpp
  };
  
  #endif // SHARE_VM_CI_CIOBJECTFACTORY_HPP
-diff -r baedebca62cc src/share/vm/classfile/classFileParser.cpp
---- a/src/share/vm/classfile/classFileParser.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/classfile/classFileParser.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/classfile/classFileParser.cpp
+--- a/src/share/vm/classfile/classFileParser.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/classfile/classFileParser.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -763,6 +763,7 @@
  Array<Klass*>* ClassFileParser::parse_interfaces(int length,
                                                   Handle protection_domain,
@@ -226,9 +226,9 @@ diff -r baedebca62cc src/share/vm/classfile/classFileParser.cpp
        k->set_is_cloneable();
      }
    }
-diff -r baedebca62cc src/share/vm/classfile/classFileParser.hpp
---- a/src/share/vm/classfile/classFileParser.hpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/classfile/classFileParser.hpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/classfile/classFileParser.hpp
+--- a/src/share/vm/classfile/classFileParser.hpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/classfile/classFileParser.hpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -218,11 +218,12 @@
    Array<Klass*>* parse_interfaces(int length,
                                    Handle protection_domain,
@@ -274,9 +274,9 @@ diff -r baedebca62cc src/share/vm/classfile/classFileParser.hpp
                                       TempNewSymbol& parsed_name,
                                       bool verify,
                                       TRAPS);
-diff -r baedebca62cc src/share/vm/classfile/classLoader.cpp
---- a/src/share/vm/classfile/classLoader.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/classfile/classLoader.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/classfile/classLoader.cpp
+--- a/src/share/vm/classfile/classLoader.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/classfile/classLoader.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -1124,6 +1124,7 @@
      instanceKlassHandle result = parser.parseClassFile(h_name,
                                                         loader_data,
@@ -285,9 +285,9 @@ diff -r baedebca62cc src/share/vm/classfile/classLoader.cpp
                                                         parsed_name,
                                                         context.should_verify(classpath_index),
                                                         THREAD);
-diff -r baedebca62cc src/share/vm/classfile/dictionary.cpp
---- a/src/share/vm/classfile/dictionary.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/classfile/dictionary.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/classfile/dictionary.cpp
+--- a/src/share/vm/classfile/dictionary.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/classfile/dictionary.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -145,7 +145,7 @@
        InstanceKlass* ik = InstanceKlass::cast(e);
  
@@ -357,9 +357,9 @@ diff -r baedebca62cc src/share/vm/classfile/dictionary.cpp
  }
  
  
-diff -r baedebca62cc src/share/vm/classfile/dictionary.hpp
---- a/src/share/vm/classfile/dictionary.hpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/classfile/dictionary.hpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/classfile/dictionary.hpp
+--- a/src/share/vm/classfile/dictionary.hpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/classfile/dictionary.hpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -78,6 +78,10 @@
  
    void add_klass(Symbol* class_name, ClassLoaderData* loader_data,KlassHandle obj);
@@ -383,9 +383,9 @@ diff -r baedebca62cc src/share/vm/classfile/dictionary.hpp
    // Unload (that is, break root links to) all unmarked classes and loaders.
    void do_unloading();
  
-diff -r baedebca62cc src/share/vm/classfile/javaClasses.cpp
---- a/src/share/vm/classfile/javaClasses.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/classfile/javaClasses.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/classfile/javaClasses.cpp
+--- a/src/share/vm/classfile/javaClasses.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/classfile/javaClasses.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -1679,6 +1679,8 @@
          skip_throwableInit_check = true;
        }
@@ -395,9 +395,9 @@ diff -r baedebca62cc src/share/vm/classfile/javaClasses.cpp
      if (method->is_hidden()) {
        if (skip_hidden)  continue;
      }
-diff -r baedebca62cc src/share/vm/classfile/loaderConstraints.cpp
---- a/src/share/vm/classfile/loaderConstraints.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/classfile/loaderConstraints.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/classfile/loaderConstraints.cpp
+--- a/src/share/vm/classfile/loaderConstraints.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/classfile/loaderConstraints.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -446,7 +446,7 @@
          if (k != NULL) {
            // We found the class in the system dictionary, so we should
@@ -407,9 +407,9 @@ diff -r baedebca62cc src/share/vm/classfile/loaderConstraints.cpp
          } else {
            // If we don't find the class in the system dictionary, it
            // has to be in the placeholders table.
-diff -r baedebca62cc src/share/vm/classfile/systemDictionary.cpp
---- a/src/share/vm/classfile/systemDictionary.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/classfile/systemDictionary.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/classfile/systemDictionary.cpp
+--- a/src/share/vm/classfile/systemDictionary.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/classfile/systemDictionary.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -182,6 +182,7 @@
      // can return a null klass
      klass = handle_resolution_exception(class_name, class_loader, protection_domain, throw_error, k_h, THREAD);
@@ -561,9 +561,9 @@ diff -r baedebca62cc src/share/vm/classfile/systemDictionary.cpp
          linkage_error = "loader (instance of  %s): attempted  duplicate class "
            "definition for name: \"%s\"";
        } else {
-diff -r baedebca62cc src/share/vm/classfile/systemDictionary.hpp
---- a/src/share/vm/classfile/systemDictionary.hpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/classfile/systemDictionary.hpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/classfile/systemDictionary.hpp
+--- a/src/share/vm/classfile/systemDictionary.hpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/classfile/systemDictionary.hpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -284,7 +284,7 @@
    // Resolve from stream (called by jni_DefineClass and JVM_DefineClass)
    static Klass* resolve_from_stream(Symbol* class_name, Handle class_loader,
@@ -602,9 +602,9 @@ diff -r baedebca62cc src/share/vm/classfile/systemDictionary.hpp
    static instanceKlassHandle find_or_define_instance_class(Symbol* class_name,
                                                  Handle class_loader,
                                                  instanceKlassHandle k, TRAPS);
-diff -r baedebca62cc src/share/vm/classfile/verifier.cpp
---- a/src/share/vm/classfile/verifier.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/classfile/verifier.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/classfile/verifier.cpp
+--- a/src/share/vm/classfile/verifier.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/classfile/verifier.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -189,7 +189,7 @@
    Symbol* name = klass->name();
    Klass* refl_magic_klass = SystemDictionary::reflect_MagicAccessorImpl_klass();
@@ -632,9 +632,9 @@ diff -r baedebca62cc src/share/vm/classfile/verifier.cpp
    int num_methods = methods->length();
  
    for (int index = 0; index < num_methods; index++) {
-diff -r baedebca62cc src/share/vm/classfile/verifier.hpp
---- a/src/share/vm/classfile/verifier.hpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/classfile/verifier.hpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/classfile/verifier.hpp
+--- a/src/share/vm/classfile/verifier.hpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/classfile/verifier.hpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -343,6 +343,7 @@
  
    VerificationType object_type() const;
@@ -643,9 +643,9 @@ diff -r baedebca62cc src/share/vm/classfile/verifier.hpp
    instanceKlassHandle _klass;  // the class being verified
    methodHandle        _method; // current method being verified
    VerificationType    _this_type; // the verification type of the current class
-diff -r baedebca62cc src/share/vm/interpreter/linkResolver.cpp
---- a/src/share/vm/interpreter/linkResolver.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/interpreter/linkResolver.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/interpreter/linkResolver.cpp
+--- a/src/share/vm/interpreter/linkResolver.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/interpreter/linkResolver.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -215,8 +215,8 @@
  // Klass resolution
  
@@ -684,10 +684,10 @@ diff -r baedebca62cc src/share/vm/interpreter/linkResolver.cpp
        selected_method = methodHandle(THREAD, inst->method_at_vtable(vtable_index));
      }
    }
-diff -r baedebca62cc src/share/vm/memory/universe.cpp
---- a/src/share/vm/memory/universe.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/memory/universe.cpp	Tue Mar 31 18:10:02 2015 -0700
-@@ -168,6 +168,42 @@
+diff -r b70d145db1e1 src/share/vm/memory/universe.cpp
+--- a/src/share/vm/memory/universe.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/memory/universe.cpp	Wed Apr 01 12:11:09 2015 -0700
+@@ -168,6 +168,43 @@
    f(doubleArrayKlassObj());
  }
  
@@ -714,7 +714,8 @@ diff -r baedebca62cc src/share/vm/memory/universe.cpp
 +  // Global (weak) JNI handles
 +  JNIHandles::weak_oops_do(&always_true, oopClosure);
 +
-+  CodeCache::oops_do(oopClosure);
++  CodeBlobToOopClosure blobClosure(oopClosure, CodeBlobToOopClosure::FixRelocations);
++  CodeCache::blobs_do(&blobClosure);
 +  StringTable::oops_do(oopClosure);
 +  
 +  // (DCEVM) TODO: Check if this is correct?
@@ -730,9 +731,9 @@ diff -r baedebca62cc src/share/vm/memory/universe.cpp
  void Universe::oops_do(OopClosure* f, bool do_all) {
  
    f->do_oop((oop*) &_int_mirror);
-diff -r baedebca62cc src/share/vm/memory/universe.hpp
---- a/src/share/vm/memory/universe.hpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/memory/universe.hpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/memory/universe.hpp
+--- a/src/share/vm/memory/universe.hpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/memory/universe.hpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -415,6 +415,7 @@
    static void run_finalizers_on_exit();
  
@@ -741,9 +742,9 @@ diff -r baedebca62cc src/share/vm/memory/universe.hpp
  
    // Apply "f" to the addresses of all the direct heap pointers maintained
    // as static fields of "Universe".
-diff -r baedebca62cc src/share/vm/oops/cpCache.cpp
---- a/src/share/vm/oops/cpCache.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/oops/cpCache.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/oops/cpCache.cpp
+--- a/src/share/vm/oops/cpCache.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/oops/cpCache.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -338,7 +338,8 @@
    if (has_appendix) {
      const int appendix_index = f2_as_index() + _indy_resolved_references_appendix_offset;
@@ -807,9 +808,9 @@ diff -r baedebca62cc src/share/vm/oops/cpCache.cpp
  #endif // INCLUDE_JVMTI
  
  
-diff -r baedebca62cc src/share/vm/oops/cpCache.hpp
---- a/src/share/vm/oops/cpCache.hpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/oops/cpCache.hpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/oops/cpCache.hpp
+--- a/src/share/vm/oops/cpCache.hpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/oops/cpCache.hpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -381,6 +381,10 @@
           bool * trace_name_printed);
    bool check_no_old_or_obsolete_entries();
@@ -832,9 +833,9 @@ diff -r baedebca62cc src/share/vm/oops/cpCache.hpp
  #endif // INCLUDE_JVMTI
  
    // Deallocate - no fields to deallocate
-diff -r baedebca62cc src/share/vm/oops/instanceKlass.cpp
---- a/src/share/vm/oops/instanceKlass.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/oops/instanceKlass.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/oops/instanceKlass.cpp
+--- a/src/share/vm/oops/instanceKlass.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/oops/instanceKlass.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -725,7 +725,8 @@
        }
  #endif
@@ -978,9 +979,9 @@ diff -r baedebca62cc src/share/vm/oops/instanceKlass.cpp
  } // end has_previous_version()
  
  
-diff -r baedebca62cc src/share/vm/oops/instanceKlass.hpp
---- a/src/share/vm/oops/instanceKlass.hpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/oops/instanceKlass.hpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/oops/instanceKlass.hpp
+--- a/src/share/vm/oops/instanceKlass.hpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/oops/instanceKlass.hpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -139,6 +139,7 @@
    friend class VMStructs;
    friend class ClassFileParser;
@@ -1025,9 +1026,9 @@ diff -r baedebca62cc src/share/vm/oops/instanceKlass.hpp
    void methods_do(void f(Method* method));
    void array_klasses_do(void f(Klass* k));
    void array_klasses_do(void f(Klass* k, TRAPS), TRAPS);
-diff -r baedebca62cc src/share/vm/oops/klass.cpp
---- a/src/share/vm/oops/klass.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/oops/klass.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/oops/klass.cpp
+--- a/src/share/vm/oops/klass.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/oops/klass.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -186,6 +186,13 @@
    set_next_link(NULL);
    TRACE_INIT_ID(this);
@@ -1067,9 +1068,9 @@ diff -r baedebca62cc src/share/vm/oops/klass.cpp
  bool Klass::is_loader_alive(BoolObjectClosure* is_alive) {
  #ifdef ASSERT
    // The class is alive iff the class loader is alive.
-diff -r baedebca62cc src/share/vm/oops/klass.hpp
---- a/src/share/vm/oops/klass.hpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/oops/klass.hpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/oops/klass.hpp
+--- a/src/share/vm/oops/klass.hpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/oops/klass.hpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -149,6 +149,10 @@
    oop       _java_mirror;
    // Superclass
@@ -1177,9 +1178,9 @@ diff -r baedebca62cc src/share/vm/oops/klass.hpp
  
    // Compiler support
    static ByteSize super_offset()                 { return in_ByteSize(offset_of(Klass, _super)); }
-diff -r baedebca62cc src/share/vm/oops/klassVtable.cpp
---- a/src/share/vm/oops/klassVtable.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/oops/klassVtable.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/oops/klassVtable.cpp
+--- a/src/share/vm/oops/klassVtable.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/oops/klassVtable.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -1432,6 +1432,8 @@
  
  void klassVtable::verify_against(outputStream* st, klassVtable* vt, int index) {
@@ -1209,9 +1210,9 @@ diff -r baedebca62cc src/share/vm/oops/klassVtable.cpp
    }
  }
  
-diff -r baedebca62cc src/share/vm/oops/method.cpp
---- a/src/share/vm/oops/method.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/oops/method.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/oops/method.cpp
+--- a/src/share/vm/oops/method.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/oops/method.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -1207,6 +1207,8 @@
  
    // Reset correct method/const method, method size, and parameter info
@@ -1232,9 +1233,9 @@ diff -r baedebca62cc src/share/vm/oops/method.cpp
    ClassLoaderData* cld = loader_data;
  
    if (!SafepointSynchronize::is_at_safepoint()) {
-diff -r baedebca62cc src/share/vm/oops/method.hpp
---- a/src/share/vm/oops/method.hpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/oops/method.hpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/oops/method.hpp
+--- a/src/share/vm/oops/method.hpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/oops/method.hpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -105,6 +105,10 @@
    AccessFlags       _access_flags;               // Access flags
    int               _vtable_index;               // vtable index of this method (see VtableIndexFlag)
@@ -1270,9 +1271,9 @@ diff -r baedebca62cc src/share/vm/oops/method.hpp
    // signature
    Symbol* signature() const                      { return constants()->symbol_at(signature_index()); }
    int signature_index() const                    { return constMethod()->signature_index();         }
-diff -r baedebca62cc src/share/vm/prims/jni.cpp
---- a/src/share/vm/prims/jni.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/prims/jni.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/prims/jni.cpp
+--- a/src/share/vm/prims/jni.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/prims/jni.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -399,6 +399,7 @@
    }
    Klass* k = SystemDictionary::resolve_from_stream(class_name, class_loader,
@@ -1281,9 +1282,9 @@ diff -r baedebca62cc src/share/vm/prims/jni.cpp
                                                       CHECK_NULL);
  
    if (TraceClassResolution && k != NULL) {
-diff -r baedebca62cc src/share/vm/prims/jvm.cpp
---- a/src/share/vm/prims/jvm.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/prims/jvm.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/prims/jvm.cpp
+--- a/src/share/vm/prims/jvm.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/prims/jvm.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -1029,6 +1029,7 @@
    Klass* k = SystemDictionary::resolve_from_stream(class_name, class_loader,
                                                       protection_domain, &st,
@@ -1292,9 +1293,9 @@ diff -r baedebca62cc src/share/vm/prims/jvm.cpp
                                                       CHECK_NULL);
  
    if (TraceClassResolution && k != NULL) {
-diff -r baedebca62cc src/share/vm/prims/jvmtiEnv.cpp
---- a/src/share/vm/prims/jvmtiEnv.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/prims/jvmtiEnv.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/prims/jvmtiEnv.cpp
+--- a/src/share/vm/prims/jvmtiEnv.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/prims/jvmtiEnv.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -43,6 +43,7 @@
  #include "prims/jvmtiManageCapabilities.hpp"
  #include "prims/jvmtiRawMonitor.hpp"
@@ -1340,9 +1341,9 @@ diff -r baedebca62cc src/share/vm/prims/jvmtiEnv.cpp
    VM_RedefineClasses op(class_count, class_definitions, jvmti_class_load_kind_redefine);
    VMThread::execute(&op);
    return (op.check_error());
-diff -r baedebca62cc src/share/vm/prims/jvmtiExport.hpp
---- a/src/share/vm/prims/jvmtiExport.hpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/prims/jvmtiExport.hpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/prims/jvmtiExport.hpp
+--- a/src/share/vm/prims/jvmtiExport.hpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/prims/jvmtiExport.hpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -188,6 +188,7 @@
    // systems as needed to relax invariant checks.
    static bool _has_redefined_a_class;
@@ -1351,9 +1352,9 @@ diff -r baedebca62cc src/share/vm/prims/jvmtiExport.hpp
    inline static void set_has_redefined_a_class() {
      JVMTI_ONLY(_has_redefined_a_class = true;)
    }
-diff -r baedebca62cc src/share/vm/prims/jvmtiImpl.cpp
---- a/src/share/vm/prims/jvmtiImpl.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/prims/jvmtiImpl.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/prims/jvmtiImpl.cpp
+--- a/src/share/vm/prims/jvmtiImpl.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/prims/jvmtiImpl.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -289,6 +289,11 @@
    Symbol* m_name = _method->name();
    Symbol* m_signature = _method->signature();
@@ -1366,9 +1367,9 @@ diff -r baedebca62cc src/share/vm/prims/jvmtiImpl.cpp
    // search previous versions if they exist
    PreviousVersionWalker pvw(thread, (InstanceKlass *)ikh());
    for (PreviousVersionNode * pv_node = pvw.next_previous_version();
-diff -r baedebca62cc src/share/vm/prims/jvmtiRedefineClasses2.cpp
+diff -r b70d145db1e1 src/share/vm/prims/jvmtiRedefineClasses2.cpp
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp	Tue Mar 31 18:10:02 2015 -0700
++++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -0,0 +1,2128 @@
 +/*
 + * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
@@ -3498,9 +3499,9 @@ diff -r baedebca62cc src/share/vm/prims/jvmtiRedefineClasses2.cpp
 +  transfer.transfer_registrations(old_klass, _deleted_methods, _deleted_methods_length);
 +  transfer.transfer_registrations(old_klass, _matching_old_methods, _matching_methods_length);
 +}
-diff -r baedebca62cc src/share/vm/prims/jvmtiRedefineClasses2.hpp
+diff -r b70d145db1e1 src/share/vm/prims/jvmtiRedefineClasses2.hpp
 --- /dev/null	Thu Jan 01 00:00:00 1970 +0000
-+++ b/src/share/vm/prims/jvmtiRedefineClasses2.hpp	Tue Mar 31 18:10:02 2015 -0700
++++ b/src/share/vm/prims/jvmtiRedefineClasses2.hpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -0,0 +1,161 @@
 +/*
 + * Copyright (c) 2003, 2011, Oracle and/or its affiliates. All rights reserved.
@@ -3663,9 +3664,9 @@ diff -r baedebca62cc src/share/vm/prims/jvmtiRedefineClasses2.hpp
 +};
 +
 +#endif // SHARE_VM_PRIMS_JVMTIENHANCEDREDEFINECLASSES_HPP
-diff -r baedebca62cc src/share/vm/runtime/reflection.cpp
---- a/src/share/vm/runtime/reflection.cpp	Tue Mar 31 18:06:35 2015 -0700
-+++ b/src/share/vm/runtime/reflection.cpp	Tue Mar 31 18:10:02 2015 -0700
+diff -r b70d145db1e1 src/share/vm/runtime/reflection.cpp
+--- a/src/share/vm/runtime/reflection.cpp	Wed Apr 01 11:24:12 2015 -0700
++++ b/src/share/vm/runtime/reflection.cpp	Wed Apr 01 12:11:09 2015 -0700
 @@ -519,6 +519,12 @@
                                       AccessFlags access,
                                       bool classloader_only,

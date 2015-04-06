@@ -1,9 +1,9 @@
 # HG changeset patch
-# Parent  94dee6e9176e68ea1122af0dc98b6a5c152ea1e5
+# Parent  7e9e421e88b58544d31212dd6961cdf51be5e5aa
 
-diff -r 94dee6e9176e src/share/vm/runtime/arguments.cpp
---- a/src/share/vm/runtime/arguments.cpp	Tue Mar 31 17:58:49 2015 -0700
-+++ b/src/share/vm/runtime/arguments.cpp	Tue Mar 31 18:01:20 2015 -0700
+diff -r 7e9e421e88b5 src/share/vm/runtime/arguments.cpp
+--- a/src/share/vm/runtime/arguments.cpp	Wed Apr 01 14:45:44 2015 -0700
++++ b/src/share/vm/runtime/arguments.cpp	Mon Apr 06 10:54:01 2015 -0700
 @@ -65,8 +65,8 @@
  #include "gc_implementation/parallelScavenge/parallelScavengeHeap.hpp"
  #endif // INCLUDE_ALL_GCS
@@ -15,18 +15,19 @@ diff -r 94dee6e9176e src/share/vm/runtime/arguments.cpp
  #define DEFAULT_JAVA_LAUNCHER  "generic"
  
  // Disable options not supported in this release, with a warning if they
-@@ -1561,6 +1561,10 @@
+@@ -1561,7 +1561,10 @@
  }
  
  void Arguments::select_gc_ergonomically() {
+-  if (os::is_server_class_machine()) {
 +  if (AllowEnhancedClassRedefinition) {
 +    // (DCEVM) enforces serial GC
 +    FLAG_SET_ERGO(bool, UseSerialGC, true);
-+  }
-   if (os::is_server_class_machine()) {
++  } else if (os::is_server_class_machine()) {
      if (should_auto_select_low_pause_collector()) {
        FLAG_SET_ERGO(bool, UseConcMarkSweepGC, true);
-@@ -2082,6 +2086,17 @@
+     } else {
+@@ -2082,6 +2085,17 @@
    if (UseConcMarkSweepGC || UseParNewGC) i++;
    if (UseParallelGC || UseParallelOldGC) i++;
    if (UseG1GC)                           i++;
@@ -44,9 +45,9 @@ diff -r 94dee6e9176e src/share/vm/runtime/arguments.cpp
    if (i > 1) {
      jio_fprintf(defaultStream::error_stream(),
                  "Conflicting collector combinations in option list; "
-diff -r 94dee6e9176e src/share/vm/runtime/globals.hpp
---- a/src/share/vm/runtime/globals.hpp	Tue Mar 31 17:58:49 2015 -0700
-+++ b/src/share/vm/runtime/globals.hpp	Tue Mar 31 18:01:20 2015 -0700
+diff -r 7e9e421e88b5 src/share/vm/runtime/globals.hpp
+--- a/src/share/vm/runtime/globals.hpp	Wed Apr 01 14:45:44 2015 -0700
++++ b/src/share/vm/runtime/globals.hpp	Mon Apr 06 10:54:01 2015 -0700
 @@ -1305,6 +1305,9 @@
    product(intx, TraceRedefineClasses, 0,                                    \
            "Trace level for JVMTI RedefineClasses")                          \

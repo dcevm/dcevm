@@ -262,7 +262,7 @@ enum Os {
     }
 
     static Os current() {
-        return values().find { os -> org.apache.tools.ant.taskdefs.condition.Os.isFamily(os.name().toLowerCase()) }
+        return values().find { os -> org.apache.tools.ant.taskdefs.condition.Os.isFamily(os.name().toLowerCase(java.util.Locale.ENGLISH)) }
     }
 }
 

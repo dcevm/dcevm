@@ -1,17 +1,107 @@
 # HG changeset patch
-# Parent  41a800a10f56ae750a3a327463422f3c6cfd2544
+# Parent  592f77165ec5790515d82fd1b9e02cd85b6d1946
 
-diff -r 41a800a10f56 src/share/vm/prims/jvm.cpp
---- a/src/share/vm/prims/jvm.cpp	Thu Jun 18 15:13:34 2015 -0700
-+++ b/src/share/vm/prims/jvm.cpp	Thu Jun 18 15:14:09 2015 -0700
-@@ -4235,6 +4235,10 @@
-   return DTraceJSDT::is_supported();
+diff -r 592f77165ec5 make/aix/makefiles/mapfile-vers-debug
+--- a/make/aix/makefiles/mapfile-vers-debug	Thu Jun 18 16:48:43 2015 -0700
++++ b/make/aix/makefiles/mapfile-vers-debug	Thu Jun 18 17:01:37 2015 -0700
+@@ -227,6 +227,7 @@
+                 JVM_SetProtectionDomain;
+                 JVM_SetSockOpt;
+                 JVM_SetThreadPriority;
++                JVM_SetVmMemoryPressure;
+                 JVM_Sleep;
+                 JVM_Socket;
+                 JVM_SocketAvailable;
+diff -r 592f77165ec5 make/aix/makefiles/mapfile-vers-product
+--- a/make/aix/makefiles/mapfile-vers-product	Thu Jun 18 16:48:43 2015 -0700
++++ b/make/aix/makefiles/mapfile-vers-product	Thu Jun 18 17:01:37 2015 -0700
+@@ -225,6 +225,7 @@
+                 JVM_SetProtectionDomain;
+                 JVM_SetSockOpt;
+                 JVM_SetThreadPriority;
++                JVM_SetVmMemoryPressure;
+                 JVM_Sleep;
+                 JVM_Socket;
+                 JVM_SocketAvailable;
+diff -r 592f77165ec5 make/bsd/makefiles/mapfile-vers-debug
+--- a/make/bsd/makefiles/mapfile-vers-debug	Thu Jun 18 16:48:43 2015 -0700
++++ b/make/bsd/makefiles/mapfile-vers-debug	Thu Jun 18 17:01:37 2015 -0700
+@@ -228,6 +228,7 @@
+                 _JVM_SetPrimitiveArrayElement
+                 _JVM_SetSockOpt
+                 _JVM_SetThreadPriority
++                _JVM_SetVmMemoryPressure
+                 _JVM_Sleep
+                 _JVM_Socket
+                 _JVM_SocketAvailable
+diff -r 592f77165ec5 make/bsd/makefiles/mapfile-vers-product
+--- a/make/bsd/makefiles/mapfile-vers-product	Thu Jun 18 16:48:43 2015 -0700
++++ b/make/bsd/makefiles/mapfile-vers-product	Thu Jun 18 17:01:37 2015 -0700
+@@ -228,6 +228,7 @@
+                 _JVM_SetPrimitiveArrayElement
+                 _JVM_SetSockOpt
+                 _JVM_SetThreadPriority
++                _JVM_SetVmMemoryPressure
+                 _JVM_Sleep
+                 _JVM_Socket
+                 _JVM_SocketAvailable
+diff -r 592f77165ec5 make/linux/makefiles/mapfile-vers-debug
+--- a/make/linux/makefiles/mapfile-vers-debug	Thu Jun 18 16:48:43 2015 -0700
++++ b/make/linux/makefiles/mapfile-vers-debug	Thu Jun 18 17:01:37 2015 -0700
+@@ -230,6 +230,7 @@
+                 JVM_SetPrimitiveArrayElement;
+                 JVM_SetSockOpt;
+                 JVM_SetThreadPriority;
++                JVM_SetVmMemoryPressure;
+                 JVM_Sleep;
+                 JVM_Socket;
+                 JVM_SocketAvailable;
+diff -r 592f77165ec5 make/linux/makefiles/mapfile-vers-product
+--- a/make/linux/makefiles/mapfile-vers-product	Thu Jun 18 16:48:43 2015 -0700
++++ b/make/linux/makefiles/mapfile-vers-product	Thu Jun 18 17:01:37 2015 -0700
+@@ -230,6 +230,7 @@
+                 JVM_SetPrimitiveArrayElement;
+                 JVM_SetSockOpt;
+                 JVM_SetThreadPriority;
++                JVM_SetVmMemoryPressure;
+                 JVM_Sleep;
+                 JVM_Socket;
+                 JVM_SocketAvailable;
+diff -r 592f77165ec5 make/solaris/makefiles/mapfile-vers
+--- a/make/solaris/makefiles/mapfile-vers	Thu Jun 18 16:48:43 2015 -0700
++++ b/make/solaris/makefiles/mapfile-vers	Thu Jun 18 17:01:37 2015 -0700
+@@ -230,6 +230,7 @@
+                 JVM_SetPrimitiveArrayElement;
+                 JVM_SetSockOpt;
+                 JVM_SetThreadPriority;
++                JVM_SetVmMemoryPressure;
+                 JVM_Sleep;
+                 JVM_Socket;
+                 JVM_SocketAvailable;
+diff -r 592f77165ec5 src/share/vm/prims/jvm.cpp
+--- a/src/share/vm/prims/jvm.cpp	Thu Jun 18 16:48:43 2015 -0700
++++ b/src/share/vm/prims/jvm.cpp	Thu Jun 18 17:01:37 2015 -0700
+@@ -4302,6 +4302,10 @@
+   return Management::get_jmm_interface(version);
  JVM_END
  
 +JVM_ENTRY_NO_ENV(void, JVM_SetVmMemoryPressure(jint pressure))
 +  // Do nothing, this function is only to make management.dll happy
 +JVM_END
 +
- // Returns an array of all live Thread objects (VM internal JavaThreads,
- // jvmti agent threads, and JNI attaching threads  are skipped)
- // See CR 6404306 regarding JNI attaching threads
+ // com.sun.tools.attach.VirtualMachine agent properties support
+ //
+ // Initialize the agent properties with the properties maintained in the VM
+diff -r 592f77165ec5 src/share/vm/prims/jvm.h
+--- a/src/share/vm/prims/jvm.h	Thu Jun 18 16:48:43 2015 -0700
++++ b/src/share/vm/prims/jvm.h	Thu Jun 18 17:01:37 2015 -0700
+@@ -1490,6 +1490,9 @@
+ JNIEXPORT void* JNICALL
+ JVM_GetManagement(jint version);
+ 
++JNIEXPORT void JNICALL
++JVM_SetVmMemoryPressure(jint pressure);
++
+ /*
+  * com.sun.tools.attach.VirtualMachine support
+  *

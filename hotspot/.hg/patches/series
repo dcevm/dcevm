@@ -42,3 +42,6 @@ light-jdk8u20-b22.patch  #+light-jdk8u20-b22 #+light-jdk8u31-b13
 light-jdk8u40-b25.patch #+light-jdk8u40-b25 #+light-jdk8u45-b14
 light-jdk8u20-deopt-cp.patch #+light-jdk8u20-b22 #+light-jdk8u31-b13 #+light-jdk8u40-b25 #+light-jdk8u45-b14
 
+# Stub JVM_SetVmMemoryPressure function
+JVM_SetVmMemoryPressure.patch #+light-jdk8u45-b14
+

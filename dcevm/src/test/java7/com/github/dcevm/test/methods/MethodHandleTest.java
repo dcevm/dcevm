@@ -37,6 +37,9 @@ import static org.junit.Assert.assertEquals;
 /**
  * Test for replacing method with MethodHandle pointing to it.
  *
+ * FIXME: add tests for case when we change type of the method (like static -> non-static). If that happens,
+ * MemberName should be somehow marked as invalid...
+ *
  * @author Ivan Dubrov
  */
 public class MethodHandleTest {
@@ -47,8 +50,16 @@ public class MethodHandleTest {
       return 1;
     }
 
+    public int filter(int value) {
+      return value + 10;
+    }
+
     public static int staticMethod() {
       return 3;
+    }
+
+    public static int staticFilter(int value) {
+      return value + 1000;
     }
   }
 
@@ -58,8 +69,16 @@ public class MethodHandleTest {
       return 2;
     }
 
+    public int filter(int value) {
+      return value + 100;
+    }
+
     public static int staticMethod() {
       return 4;
+    }
+
+    public static int staticFilter(int value) {
+      return value + 10000;
     }
   }
 
@@ -77,11 +96,31 @@ public class MethodHandleTest {
     MethodHandle handle = lookup.findVirtual(A.class, "method", MethodType.methodType(int.class));
 
     A a = new A();
-    assertEquals(1, handle.invoke(a));
+    assertEquals(1, (int) handle.invokeExact(a));
 
     __toVersion__(1);
 
-    assertEquals(2, handle.invoke(a));
+    assertEquals(2, (int) handle.invokeExact(a));
+
+    __toVersion__(0);
+    assert __version__() == 0;
+  }
+
+  @Test
+  public void testBoundMethodHandleUpdated() throws Throwable {
+
+    assert __version__() == 0;
+
+    MethodHandles.Lookup lookup = MethodHandles.lookup();
+    MethodHandle handle = lookup.findVirtual(A.class, "method", MethodType.methodType(int.class));
+
+    A a = new A();
+    MethodHandle boundHandle = handle.bindTo(a);
+    assertEquals(1, (int) boundHandle.invokeExact());
+
+    __toVersion__(1);
+
+    assertEquals(2, (int) boundHandle.invokeExact());
 
     __toVersion__(0);
     assert __version__() == 0;
@@ -100,6 +139,31 @@ public class MethodHandleTest {
     __toVersion__(1);
 
     assertEquals(4, handle.invoke());
+
+    __toVersion__(0);
+    assert __version__() == 0;
+  }
+
+  @Test
+  public void testComplexMethodHandleUpdated() throws Throwable {
+
+    assert __version__() == 0;
+
+    MethodHandles.Lookup lookup = MethodHandles.lookup();
+    MethodHandle handle = lookup.findVirtual(A.class, "method", MethodType.methodType(int.class));
+    MethodHandle filter = lookup.findVirtual(A.class, "filter", MethodType.methodType(int.class, int.class));
+    MethodHandle staticFilter = lookup.findStatic(A.class, "staticFilter", MethodType.methodType(int.class, int.class));
+
+    A a = new A();
+    MethodHandle boundFilter = filter.bindTo(a);
+    handle = MethodHandles.filterReturnValue(handle, staticFilter);
+    handle = MethodHandles.filterReturnValue(handle, boundFilter);
+
+    assertEquals(1011, handle.invoke(a));
+
+    __toVersion__(1);
+
+    assertEquals(10102, handle.invoke(a));
 
     __toVersion__(0);
     assert __version__() == 0;

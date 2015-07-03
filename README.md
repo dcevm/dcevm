@@ -22,7 +22,7 @@ You need the following software to build DCEVM:
 
 * Java 7 or later. If you intend to run tests, it should be one of the supported versions (see list of [patches/](patches/))
 * C++ compiler toolchain (gcc). There is no strict version requirement except that it should be supported by HotSpot build scripts.
-* Mercurial with [Mercurial Queues Extension](mercurial.selenic.com/wiki/MqExtension) enabled.
+* Mercurial with [Mercurial Queues Extension](https://mercurial.selenic.com/wiki/MqExtension) enabled.
 
 #### Mac OS X specific requirements
 

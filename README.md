@@ -28,15 +28,19 @@ You need the following software to build DCEVM:
 
 Currently the build is not compatible with Clang on Mac OS X, you need to install gcc 4.8 using the [Homebrew](http://brew.sh/):
 
-* brew tap homebrew/versions
-* brew install gcc48
+```sh
+brew tap homebrew/versions
+brew install gcc48
+```
 
 Then set the following environmental properties:
 
-* export CC=/usr/local/bin/gcc-4.8
-* export CFLAGS=-fobjc-exceptions
-* export CXX=/usr/local/bin/g++-4.8
-* export SA_LDFLAGS=-fobjc-exceptions
+```sh
+export CC=/usr/local/bin/gcc-4.8
+export CFLAGS=-fobjc-exceptions
+export CXX=/usr/local/bin/g++-4.8
+export SA_LDFLAGS=-fobjc-exceptions
+```
 
 ### Compiling DCEVM
 

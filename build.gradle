@@ -1,4 +1,53 @@
 // Global settings
+
+def checkHg() {
+    def printHgErrorAndDie = { errMsg ->
+        // flush whatever gradle was writing
+        System.err.println()
+        System.err.println(errMsg)
+        System.err.println('That it fatal, as it is a requirement to build DCEVM')
+        System.err.println('Please consult the README for more details')
+        // and ensure a clean line after ours
+        System.err.println()
+        // but that IS fatal
+        System.exit(1)
+    }
+
+    def hgMissingError = {
+        printHgErrorAndDie('It seems you do not have Mercurial installed (hg)')
+    }
+
+    try {
+        def hgHelpProc = new ProcessBuilder('hg', 'help', 'init').
+            redirectErrorStream(true).
+            start()
+        if (0 != hgHelpProc.waitFor()) {
+            System.err.println('Odd, unable to invoke "hg help"')
+            hgMissingError()
+        }
+        hgHelpProc.getInputStream().withStream { stream ->
+            def sb = new StringBuilder()
+            def bs = new BufferedReader(new InputStreamReader(stream))
+            while (true) {
+                def line = bs.readLine()
+                if (null == line) {
+                    break
+                }
+                sb.append(line)
+            }
+            bs.close()
+            def helpMsg = sb.toString()
+            if (! helpMsg.contains('--mq')) {
+                printHgErrorAndDie('It seems you do not have Mercurial Queues ("hgext.mq")')
+            }
+        }
+    } catch (IOException ex) {
+        getLogger().debug('Unable to invoke "hg"', ex)
+        hgMissingError()
+    }
+}
+checkHg()
+
 project.ext {
     // Source JRE used for compilation, etc
     if (!project.hasProperty('jre')) {

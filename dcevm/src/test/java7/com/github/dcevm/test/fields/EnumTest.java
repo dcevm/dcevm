@@ -29,42 +29,64 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.*;
 
 /**
  * @author Ivan Dubrov
  */
 public class EnumTest {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-    static enum A {
-        FIRST,
-        SECOND;
-    }
+  enum A {
+    FIRST,
+    SECOND {
+    },
+    OTHER,
+    ANOTHER;
 
-    static enum A___1 {
-        SECOND,
-        THIRD,
-        FOURTH;
-    }
 
-    @Test
-    @Ignore
-    public void testEnumFields() throws Exception {
-        assertEquals(2, A.values().length);
-        assertNotNull(A.values()[0]);
-        assertNotNull(A.values()[1]);
+    private final static A THIRD = FIRST;
+    private final static A FOURTH = null;
+  }
 
-        __toVersion__(1);
+  enum A___1 {
+    SECOND {
+    },
+    THIRD,
+    FOURTH;
 
-        assertEquals(3, A.values().length);
-        assertNotNull(A.values()[0]);
-        assertNotNull(A.values()[1]);
-        assertNotNull(A.values()[2]);
-    }
+    public final static A___1 FIRST = FOURTH;
+    public final static A___1 OTHER = null;
+  }
+
+  @Test
+  public void testEnumFields() throws Exception {
+    A second = A.SECOND;
+    assertEquals(4, A.values().length);
+    assertNotNull(A.values()[0]);
+    assertNotNull(A.values()[1]);
+
+    __toVersion__(1);
+
+    assertEquals(3, A.values().length);
+    assertNotNull(A.values()[0]);
+    assertNotNull(A.values()[1]);
+    assertNotNull(A.values()[2]);
+
+    assertSame("literal instance is the same", second, A.SECOND);
+    assertEquals("THIRD static non-literal field should not be copied", "THIRD", A.values()[1].name());
+    assertEquals("FOURTH static non-literal field should not be copied", "FOURTH", A.values()[2].name());
+    assertSame("literal should not be copied to a non-literal static field", A.FIRST, A.valueOf("FOURTH"));
+    assertNull("literal should not be copied to a non-literal static field", A.OTHER);
+
+    // Ordinal was transferred
+    assertEquals(0, second.ordinal());
+
+    // Array was updated
+    assertSame(second, A.values()[0]);
+  }
 }

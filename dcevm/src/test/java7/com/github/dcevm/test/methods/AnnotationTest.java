@@ -82,6 +82,9 @@ public class AnnotationTest {
         @TestAnnotation2
         public int testField;
 
+        public void addedMethod() {
+        }
+
         @TestAnnotation2
         public void testMethod() {
         }

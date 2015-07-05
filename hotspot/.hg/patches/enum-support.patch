@@ -1,0 +1,340 @@
+# HG changeset patch
+# Parent  63fb47989b1efff4ef407091a1cb7067fa48ca05
+
+diff -r 63fb47989b1e src/share/vm/classfile/javaClasses.cpp
+--- a/src/share/vm/classfile/javaClasses.cpp	Wed Jul 08 22:48:41 2015 -0700
++++ b/src/share/vm/classfile/javaClasses.cpp	Thu Jul 09 16:12:17 2015 -0700
+@@ -3408,6 +3408,7 @@
+   if (JDK_Version::is_gte_jdk15x_version()) {
+     sun_reflect_ConstantPool::compute_offsets();
+     sun_reflect_UnsafeStaticFieldAccessorImpl::compute_offsets();
++    java_lang_Enum::compute_offsets();
+   }
+   if (JDK_Version::is_jdk18x_version())
+     java_lang_reflect_Parameter::compute_offsets();
+@@ -3634,6 +3635,17 @@
+   return -1;
+ }
+ 
++int java_lang_Enum::_name_offset = 0;
++int java_lang_Enum::_ordinal_offset = 0;
++
++void java_lang_Enum::compute_offsets() {
++  assert(_name_offset == 0 || _ordinal_offset == 0, "offsets should be initialized only once");
++
++  Klass* k = SystemDictionary::Enum_klass();
++  compute_offset(_name_offset,    k, vmSymbols::name_name(),     vmSymbols::string_signature());
++  compute_offset(_ordinal_offset, k, vmSymbols::ordinal_name(),  vmSymbols::int_signature());
++}
++
+ void javaClasses_init() {
+   JavaClasses::compute_offsets();
+   JavaClasses::check_offsets();
+diff -r 63fb47989b1e src/share/vm/classfile/javaClasses.hpp
+--- a/src/share/vm/classfile/javaClasses.hpp	Wed Jul 08 22:48:41 2015 -0700
++++ b/src/share/vm/classfile/javaClasses.hpp	Thu Jul 09 16:12:17 2015 -0700
+@@ -1493,6 +1493,34 @@
+   static InjectedField* get_injected(Symbol* class_name, int* field_count);
+ };
+ 
++class java_lang_Enum: AllStatic {
++  friend class JavaClasses;
++private:
++  static int _name_offset;
++  static int _ordinal_offset;
++
++  static void compute_offsets();
++
++public:
++  // Accessors
++  static oop              name(         oop enm)              { return enm->obj_field(             _name_offset);             }
++  static void         set_name(         oop enm, oop target)  {        enm->obj_field_put(         _name_offset, target);     }
++
++  static int           ordinal(         oop enm)              { return enm->int_field(             _ordinal_offset);          }
++  static void      set_ordinal(         oop enm, int ordinal) {        enm->int_field_put(         _ordinal_offset, ordinal); }
++
++public:
++  // Testers
++  static bool is_subclass(Klass* klass) {
++    return klass->is_subclass_of(SystemDictionary::Enum_klass());
++  }
++  static bool is_instance(oop obj) {
++    return obj != NULL && is_subclass(obj->klass());
++  }
++
++};
++
++
+ #undef DECLARE_INJECTED_FIELD_ENUM
+ 
+ #endif // SHARE_VM_CLASSFILE_JAVACLASSES_HPP
+diff -r 63fb47989b1e src/share/vm/classfile/systemDictionary.hpp
+--- a/src/share/vm/classfile/systemDictionary.hpp	Wed Jul 08 22:48:41 2015 -0700
++++ b/src/share/vm/classfile/systemDictionary.hpp	Thu Jul 09 16:12:17 2015 -0700
+@@ -122,6 +122,7 @@
+   do_klass(StackOverflowError_klass,                    java_lang_StackOverflowError,              Pre                 ) \
+   do_klass(IllegalMonitorStateException_klass,          java_lang_IllegalMonitorStateException,    Pre                 ) \
+   do_klass(Reference_klass,                             java_lang_ref_Reference,                   Pre                 ) \
++  do_klass(Enum_klass,                                  java_lang_Enum,                            Opt_Only_JDK15      ) \
+                                                                                                                          \
+   /* Preload ref klasses and set reference types */                                                                      \
+   do_klass(SoftReference_klass,                         java_lang_ref_SoftReference,               Pre                 ) \
+diff -r 63fb47989b1e src/share/vm/classfile/vmSymbols.hpp
+--- a/src/share/vm/classfile/vmSymbols.hpp	Wed Jul 08 22:48:41 2015 -0700
++++ b/src/share/vm/classfile/vmSymbols.hpp	Thu Jul 09 16:12:17 2015 -0700
+@@ -119,6 +119,7 @@
+   template(sun_misc_PostVMInitHook,                   "sun/misc/PostVMInitHook")                  \
+   template(sun_misc_Launcher_AppClassLoader,          "sun/misc/Launcher$AppClassLoader")         \
+   template(sun_misc_Launcher_ExtClassLoader,          "sun/misc/Launcher$ExtClassLoader")         \
++  template(java_lang_Enum,                            "java/lang/Enum")                           \
+                                                                                                   \
+   /* Java runtime version access */                                                               \
+   template(sun_misc_Version,                          "sun/misc/Version")                         \
+@@ -307,6 +308,7 @@
+   template(printStackTrace_name,                      "printStackTrace")                          \
+   template(main_name,                                 "main")                                     \
+   template(name_name,                                 "name")                                     \
++  template(ordinal_name,                              "ordinal")                                  \
+   template(priority_name,                             "priority")                                 \
+   template(stillborn_name,                            "stillborn")                                \
+   template(group_name,                                "group")                                    \
+diff -r 63fb47989b1e src/share/vm/oops/instanceKlass.cpp
+--- a/src/share/vm/oops/instanceKlass.cpp	Wed Jul 08 22:48:41 2015 -0700
++++ b/src/share/vm/oops/instanceKlass.cpp	Thu Jul 09 16:12:17 2015 -0700
+@@ -817,6 +817,82 @@
+   }
+ }
+ 
++class EnumLiteralCopier : public FieldClosure {
++  InstanceKlass* _new_klass;
++  fieldDescriptor _new_values_fd;
++
++ public:
++  EnumLiteralCopier(InstanceKlass *new_klass) : _new_klass(new_klass) { }
++
++  bool initialize() {
++    return find_values_field(_new_klass, &_new_values_fd);
++  }
++
++  bool find_values_field(InstanceKlass *klass, fieldDescriptor* fd) {
++    int end;
++    int start = klass->find_method_by_name(vmSymbols::values_name(), &end);
++    assert(start != -1, "enum must have values() method");
++
++    for (; start < end; start++) {
++      Method *candidate = klass->methods()->at(start);
++      if (candidate->access_flags().is_static() &&
++          candidate->signature()->starts_with("()"))
++        break;
++    }
++    assert(start < end, "must have values() method");
++    Method *values_method = klass->methods()->at(start);
++
++    for (JavaFieldStream fs(klass); !fs.done(); fs.next()) {
++      if (!fs.access_flags().is_synthetic())
++        continue;
++
++      fd->reinitialize(const_cast<InstanceKlass*>(klass), fs.index());
++
++      // Check that field signature prepended with () equals to method signature
++      if (values_method->signature()->utf8_length() == fd->signature()->utf8_length() + 2) {
++        int pos = values_method->signature()->index_of_at(2 /* () */,
++          (const char*) fd->signature()->bytes(), fd->signature()->utf8_length());
++        if (pos == 2)
++          return true;
++      }
++    }
++    return false;
++  }
++
++  void do_field(fieldDescriptor* old_fd) {
++    if (old_fd->is_final() && (old_fd->access_flags().get_flags() & JVM_ACC_ENUM) != 0) {
++      fieldDescriptor new_fd;
++      if (_new_klass->find_local_field(old_fd->name(), old_fd->signature(), &new_fd) &&
++          (new_fd.access_flags().get_flags() & JVM_ACC_ENUM) != 0) {
++        oop old_mirror = old_fd->field_holder()->java_mirror();
++        oop new_mirror = new_fd.field_holder()->java_mirror();
++        assert(old_mirror != NULL && new_mirror != NULL, "just checking");
++
++        oop old_literal = old_mirror->obj_field_acquire(old_fd->offset());
++        oop new_literal = new_mirror->obj_field_acquire(new_fd.offset());
++        if (old_literal == NULL || new_literal == NULL) {
++          RC_TRACE(0x00000001, ("found null while copying enum literal %s",
++              old_fd->name()->as_C_string()));
++          return;
++        }
++
++        // Capture ordinal from the new literal
++        int ordinal = java_lang_Enum::ordinal(new_literal);
++
++        // Update values array
++        objArrayOop arr = (objArrayOop) new_mirror->obj_field_acquire(_new_values_fd.offset());
++        assert(arr->is_array(), "must be an array");
++        arr->obj_at_put(ordinal, old_literal);
++
++        // Set new ordinal into old literal
++        java_lang_Enum::set_ordinal(old_literal, ordinal);
++        // Replace new literal with old literal
++        new_mirror->release_obj_field_put(new_fd.offset(), old_literal);
++      }
++    }
++  }
++};
++
+ void InstanceKlass::initialize_impl(instanceKlassHandle this_oop, TRAPS) {
+   // Make sure klass is linked (verified) before initialization
+   // A class could already be verified, since it has been reflected upon.
+@@ -926,6 +1002,20 @@
+     { ResourceMark rm(THREAD);
+       debug_only(this_oop->vtable()->verify(tty, true);)
+     }
++
++    // (DCEVM) rewire old enum literals into new enum class
++    if (this_oop->java_super() != NULL &&
++        this_oop->java_super()->newest_version() == SystemDictionary::Enum_klass()->newest_version() &&
++        this_oop->is_newest_version() &&
++        this_oop->old_version() != NULL) {
++      instanceKlassHandle old(THREAD, InstanceKlass::cast(this_oop->old_version()));
++      old->initialize(THREAD);
++
++      EnumLiteralCopier copier(this_oop());
++      if (copier.initialize()) {
++        old->do_local_static_fields(&copier);
++      }
++    }
+   }
+   else {
+     // Step 10 and 11
+diff -r 63fb47989b1e src/share/vm/prims/jvmtiRedefineClasses2.cpp
+--- a/src/share/vm/prims/jvmtiRedefineClasses2.cpp	Wed Jul 08 22:48:41 2015 -0700
++++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp	Thu Jul 09 16:12:17 2015 -0700
+@@ -1319,9 +1319,9 @@
+     //java_lang_Class::set_klass(old->java_mirror(), cur); // FIXME-isd: is that correct?
+     //FIXME-isd: do we need this: ??? old->set_java_mirror(cur->java_mirror());
+ 
+-    // Transfer init state
+     InstanceKlass::ClassState state = old->init_state();
+-    if (state > InstanceKlass::linked) {
++    if (state > cur->init_state() && cur->java_super() != SystemDictionary::Enum_klass()) {
++      // Transfer state for non-enum classes. Let enums to reinitialize, so we get new literals.
+       cur->set_init_state(state);
+     }
+   }
+@@ -1370,14 +1370,19 @@
+   if (TraceRedefineClasses > 0) {
+     tty->flush();
+   }
++
++  // Tell each thread to re-initialize classes we left uninitialized
++  JavaThread *jt = Threads::first();
++  while (jt != NULL) {
++    jt->set_should_reinitialize_classes();
++    jt = jt->next();
++  }
+ }
+ 
+ void VM_EnhancedRedefineClasses::doit_epilogue() {
+ 
+   RC_TIMER_START(_timer_vm_op_epilogue);
+ 
+-  ResourceMark mark;
+-
+   VM_GC_Operation::doit_epilogue();
+   RC_TRACE(0x00000001, ("GC Operation epilogue finished!"));
+ 
+diff -r 63fb47989b1e src/share/vm/runtime/thread.cpp
+--- a/src/share/vm/runtime/thread.cpp	Wed Jul 08 22:48:41 2015 -0700
++++ b/src/share/vm/runtime/thread.cpp	Thu Jul 09 16:12:17 2015 -0700
+@@ -45,6 +45,7 @@
+ #include "prims/jvmtiExport.hpp"
+ #include "prims/jvmtiThreadState.hpp"
+ #include "prims/privilegedStack.hpp"
++#include "prims/jvmtiRedefineClassesTrace.hpp"
+ #include "runtime/arguments.hpp"
+ #include "runtime/biasedLocking.hpp"
+ #include "runtime/deoptimization.hpp"
+@@ -1468,6 +1469,7 @@
+   _do_not_unlock_if_synchronized = false;
+   _cached_monitor_info = NULL;
+   _parker = Parker::Allocate(this) ;
++  _should_reinitialize_classes = false;
+ 
+ #ifndef PRODUCT
+   _jmp_ring_index = 0;
+@@ -3224,6 +3226,44 @@
+   return NULL;
+ }
+ 
++static void reinitialize_class( Klass* klass ) {
++  if (!klass->oop_is_instance())
++    return;
++
++  InstanceKlass *cur = InstanceKlass::cast(klass->newest_version());
++  Klass *old = cur->old_version();
++  if (old != NULL && !cur->is_redefining() && !InstanceKlass::cast(old)->is_not_initialized() && !cur->is_initialized()) {
++    RC_TRACE(0x00000001, ("Re-initializing %s because old state was %d and new is %d", klass->name()->as_C_string(),
++      InstanceKlass::cast(old)->init_state(), cur->init_state()));
++
++    // Re-initialize classes
++    Thread *THREAD = Thread::current();
++    if (HAS_PENDING_EXCEPTION) {
++      CLEAR_PENDING_EXCEPTION;
++    }
++
++    cur->initialize(THREAD);
++    if (HAS_PENDING_EXCEPTION) {
++      oop exception = PENDING_EXCEPTION;
++      CLEAR_PENDING_EXCEPTION;
++
++      RC_TRACE(0x00000001, ("Exception while re-initializing class, ignoring!"));
++      java_lang_Throwable::print(exception, tty);
++      tty->cr();
++      java_lang_Throwable::print_stack_trace(exception, tty);
++      tty->cr();
++    }
++  }
++}
++
++void JavaThread::reinitialize_classes() {
++  ThreadInVMfromJava __tiv(this);
++
++  // thread state will be reset to in Java after this call
++  _should_reinitialize_classes = false;
++  SystemDictionary::classes_do(&reinitialize_class);
++}
++
+ static void compiler_thread_entry(JavaThread* thread, TRAPS) {
+   assert(thread->is_Compiler_thread(), "must be compiler thread");
+   CompileBroker::compiler_thread_loop();
+diff -r 63fb47989b1e src/share/vm/runtime/thread.hpp
+--- a/src/share/vm/runtime/thread.hpp	Wed Jul 08 22:48:41 2015 -0700
++++ b/src/share/vm/runtime/thread.hpp	Thu Jul 09 16:12:17 2015 -0700
+@@ -1049,7 +1049,13 @@
+   // Safepoint support
+ #ifndef PPC64
+   JavaThreadState thread_state() const           { return _thread_state; }
+-  void set_thread_state(JavaThreadState s)       { _thread_state = s;    }
++  void set_thread_state(JavaThreadState s)       {
++    _thread_state = s;
++    // (DCEVM) re-initialize all classes we left uninitialized after the redefinition when we switch back to Java state
++    if (s == _thread_in_Java && _should_reinitialize_classes) {
++      reinitialize_classes();
++    }
++  }
+ #else
+   // Use membars when accessing volatile _thread_state. See
+   // Threads::create_vm() for size checks.
+@@ -1082,6 +1088,13 @@
+   void set_ext_suspended()       { set_suspend_flag (_ext_suspended);  }
+   void clear_ext_suspended()     { clear_suspend_flag(_ext_suspended); }
+ 
++  // (DCEVM) support
++ public:
++  void set_should_reinitialize_classes()                { _should_reinitialize_classes = true; }
++ private:
++  void reinitialize_classes();
++  bool _should_reinitialize_classes;
++
+  public:
+   void java_suspend();
+   void java_resume();

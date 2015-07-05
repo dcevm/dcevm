@@ -33,7 +33,25 @@ project('hotspot') {
         }
     }
 
-    task init(description: 'Initialize HotSpot repository') << {
+    task checkMercurial(description: 'Verify Mercurial is installed') << {
+        def os = new ByteArrayOutputStream()
+        try {
+            exec {
+                executable 'hg'
+                args 'help', 'init'
+                standardOutput = os
+                errorOutput = os
+            }
+        } catch (GradleException e) {
+            throw new GradleException("Failed to execute 'hg'. Make sure you have Mercurial installed!")
+        }
+        def str = os.toString()
+        if (!str.contains('--mq')) {
+            throw new GradleException("Mercurial does not have mq extension installed! Consult README.md for details.")
+        }
+    }
+
+    task init(description: 'Initialize HotSpot repository', dependsOn: checkMercurial) << {
         file('hotspot').mkdir()
         exec {
             executable 'hg'
@@ -45,8 +63,8 @@ project('hotspot') {
     task pull(description: 'Pull OpenJDK HotSpot changes', dependsOn: init) {
         doLast {
             def hotspotRepository = hotspotTag.contains('jdk7') ?
-                'http://hg.openjdk.java.net/jdk7u/jdk7u/hotspot' :
-                'http://hg.openjdk.java.net/jdk8u/jdk8u/hotspot'
+                    'http://hg.openjdk.java.net/jdk7u/jdk7u/hotspot' :
+                    'http://hg.openjdk.java.net/jdk8u/jdk8u/hotspot'
             exec {
                 executable 'hg'
                 args 'pull', hotspotRepository
@@ -93,7 +111,7 @@ project('hotspot') {
         }
     }
 
-    def arguments = ['product':   ['ENABLE_FULL_DEBUG_SYMBOLS=0'],
+    def arguments = ['product'  : ['ENABLE_FULL_DEBUG_SYMBOLS=0'],
                      'fastdebug': ['ENABLE_FULL_DEBUG_SYMBOLS=1', 'STRIP_POLICY=no_strip', 'ZIP_DEBUGINFO_FILES=0']]
 
     ['product', 'fastdebug'].each { k ->
@@ -123,21 +141,14 @@ project('hotspot') {
     }
 }
 
-// Java projects for testing DCEVM
-def setup(prjs, closure) {
-    prjs.each { prj ->
-        project(prj, closure)
-    }
-}
-
-setup(['agent', 'dcevm'], {
+configure([project(':agent'), project(':dcevm')]) {
     apply plugin: 'java'
     apply plugin: 'idea'
 
     repositories {
         mavenCentral()
     }
-})
+}
 
 project('agent') {
     jar {
@@ -162,7 +173,7 @@ project('native') {
                 args "-I${jre}/../include/linux"
                 args '-o'
                 args 'build/libnatives.so'
-                args (arch == Arch.X86 ? '-m32' : '-m64')
+                args(arch == Arch.X86 ? '-m32' : '-m64')
             } else if (os == Os.MAC) {
                 args "-I${jre}/../include/darwin"
                 args '-o'
@@ -213,7 +224,7 @@ project('dcevm') {
         ignoreFailures = true
         outputs.upToDateWhen { false }
         useJUnit {
-            excludeCategories ('com.github.dcevm.test.category.' + (flavor == 'light' ? 'Full' : 'Light'))
+            excludeCategories('com.github.dcevm.test.category.' + (flavor == 'light' ? 'Full' : 'Light'))
         }
     }
 

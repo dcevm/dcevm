@@ -171,6 +171,7 @@ project('native') {
             args 'natives.c'
             if (os == Os.UNIX) {
                 args "-I${jre}/../include/linux"
+                args '-fPIC'
                 args '-o'
                 args 'build/libnatives.so'
                 args(arch == Arch.X86 ? '-m32' : '-m64')

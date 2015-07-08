@@ -36,18 +36,18 @@ project('hotspot') {
     task checkMercurial(description: 'Verify Mercurial is installed') << {
         def os = new ByteArrayOutputStream()
         try {
-            exec {
+            def result = exec {
                 executable 'hg'
-                args 'help', 'init'
+                args 'help', 'qinit'
                 standardOutput = os
                 errorOutput = os
+                ignoreExitValue = true
+            }
+            if (result.getExitValue() != 0) {
+                throw new GradleException("Mercurial does not have mq extension installed! Consult README.md for details.")
             }
         } catch (GradleException e) {
             throw new GradleException("Failed to execute 'hg'. Make sure you have Mercurial installed!")
-        }
-        def str = os.toString()
-        if (!str.contains('--mq')) {
-            throw new GradleException("Mercurial does not have mq extension installed! Consult README.md for details.")
         }
     }
 

@@ -33,6 +33,8 @@ import java.net.URL;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @author Thomas Wuerthinger
@@ -47,7 +49,7 @@ public class HotSwapTool {
      * the following number is removed. This means that e.g. A___2 is treated as A anywhere in the source code. This is introduced
      * to make the IDE not complain about multiple defined classes.
      */
-    public static final String IDENTIFIER = "___";
+    public static final Pattern VERSION_PATTERN = Pattern.compile("___([0-9]+)");
     private static final String CLASS_FILE_SUFFIX = ".class";
     private static Map<Class<?>, Integer> currentVersion = new Hashtable<Class<?>, Integer>();
     private static Redefiner redefiner;
@@ -214,19 +216,13 @@ public class HotSwapTool {
      * Parse version of the class from the class name. Classes are named in the form of [Name]___[Version]
      */
     private static int parseClassVersion(String simpleName) {
-        int index = simpleName.indexOf(IDENTIFIER);
-        if (index == -1) {
-            return 0;
-        }
-        return Integer.valueOf(simpleName.substring(index + IDENTIFIER.length(), simpleName.length()));
+        Matcher m = VERSION_PATTERN.matcher(simpleName);
+        return m.find() ? Integer.valueOf(m.group(1)) : 0;
     }
 
     private static String stripVersion(String className) {
-        int index = className.indexOf(IDENTIFIER);
-        if (index == -1) {
-            return className;
-        }
-        return className.substring(0, index);
+        Matcher m = VERSION_PATTERN.matcher(className);
+        return m.replaceAll("");
     }
 
     public static void resetTimings() {

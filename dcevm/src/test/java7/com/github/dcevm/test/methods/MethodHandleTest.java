@@ -46,6 +46,11 @@ public class MethodHandleTest {
 
   // Version 0
   public static class A {
+    public int field;
+    public A(int value) {
+      field = value;
+    }
+
     public int method() {
       return 1;
     }
@@ -65,6 +70,11 @@ public class MethodHandleTest {
 
   // Version 1
   public static class A___1 {
+    public int field;
+    public A___1(int value) {
+      field = value * 10;
+    }
+
     public int method() {
       return 2;
     }
@@ -95,7 +105,7 @@ public class MethodHandleTest {
     MethodHandles.Lookup lookup = MethodHandles.lookup();
     MethodHandle handle = lookup.findVirtual(A.class, "method", MethodType.methodType(int.class));
 
-    A a = new A();
+    A a = new A(3);
     assertEquals(1, (int) handle.invokeExact(a));
 
     __toVersion__(1);
@@ -114,7 +124,7 @@ public class MethodHandleTest {
     MethodHandles.Lookup lookup = MethodHandles.lookup();
     MethodHandle handle = lookup.findVirtual(A.class, "method", MethodType.methodType(int.class));
 
-    A a = new A();
+    A a = new A(3);
     MethodHandle boundHandle = handle.bindTo(a);
     assertEquals(1, (int) boundHandle.invokeExact());
 
@@ -145,6 +155,24 @@ public class MethodHandleTest {
   }
 
   @Test
+  public void testConstructorMethodHandleUpdated() throws Throwable {
+
+    assert __version__() == 0;
+
+    MethodHandles.Lookup lookup = MethodHandles.lookup();
+    MethodHandle handle = lookup.findConstructor(A.class, MethodType.methodType(void.class, int.class));
+
+    assertEquals(12, ((A) handle.invoke(12)).field);
+
+    __toVersion__(1);
+
+    assertEquals(120, ((A) handle.invoke(12)).field);
+
+    __toVersion__(0);
+    assert __version__() == 0;
+  }
+
+  @Test
   public void testComplexMethodHandleUpdated() throws Throwable {
 
     assert __version__() == 0;
@@ -154,7 +182,7 @@ public class MethodHandleTest {
     MethodHandle filter = lookup.findVirtual(A.class, "filter", MethodType.methodType(int.class, int.class));
     MethodHandle staticFilter = lookup.findStatic(A.class, "staticFilter", MethodType.methodType(int.class, int.class));
 
-    A a = new A();
+    A a = new A(3);
     MethodHandle boundFilter = filter.bindTo(a);
     handle = MethodHandles.filterReturnValue(handle, staticFilter);
     handle = MethodHandles.filterReturnValue(handle, boundFilter);

@@ -78,6 +78,7 @@ project('hotspot') {
             exec {
                 executable 'hg'
                 args 'qpop', '-a'
+                ignoreExitValue = true
             }
             exec {
                 executable 'hg'

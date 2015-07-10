@@ -1,0 +1,345 @@
+# HG changeset patch
+# Parent  6858a68213bfb26e2a246f0014b921ecab5ac750
+
+diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/classfile/javaClasses.cpp
+--- a/src/share/vm/classfile/javaClasses.cpp	Fri Jul 10 13:18:18 2015 -0700
++++ b/src/share/vm/classfile/javaClasses.cpp	Fri Jul 10 13:59:26 2015 -0700
+@@ -2414,6 +2414,49 @@
+   }
+ }
+ 
++// Support for java_lang_invoke_DirectMethodHandle$StaticAccessor
++
++int java_lang_invoke_DirectMethodHandle_StaticAccessor::_static_offset_offset;
++
++long java_lang_invoke_DirectMethodHandle_StaticAccessor::static_offset(oop dmh) {
++  assert(_static_offset_offset != 0, "");
++  return dmh->long_field(_static_offset_offset);
++}
++
++void java_lang_invoke_DirectMethodHandle_StaticAccessor::set_static_offset(oop dmh, long static_offset) {
++  assert(_static_offset_offset != 0, "");
++  dmh->long_field_put(_static_offset_offset, static_offset);
++}
++
++
++void java_lang_invoke_DirectMethodHandle_StaticAccessor::compute_offsets() {
++  klassOop klass_oop = SystemDictionary::DirectMethodHandle_StaticAccessor_klass();
++  if (klass_oop != NULL && EnableInvokeDynamic) {
++    compute_offset(_static_offset_offset, klass_oop, vmSymbols::static_offset_name(), vmSymbols::long_signature());
++  }
++}
++
++// Support for java_lang_invoke_DirectMethodHandle$Accessor
++
++int java_lang_invoke_DirectMethodHandle_Accessor::_field_offset_offset;
++
++int java_lang_invoke_DirectMethodHandle_Accessor::field_offset(oop dmh) {
++  assert(_field_offset_offset != 0, "");
++  return dmh->int_field(_field_offset_offset);
++}
++
++void java_lang_invoke_DirectMethodHandle_Accessor::set_field_offset(oop dmh, int field_offset) {
++  assert(_field_offset_offset != 0, "");
++  dmh->int_field_put(_field_offset_offset, field_offset);
++}
++
++void java_lang_invoke_DirectMethodHandle_Accessor::compute_offsets() {
++  klassOop klass_oop = SystemDictionary::DirectMethodHandle_Accessor_klass();
++  if (klass_oop != NULL && EnableInvokeDynamic) {
++    compute_offset(_field_offset_offset, klass_oop, vmSymbols::field_offset_name(), vmSymbols::int_signature());
++  }
++}
++
+ // Support for java_lang_invoke_MethodHandle
+ 
+ int java_lang_invoke_MethodHandle::_type_offset;
+@@ -3033,6 +3076,8 @@
+   if (EnableInvokeDynamic) {
+     java_lang_invoke_MethodHandle::compute_offsets();
+     java_lang_invoke_DirectMethodHandle::compute_offsets();
++    java_lang_invoke_DirectMethodHandle_StaticAccessor::compute_offsets();
++    java_lang_invoke_DirectMethodHandle_Accessor::compute_offsets();
+     java_lang_invoke_MemberName::compute_offsets();
+     java_lang_invoke_LambdaForm::compute_offsets();
+     java_lang_invoke_MethodType::compute_offsets();
+diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/classfile/javaClasses.hpp
+--- a/src/share/vm/classfile/javaClasses.hpp	Fri Jul 10 13:18:18 2015 -0700
++++ b/src/share/vm/classfile/javaClasses.hpp	Fri Jul 10 13:59:26 2015 -0700
+@@ -942,6 +942,55 @@
+   static int member_offset_in_bytes() { return _member_offset; }
+ };
+ 
++// Interface to java.lang.invoke.DirectMethodHandle$StaticAccessor objects
++
++class java_lang_invoke_DirectMethodHandle_StaticAccessor: AllStatic {
++  friend class JavaClasses;
++
++ private:
++  static int _static_offset_offset;               // offset to static field
++
++  static void compute_offsets();
++
++ public:
++  // Accessors
++  static long      static_offset(oop dmh);
++  static void  set_static_offset(oop dmh, long value);
++
++  // Testers
++  static bool is_subclass(klassOop klass) {
++    return Klass::cast(klass)->is_subclass_of(SystemDictionary::DirectMethodHandle_StaticAccessor_klass());
++  }
++  static bool is_instance(oop obj) {
++    return obj != NULL && is_subclass(obj->klass());
++  }
++};
++
++// Interface to java.lang.invoke.DirectMethodHandle$Accessor objects
++
++class java_lang_invoke_DirectMethodHandle_Accessor: AllStatic {
++  friend class JavaClasses;
++
++ private:
++  static int _field_offset_offset;               // offset to field
++
++  static void compute_offsets();
++
++ public:
++  // Accessors
++  static int      field_offset(oop dmh);
++  static void set_field_offset(oop dmh, int value);
++
++  // Testers
++  static bool is_subclass(klassOop klass) {
++    return Klass::cast(klass)->is_subclass_of(SystemDictionary::DirectMethodHandle_Accessor_klass());
++  }
++  static bool is_instance(oop obj) {
++    return obj != NULL && is_subclass(obj->klass());
++  }
++};
++
++
+ // Interface to java.lang.invoke.LambdaForm objects
+ // (These are a private interface for managing adapter code generation.)
+ 
+diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/classfile/systemDictionary.hpp
+--- a/src/share/vm/classfile/systemDictionary.hpp	Fri Jul 10 13:18:18 2015 -0700
++++ b/src/share/vm/classfile/systemDictionary.hpp	Fri Jul 10 13:59:26 2015 -0700
+@@ -148,6 +148,8 @@
+   do_klass(reflect_UnsafeStaticFieldAccessorImpl_klass, sun_reflect_UnsafeStaticFieldAccessorImpl, Opt_Only_JDK15      ) \
+                                                                                                                          \
+   /* support for dynamic typing; it's OK if these are NULL in earlier JDKs */                                            \
++  do_klass(DirectMethodHandle_StaticAccessor_klass,     java_lang_invoke_DirectMethodHandle_StaticAccessor, Opt        ) \
++  do_klass(DirectMethodHandle_Accessor_klass,           java_lang_invoke_DirectMethodHandle_Accessor, Opt              ) \
+   do_klass(MethodHandle_klass,                          java_lang_invoke_MethodHandle,             Pre_JSR292          ) \
+   do_klass(MemberName_klass,                            java_lang_invoke_MemberName,               Pre_JSR292          ) \
+   do_klass(MethodHandleNatives_klass,                   java_lang_invoke_MethodHandleNatives,      Pre_JSR292          ) \
+diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/classfile/vmSymbols.hpp
+--- a/src/share/vm/classfile/vmSymbols.hpp	Fri Jul 10 13:18:18 2015 -0700
++++ b/src/share/vm/classfile/vmSymbols.hpp	Fri Jul 10 13:59:26 2015 -0700
+@@ -244,6 +244,8 @@
+   /* Support for JSR 292 & invokedynamic (JDK 1.7 and above) */                                   \
+   template(java_lang_invoke_CallSite,                 "java/lang/invoke/CallSite")                \
+   template(java_lang_invoke_ConstantCallSite,         "java/lang/invoke/ConstantCallSite")        \
++  template(java_lang_invoke_DirectMethodHandle_StaticAccessor, "java/lang/invoke/DirectMethodHandle$StaticAccessor") \
++  template(java_lang_invoke_DirectMethodHandle_Accessor, "java/lang/invoke/DirectMethodHandle$Accessor") \
+   template(java_lang_invoke_DirectMethodHandle,       "java/lang/invoke/DirectMethodHandle")      \
+   template(java_lang_invoke_MutableCallSite,          "java/lang/invoke/MutableCallSite")         \
+   template(java_lang_invoke_VolatileCallSite,         "java/lang/invoke/VolatileCallSite")        \
+@@ -477,6 +479,10 @@
+   template(int_StringBuffer_signature,                "(I)Ljava/lang/StringBuffer;")                              \
+   template(char_StringBuffer_signature,               "(C)Ljava/lang/StringBuffer;")                              \
+   template(int_String_signature,                      "(I)Ljava/lang/String;")                                    \
++  template(static_offset_name,                        "staticOffset")                                             \
++  template(static_base_name,                          "staticBase")                                               \
++  template(field_offset_name,                         "fieldOffset")                                              \
++  template(field_type_name,                           "fieldType")                                                \
+   /* signature symbols needed by intrinsics */                                                                    \
+   VM_INTRINSICS_DO(VM_INTRINSIC_IGNORE, VM_SYMBOL_IGNORE, VM_SYMBOL_IGNORE, template, VM_ALIAS_IGNORE)            \
+                                                                                                                   \
+diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/prims/jvmtiRedefineClasses.cpp
+--- a/src/share/vm/prims/jvmtiRedefineClasses.cpp	Fri Jul 10 13:18:18 2015 -0700
++++ b/src/share/vm/prims/jvmtiRedefineClasses.cpp	Fri Jul 10 13:59:26 2015 -0700
+@@ -1400,6 +1400,120 @@
+ 
+ template <class S>
+ class ChangePointersOopClosure : public OopClosureNoHeader {
++  // import java_lang_invoke_MemberName.*
++  enum {
++    REFERENCE_KIND_SHIFT = java_lang_invoke_MemberName::MN_REFERENCE_KIND_SHIFT,
++    REFERENCE_KIND_MASK  = java_lang_invoke_MemberName::MN_REFERENCE_KIND_MASK,
++  };
++
++  static oop field_name_or_null(Symbol* s) {
++    if (s == NULL)  return NULL;
++    return StringTable::lookup(s);
++  }
++
++  static oop object_java_mirror() {
++    return Klass::cast(SystemDictionary::Object_klass())->java_mirror();
++  }
++
++  static oop field_signature_type_or_null(Symbol* s) {
++    if (s == NULL)  return NULL;
++    BasicType bt = FieldType::basic_type(s);
++    if (is_java_primitive(bt)) {
++      assert(s->utf8_length() == 1, "");
++      return java_lang_Class::primitive_mirror(bt);
++    }
++    // Here are some more short cuts for common types.
++    // They are optional, since reference types can be resolved lazily.
++    if (bt == T_OBJECT) {
++      if (s == vmSymbols::object_signature()) {
++        return object_java_mirror();
++      } else if (s == vmSymbols::class_signature()) {
++        return Klass::cast(SystemDictionary::Class_klass())->java_mirror();
++      } else if (s == vmSymbols::string_signature()) {
++        return Klass::cast(SystemDictionary::String_klass())->java_mirror();
++      }
++    }
++    return NULL;
++  }
++
++  bool update_member_name(oop obj) {
++    int flags    =       java_lang_invoke_MemberName::flags(obj);
++    int ref_kind =       (flags >> REFERENCE_KIND_SHIFT) & REFERENCE_KIND_MASK;
++    if (MethodHandles::ref_kind_is_method(ref_kind)) {
++      methodOop m = (methodOop) java_lang_invoke_MemberName::vmtarget(obj);
++      if (m != NULL && !instanceKlass::cast(m->method_holder())->is_newest_version()) {
++        // Let's try to re-resolve method
++        KlassHandle newest = instanceKlass::cast(m->method_holder())->newest_version();
++        methodOop new_method = instanceKlass::cast(newest())->find_method(m->name(), m->signature());
++
++        // Note: we might set NULL at this point, which should force AbstractMethodError at runtime
++        bool do_dispatch = (ref_kind != JVM_REF_invokeSpecial);
++        MethodHandles::init_method_MemberName(obj, new_method, do_dispatch, newest);
++      }
++    } else if (MethodHandles::ref_kind_is_field(ref_kind)) {
++      klassOop k = (klassOop) java_lang_invoke_MemberName::vmtarget(obj);
++      if (k == NULL) {
++        return false; // Was cleared before, this MemberName is invalid.
++      }
++
++      if (k != NULL && !Klass::cast(k)->is_newest_version()) {
++        // Let's try to re-resolve field
++        fieldDescriptor fd;
++        int offset = java_lang_invoke_MemberName::vmindex(obj);
++        bool is_static = MethodHandles::ref_kind_is_static(ref_kind);
++        instanceKlass *ik = instanceKlass::cast(k);
++        if (ik->find_local_field_from_offset(offset, is_static, &fd)) {
++          KlassHandle newest = Klass::cast(k)->newest_version();
++          fieldDescriptor fd_new;
++          if (instanceKlass::cast(newest())->find_local_field(fd.name(), fd.signature(), &fd_new)) {
++            bool is_setter = MethodHandles::ref_kind_is_setter(ref_kind);
++            oop type = field_signature_type_or_null(fd_new.signature());
++            oop name = field_name_or_null(fd_new.name());
++            MethodHandles::init_field_MemberName(obj, newest, fd_new.access_flags(), type, name, fd_new.offset(), is_setter);
++          } else {
++            // Matching field is not found in new version, not much we can do here.
++            // JVM will crash once faulty MH is invoked.
++            // However, to avoid that all DMH's using this faulty MH are cleared (set to NULL)
++            // Eventually, we probably want to replace them with something more meaningful,
++            // like instance throwing NoSuchFieldError or DMH that will resort to dynamic
++            // field resolution (with possibility of type conversion)
++            java_lang_invoke_MemberName::set_vmtarget(obj, NULL);
++            java_lang_invoke_MemberName::set_vmindex(obj, 0);
++            return false;
++          }
++        }
++      }
++    }
++    return true;
++  }
++
++  bool update_direct_method_handle(oop obj) {
++    // Always update member name first.
++    oop mem_name = java_lang_invoke_DirectMethodHandle::member(obj);
++    if (!update_member_name(mem_name)) {
++      return false;
++    }
++
++    // Here we rely on DirectMethodHandle implementation.
++    // The current implementation caches field offset in $StaticAccessor/$Accessor
++    int flags    =       java_lang_invoke_MemberName::flags(mem_name);
++    int ref_kind =       (flags >> REFERENCE_KIND_SHIFT) & REFERENCE_KIND_MASK;
++    if (MethodHandles::ref_kind_is_field(ref_kind)) {
++      // Note: we don't care about staticBase field (which is java.lang.Class)
++      // It should be processed during normal object update.
++      // Update offset in StaticAccessor
++      int offset = java_lang_invoke_MemberName::vmindex(mem_name);
++      if (offset != 0) { // index of 0 means that field no longer exist
++        if (java_lang_invoke_DirectMethodHandle_StaticAccessor::is_instance(obj)) {
++          java_lang_invoke_DirectMethodHandle_StaticAccessor::set_static_offset(obj, offset);
++        } else if (java_lang_invoke_DirectMethodHandle_Accessor::is_instance(obj)) {
++          java_lang_invoke_DirectMethodHandle_Accessor::set_field_offset(obj, offset);
++        }
++      }
++    }
++    return true;
++  }
++
+   // Forward pointers to instanceKlass and mirror class to new versions
+   template <class T>
+   inline void do_oop_work(T* p) {
+@@ -1422,6 +1536,14 @@
+           S::oop_store(p, oop);
+         }
+       }
++    } else if (java_lang_invoke_MemberName::is_instance(oop)) {
++      update_member_name(oop);
++    } else if (java_lang_invoke_DirectMethodHandle::is_instance(oop)) {
++      if (!update_direct_method_handle(oop)) {
++        // DMH is no longer valid, replace it with null reference.
++        // See note above. We probably want to replace this with something more meaningful.
++        S::oop_store(p, NULL);
++      }
+     }
+   }
+ 
+@@ -1504,22 +1626,6 @@
+           obj->oop_iterate(_closure);
+         }
+ 
+-        // Update method handles
+-        // FIXME: should we also update fields?
+-        if (java_lang_invoke_MemberName::is_instance(obj)) {
+-          oop target = java_lang_invoke_MemberName::vmtarget(obj);
+-          if (target != NULL && target->is_method()) {
+-            methodOop m = (methodOop) target;
+-            klassOop holder = m->method_holder();
+-            if (!holder->klass_part()->is_newest_version()) {
+-              // Let's try to re-resolve method
+-              klassOop newest = holder->klass_part()->newest_version();
+-              methodOop new_method = instanceKlass::cast(newest)->find_method(m->name(), m->signature());
+-              java_lang_invoke_MemberName::set_vmtarget(obj, new_method);
+-            }
+-          }
+-        }
+-
+         if (obj->blueprint()->new_version() != NULL) {
+           Klass* new_klass = obj->blueprint()->new_version()->klass_part();
+           if (obj->is_perm()) {
+@@ -1989,6 +2095,11 @@
+   transfer_old_native_function_registrations(the_old_class);
+ 
+ 
++  // Swap method handles
++  MemberNameTable* mnt = the_old_class->member_names();
++  assert(the_new_class->member_names() == NULL, "");
++  the_new_class->set_member_names(mnt);
++  the_old_class->set_member_names(NULL);
+ 
+ #ifdef ASSERT
+ 
+diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/runtime/mutexLocker.cpp
+--- a/src/share/vm/runtime/mutexLocker.cpp	Fri Jul 10 13:18:18 2015 -0700
++++ b/src/share/vm/runtime/mutexLocker.cpp	Fri Jul 10 13:59:26 2015 -0700
+@@ -265,7 +265,7 @@
+   def(Heap_lock                    , Monitor, nonleaf+1,   false);
+   def(JfieldIdCreation_lock        , Mutex  , nonleaf+1,   true ); // jfieldID, Used in VM_Operation
+   def(JNICachedItableIndex_lock    , Mutex  , nonleaf+1,   false); // Used to cache an itable index during JNI invoke
+-  def(MemberNameTable_lock         , Mutex  , nonleaf+1,   false); // Used to protect MemberNameTable
++  def(MemberNameTable_lock         , Mutex  , nonleaf+1,   true); // Used to protect MemberNameTable
+ 
+   def(CompiledIC_lock              , Mutex  , nonleaf+2,   false); // locks VtableStubs_lock, InlineCacheBuffer_lock
+   def(CompileTaskAlloc_lock        , Mutex  , nonleaf+2,   true );

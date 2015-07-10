@@ -1,9 +1,9 @@
 # HG changeset patch
-# Parent  2ffb90b422e20ff948d25b96bfb9be923c130734
+# Parent  a51cdc4778871d65e004c6858c2d4afa806dbe42
 
-diff -r 2ffb90b422e2 src/share/vm/classfile/javaClasses.cpp
---- a/src/share/vm/classfile/javaClasses.cpp	Fri Jul 10 10:19:24 2015 -0700
-+++ b/src/share/vm/classfile/javaClasses.cpp	Fri Jul 10 10:19:37 2015 -0700
+diff -r a51cdc477887 src/share/vm/classfile/javaClasses.cpp
+--- a/src/share/vm/classfile/javaClasses.cpp	Fri Jul 10 14:23:50 2015 -0700
++++ b/src/share/vm/classfile/javaClasses.cpp	Fri Jul 10 14:30:29 2015 -0700
 @@ -2409,6 +2409,52 @@
    }
  }
@@ -66,9 +66,9 @@ diff -r 2ffb90b422e2 src/share/vm/classfile/javaClasses.cpp
      java_lang_invoke_MemberName::compute_offsets();
      java_lang_invoke_LambdaForm::compute_offsets();
      java_lang_invoke_MethodType::compute_offsets();
-diff -r 2ffb90b422e2 src/share/vm/classfile/javaClasses.hpp
---- a/src/share/vm/classfile/javaClasses.hpp	Fri Jul 10 10:19:24 2015 -0700
-+++ b/src/share/vm/classfile/javaClasses.hpp	Fri Jul 10 10:19:37 2015 -0700
+diff -r a51cdc477887 src/share/vm/classfile/javaClasses.hpp
+--- a/src/share/vm/classfile/javaClasses.hpp	Fri Jul 10 14:23:50 2015 -0700
++++ b/src/share/vm/classfile/javaClasses.hpp	Fri Jul 10 14:30:29 2015 -0700
 @@ -940,6 +940,54 @@
    static int member_offset_in_bytes() { return _member_offset; }
  };
@@ -124,9 +124,9 @@ diff -r 2ffb90b422e2 src/share/vm/classfile/javaClasses.hpp
  // Interface to java.lang.invoke.LambdaForm objects
  // (These are a private interface for managing adapter code generation.)
  
-diff -r 2ffb90b422e2 src/share/vm/classfile/systemDictionary.hpp
---- a/src/share/vm/classfile/systemDictionary.hpp	Fri Jul 10 10:19:24 2015 -0700
-+++ b/src/share/vm/classfile/systemDictionary.hpp	Fri Jul 10 10:19:37 2015 -0700
+diff -r a51cdc477887 src/share/vm/classfile/systemDictionary.hpp
+--- a/src/share/vm/classfile/systemDictionary.hpp	Fri Jul 10 14:23:50 2015 -0700
++++ b/src/share/vm/classfile/systemDictionary.hpp	Fri Jul 10 14:30:29 2015 -0700
 @@ -148,6 +148,8 @@
    do_klass(reflect_UnsafeStaticFieldAccessorImpl_klass, sun_reflect_UnsafeStaticFieldAccessorImpl, Opt_Only_JDK15      ) \
                                                                                                                           \
@@ -136,9 +136,9 @@ diff -r 2ffb90b422e2 src/share/vm/classfile/systemDictionary.hpp
    do_klass(MethodHandle_klass,                          java_lang_invoke_MethodHandle,             Pre_JSR292          ) \
    do_klass(MemberName_klass,                            java_lang_invoke_MemberName,               Pre_JSR292          ) \
    do_klass(MethodHandleNatives_klass,                   java_lang_invoke_MethodHandleNatives,      Pre_JSR292          ) \
-diff -r 2ffb90b422e2 src/share/vm/classfile/vmSymbols.hpp
---- a/src/share/vm/classfile/vmSymbols.hpp	Fri Jul 10 10:19:24 2015 -0700
-+++ b/src/share/vm/classfile/vmSymbols.hpp	Fri Jul 10 10:19:37 2015 -0700
+diff -r a51cdc477887 src/share/vm/classfile/vmSymbols.hpp
+--- a/src/share/vm/classfile/vmSymbols.hpp	Fri Jul 10 14:23:50 2015 -0700
++++ b/src/share/vm/classfile/vmSymbols.hpp	Fri Jul 10 14:30:29 2015 -0700
 @@ -248,6 +248,8 @@
    /* Support for JSR 292 & invokedynamic (JDK 1.7 and above) */                                   \
    template(java_lang_invoke_CallSite,                 "java/lang/invoke/CallSite")                \
@@ -159,9 +159,9 @@ diff -r 2ffb90b422e2 src/share/vm/classfile/vmSymbols.hpp
    /* signature symbols needed by intrinsics */                                                                    \
    VM_INTRINSICS_DO(VM_INTRINSIC_IGNORE, VM_SYMBOL_IGNORE, VM_SYMBOL_IGNORE, template, VM_ALIAS_IGNORE)            \
                                                                                                                    \
-diff -r 2ffb90b422e2 src/share/vm/prims/jvmtiRedefineClasses.cpp
---- a/src/share/vm/prims/jvmtiRedefineClasses.cpp	Fri Jul 10 10:19:24 2015 -0700
-+++ b/src/share/vm/prims/jvmtiRedefineClasses.cpp	Fri Jul 10 10:19:37 2015 -0700
+diff -r a51cdc477887 src/share/vm/prims/jvmtiRedefineClasses.cpp
+--- a/src/share/vm/prims/jvmtiRedefineClasses.cpp	Fri Jul 10 14:23:50 2015 -0700
++++ b/src/share/vm/prims/jvmtiRedefineClasses.cpp	Fri Jul 10 14:30:29 2015 -0700
 @@ -2110,6 +2110,120 @@
  
  }
@@ -295,14 +295,27 @@ diff -r 2ffb90b422e2 src/share/vm/prims/jvmtiRedefineClasses.cpp
 +        if (!update_direct_method_handle(obj)) {
 +          // DMH is no longer valid, replace it with null reference.
 +          // See note above. We probably want to replace this with something more meaningful.
-+          oopDesc::encode_store_heap_oop_not_null(p, NULL);
++          oopDesc::encode_store_heap_oop(p, NULL);
 +          //S::oop_store(p, NULL);
 +        }
 +      }
      }
    }
  }
-@@ -2822,6 +2948,11 @@
+@@ -2245,6 +2371,12 @@
+ 
+       virtual void do_object(oop obj) {
+         if (!obj->is_instanceKlass()) {
++          // JSR 292 support, uptade java.lang.invoke.MemberName instances
++          // Update before we update its fields, so if it is a field ref, its vmtarget still points at old klass
++          if (java_lang_invoke_MemberName::is_instance(obj)) {
++            update_member_name(obj);
++          }
++
+           obj->oop_iterate(_closure);
+           
+           if (obj->blueprint()->is_redefining()) {
+@@ -2822,6 +2954,11 @@
    // TODO:
    transfer_old_native_function_registrations(the_old_class);
  
@@ -314,9 +327,9 @@ diff -r 2ffb90b422e2 src/share/vm/prims/jvmtiRedefineClasses.cpp
  
  #ifdef ASSERT
  
-diff -r 2ffb90b422e2 src/share/vm/runtime/mutexLocker.cpp
---- a/src/share/vm/runtime/mutexLocker.cpp	Fri Jul 10 10:19:24 2015 -0700
-+++ b/src/share/vm/runtime/mutexLocker.cpp	Fri Jul 10 10:19:37 2015 -0700
+diff -r a51cdc477887 src/share/vm/runtime/mutexLocker.cpp
+--- a/src/share/vm/runtime/mutexLocker.cpp	Fri Jul 10 14:23:50 2015 -0700
++++ b/src/share/vm/runtime/mutexLocker.cpp	Fri Jul 10 14:30:29 2015 -0700
 @@ -267,7 +267,7 @@
    def(Heap_lock                    , Monitor, nonleaf+1,   false);
    def(JfieldIdCreation_lock        , Mutex  , nonleaf+1,   true ); // jfieldID, Used in VM_Operation

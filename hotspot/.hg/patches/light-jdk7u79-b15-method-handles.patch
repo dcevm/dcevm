@@ -1,9 +1,9 @@
 # HG changeset patch
 # Parent  6858a68213bfb26e2a246f0014b921ecab5ac750
 
-diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/classfile/javaClasses.cpp
+diff -r 6858a68213bf src/share/vm/classfile/javaClasses.cpp
 --- a/src/share/vm/classfile/javaClasses.cpp	Fri Jul 10 13:18:18 2015 -0700
-+++ b/src/share/vm/classfile/javaClasses.cpp	Fri Jul 10 13:59:26 2015 -0700
++++ b/src/share/vm/classfile/javaClasses.cpp	Fri Jul 10 14:20:20 2015 -0700
 @@ -2414,6 +2414,49 @@
    }
  }
@@ -63,9 +63,9 @@ diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/classfile/javaClasses.cpp
      java_lang_invoke_MemberName::compute_offsets();
      java_lang_invoke_LambdaForm::compute_offsets();
      java_lang_invoke_MethodType::compute_offsets();
-diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/classfile/javaClasses.hpp
+diff -r 6858a68213bf src/share/vm/classfile/javaClasses.hpp
 --- a/src/share/vm/classfile/javaClasses.hpp	Fri Jul 10 13:18:18 2015 -0700
-+++ b/src/share/vm/classfile/javaClasses.hpp	Fri Jul 10 13:59:26 2015 -0700
++++ b/src/share/vm/classfile/javaClasses.hpp	Fri Jul 10 14:20:20 2015 -0700
 @@ -942,6 +942,55 @@
    static int member_offset_in_bytes() { return _member_offset; }
  };
@@ -122,9 +122,9 @@ diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/classfile/javaClasses.hpp
  // Interface to java.lang.invoke.LambdaForm objects
  // (These are a private interface for managing adapter code generation.)
  
-diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/classfile/systemDictionary.hpp
+diff -r 6858a68213bf src/share/vm/classfile/systemDictionary.hpp
 --- a/src/share/vm/classfile/systemDictionary.hpp	Fri Jul 10 13:18:18 2015 -0700
-+++ b/src/share/vm/classfile/systemDictionary.hpp	Fri Jul 10 13:59:26 2015 -0700
++++ b/src/share/vm/classfile/systemDictionary.hpp	Fri Jul 10 14:20:20 2015 -0700
 @@ -148,6 +148,8 @@
    do_klass(reflect_UnsafeStaticFieldAccessorImpl_klass, sun_reflect_UnsafeStaticFieldAccessorImpl, Opt_Only_JDK15      ) \
                                                                                                                           \
@@ -134,9 +134,9 @@ diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/classfile/systemDictionary.hpp
    do_klass(MethodHandle_klass,                          java_lang_invoke_MethodHandle,             Pre_JSR292          ) \
    do_klass(MemberName_klass,                            java_lang_invoke_MemberName,               Pre_JSR292          ) \
    do_klass(MethodHandleNatives_klass,                   java_lang_invoke_MethodHandleNatives,      Pre_JSR292          ) \
-diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/classfile/vmSymbols.hpp
+diff -r 6858a68213bf src/share/vm/classfile/vmSymbols.hpp
 --- a/src/share/vm/classfile/vmSymbols.hpp	Fri Jul 10 13:18:18 2015 -0700
-+++ b/src/share/vm/classfile/vmSymbols.hpp	Fri Jul 10 13:59:26 2015 -0700
++++ b/src/share/vm/classfile/vmSymbols.hpp	Fri Jul 10 14:20:20 2015 -0700
 @@ -244,6 +244,8 @@
    /* Support for JSR 292 & invokedynamic (JDK 1.7 and above) */                                   \
    template(java_lang_invoke_CallSite,                 "java/lang/invoke/CallSite")                \
@@ -157,99 +157,103 @@ diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/classfile/vmSymbols.hpp
    /* signature symbols needed by intrinsics */                                                                    \
    VM_INTRINSICS_DO(VM_INTRINSIC_IGNORE, VM_SYMBOL_IGNORE, VM_SYMBOL_IGNORE, template, VM_ALIAS_IGNORE)            \
                                                                                                                    \
-diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/prims/jvmtiRedefineClasses.cpp
+diff -r 6858a68213bf src/share/vm/prims/jvmtiRedefineClasses.cpp
 --- a/src/share/vm/prims/jvmtiRedefineClasses.cpp	Fri Jul 10 13:18:18 2015 -0700
-+++ b/src/share/vm/prims/jvmtiRedefineClasses.cpp	Fri Jul 10 13:59:26 2015 -0700
-@@ -1400,6 +1400,120 @@
++++ b/src/share/vm/prims/jvmtiRedefineClasses.cpp	Fri Jul 10 14:20:20 2015 -0700
+@@ -1398,8 +1398,124 @@
+   template <class T> static void oop_store(T* p, oop v) { oopDesc::encode_store_heap_oop_not_null(p, v); }
+ };
  
- template <class S>
- class ChangePointersOopClosure : public OopClosureNoHeader {
-+  // import java_lang_invoke_MemberName.*
-+  enum {
-+    REFERENCE_KIND_SHIFT = java_lang_invoke_MemberName::MN_REFERENCE_KIND_SHIFT,
-+    REFERENCE_KIND_MASK  = java_lang_invoke_MemberName::MN_REFERENCE_KIND_MASK,
-+  };
++// import java_lang_invoke_MemberName.*
++enum {
++  REFERENCE_KIND_SHIFT = java_lang_invoke_MemberName::MN_REFERENCE_KIND_SHIFT,
++  REFERENCE_KIND_MASK  = java_lang_invoke_MemberName::MN_REFERENCE_KIND_MASK,
++};
 +
-+  static oop field_name_or_null(Symbol* s) {
-+    if (s == NULL)  return NULL;
-+    return StringTable::lookup(s);
++static oop field_name_or_null(Symbol* s) {
++  if (s == NULL)  return NULL;
++  return StringTable::lookup(s);
++}
++
++static oop object_java_mirror() {
++  return Klass::cast(SystemDictionary::Object_klass())->java_mirror();
++}
++
++static oop field_signature_type_or_null(Symbol* s) {
++  if (s == NULL)  return NULL;
++  BasicType bt = FieldType::basic_type(s);
++  if (is_java_primitive(bt)) {
++    assert(s->utf8_length() == 1, "");
++    return java_lang_Class::primitive_mirror(bt);
 +  }
-+
-+  static oop object_java_mirror() {
-+    return Klass::cast(SystemDictionary::Object_klass())->java_mirror();
-+  }
-+
-+  static oop field_signature_type_or_null(Symbol* s) {
-+    if (s == NULL)  return NULL;
-+    BasicType bt = FieldType::basic_type(s);
-+    if (is_java_primitive(bt)) {
-+      assert(s->utf8_length() == 1, "");
-+      return java_lang_Class::primitive_mirror(bt);
++  // Here are some more short cuts for common types.
++  // They are optional, since reference types can be resolved lazily.
++  if (bt == T_OBJECT) {
++    if (s == vmSymbols::object_signature()) {
++      return object_java_mirror();
++    } else if (s == vmSymbols::class_signature()) {
++      return Klass::cast(SystemDictionary::Class_klass())->java_mirror();
++    } else if (s == vmSymbols::string_signature()) {
++      return Klass::cast(SystemDictionary::String_klass())->java_mirror();
 +    }
-+    // Here are some more short cuts for common types.
-+    // They are optional, since reference types can be resolved lazily.
-+    if (bt == T_OBJECT) {
-+      if (s == vmSymbols::object_signature()) {
-+        return object_java_mirror();
-+      } else if (s == vmSymbols::class_signature()) {
-+        return Klass::cast(SystemDictionary::Class_klass())->java_mirror();
-+      } else if (s == vmSymbols::string_signature()) {
-+        return Klass::cast(SystemDictionary::String_klass())->java_mirror();
-+      }
-+    }
-+    return NULL;
 +  }
++  return NULL;
++}
 +
-+  bool update_member_name(oop obj) {
-+    int flags    =       java_lang_invoke_MemberName::flags(obj);
-+    int ref_kind =       (flags >> REFERENCE_KIND_SHIFT) & REFERENCE_KIND_MASK;
-+    if (MethodHandles::ref_kind_is_method(ref_kind)) {
-+      methodOop m = (methodOop) java_lang_invoke_MemberName::vmtarget(obj);
-+      if (m != NULL && !instanceKlass::cast(m->method_holder())->is_newest_version()) {
-+        // Let's try to re-resolve method
-+        KlassHandle newest = instanceKlass::cast(m->method_holder())->newest_version();
-+        methodOop new_method = instanceKlass::cast(newest())->find_method(m->name(), m->signature());
++bool update_member_name(oop obj) {
++  int flags    =       java_lang_invoke_MemberName::flags(obj);
++  int ref_kind =       (flags >> REFERENCE_KIND_SHIFT) & REFERENCE_KIND_MASK;
++  if (MethodHandles::ref_kind_is_method(ref_kind)) {
++    methodOop m = (methodOop) java_lang_invoke_MemberName::vmtarget(obj);
++    if (m != NULL && !instanceKlass::cast(m->method_holder())->is_newest_version()) {
++      // Let's try to re-resolve method
++      KlassHandle newest = instanceKlass::cast(m->method_holder())->newest_version();
++      methodOop new_method = instanceKlass::cast(newest())->find_method(m->name(), m->signature());
 +
-+        // Note: we might set NULL at this point, which should force AbstractMethodError at runtime
-+        bool do_dispatch = (ref_kind != JVM_REF_invokeSpecial);
-+        MethodHandles::init_method_MemberName(obj, new_method, do_dispatch, newest);
-+      }
-+    } else if (MethodHandles::ref_kind_is_field(ref_kind)) {
-+      klassOop k = (klassOop) java_lang_invoke_MemberName::vmtarget(obj);
-+      if (k == NULL) {
-+        return false; // Was cleared before, this MemberName is invalid.
-+      }
++      // Note: we might set NULL at this point, which should force AbstractMethodError at runtime
++      bool do_dispatch = (ref_kind != JVM_REF_invokeSpecial);
++      MethodHandles::init_method_MemberName(obj, new_method, do_dispatch, newest);
++    }
++  } else if (MethodHandles::ref_kind_is_field(ref_kind)) {
++    klassOop k = (klassOop) java_lang_invoke_MemberName::vmtarget(obj);
++    if (k == NULL) {
++      return false; // Was cleared before, this MemberName is invalid.
++    }
 +
-+      if (k != NULL && !Klass::cast(k)->is_newest_version()) {
-+        // Let's try to re-resolve field
-+        fieldDescriptor fd;
-+        int offset = java_lang_invoke_MemberName::vmindex(obj);
-+        bool is_static = MethodHandles::ref_kind_is_static(ref_kind);
-+        instanceKlass *ik = instanceKlass::cast(k);
-+        if (ik->find_local_field_from_offset(offset, is_static, &fd)) {
-+          KlassHandle newest = Klass::cast(k)->newest_version();
-+          fieldDescriptor fd_new;
-+          if (instanceKlass::cast(newest())->find_local_field(fd.name(), fd.signature(), &fd_new)) {
-+            bool is_setter = MethodHandles::ref_kind_is_setter(ref_kind);
-+            oop type = field_signature_type_or_null(fd_new.signature());
-+            oop name = field_name_or_null(fd_new.name());
-+            MethodHandles::init_field_MemberName(obj, newest, fd_new.access_flags(), type, name, fd_new.offset(), is_setter);
-+          } else {
-+            // Matching field is not found in new version, not much we can do here.
-+            // JVM will crash once faulty MH is invoked.
-+            // However, to avoid that all DMH's using this faulty MH are cleared (set to NULL)
-+            // Eventually, we probably want to replace them with something more meaningful,
-+            // like instance throwing NoSuchFieldError or DMH that will resort to dynamic
-+            // field resolution (with possibility of type conversion)
-+            java_lang_invoke_MemberName::set_vmtarget(obj, NULL);
-+            java_lang_invoke_MemberName::set_vmindex(obj, 0);
-+            return false;
-+          }
++    if (k != NULL && !Klass::cast(k)->is_newest_version()) {
++      // Let's try to re-resolve field
++      fieldDescriptor fd;
++      int offset = java_lang_invoke_MemberName::vmindex(obj);
++      bool is_static = MethodHandles::ref_kind_is_static(ref_kind);
++      instanceKlass *ik = instanceKlass::cast(k);
++      if (ik->find_local_field_from_offset(offset, is_static, &fd)) {
++        KlassHandle newest = Klass::cast(k)->newest_version();
++        fieldDescriptor fd_new;
++        if (instanceKlass::cast(newest())->find_local_field(fd.name(), fd.signature(), &fd_new)) {
++          bool is_setter = MethodHandles::ref_kind_is_setter(ref_kind);
++          oop type = field_signature_type_or_null(fd_new.signature());
++          oop name = field_name_or_null(fd_new.name());
++          MethodHandles::init_field_MemberName(obj, newest, fd_new.access_flags(), type, name, fd_new.offset(), is_setter);
++        } else {
++          // Matching field is not found in new version, not much we can do here.
++          // JVM will crash once faulty MH is invoked.
++          // However, to avoid that all DMH's using this faulty MH are cleared (set to NULL)
++          // Eventually, we probably want to replace them with something more meaningful,
++          // like instance throwing NoSuchFieldError or DMH that will resort to dynamic
++          // field resolution (with possibility of type conversion)
++          java_lang_invoke_MemberName::set_vmtarget(obj, NULL);
++          java_lang_invoke_MemberName::set_vmindex(obj, 0);
++          return false;
 +        }
 +      }
 +    }
-+    return true;
 +  }
++  return true;
++}
++
++
+ template <class S>
+ class ChangePointersOopClosure : public OopClosureNoHeader {
 +
 +  bool update_direct_method_handle(oop obj) {
 +    // Always update member name first.
@@ -281,12 +285,10 @@ diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/prims/jvmtiRedefineClasses.cpp
    // Forward pointers to instanceKlass and mirror class to new versions
    template <class T>
    inline void do_oop_work(T* p) {
-@@ -1422,6 +1536,14 @@
+@@ -1422,6 +1538,12 @@
            S::oop_store(p, oop);
          }
        }
-+    } else if (java_lang_invoke_MemberName::is_instance(oop)) {
-+      update_member_name(oop);
 +    } else if (java_lang_invoke_DirectMethodHandle::is_instance(oop)) {
 +      if (!update_direct_method_handle(oop)) {
 +        // DMH is no longer valid, replace it with null reference.
@@ -296,7 +298,14 @@ diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/prims/jvmtiRedefineClasses.cpp
      }
    }
  
-@@ -1504,22 +1626,6 @@
+@@ -1501,25 +1623,13 @@
+           // Causes SIGSEGV?
+           //instanceMirrorKlass::oop_fields_iterate(obj, _closure);
+         } else {
++          // Update member name before its klass pointer is updated!
++          if (java_lang_invoke_MemberName::is_instance(obj)) {
++            update_member_name(obj);
++          }
            obj->oop_iterate(_closure);
          }
  
@@ -319,7 +328,7 @@ diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/prims/jvmtiRedefineClasses.cpp
          if (obj->blueprint()->new_version() != NULL) {
            Klass* new_klass = obj->blueprint()->new_version()->klass_part();
            if (obj->is_perm()) {
-@@ -1989,6 +2095,11 @@
+@@ -1989,6 +2099,11 @@
    transfer_old_native_function_registrations(the_old_class);
  
  
@@ -331,9 +340,9 @@ diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/prims/jvmtiRedefineClasses.cpp
  
  #ifdef ASSERT
  
-diff -r 6858a68213bf -r a416f1b672a4 src/share/vm/runtime/mutexLocker.cpp
+diff -r 6858a68213bf src/share/vm/runtime/mutexLocker.cpp
 --- a/src/share/vm/runtime/mutexLocker.cpp	Fri Jul 10 13:18:18 2015 -0700
-+++ b/src/share/vm/runtime/mutexLocker.cpp	Fri Jul 10 13:59:26 2015 -0700
++++ b/src/share/vm/runtime/mutexLocker.cpp	Fri Jul 10 14:20:20 2015 -0700
 @@ -265,7 +265,7 @@
    def(Heap_lock                    , Monitor, nonleaf+1,   false);
    def(JfieldIdCreation_lock        , Mutex  , nonleaf+1,   true ); // jfieldID, Used in VM_Operation

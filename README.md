@@ -59,6 +59,13 @@ Or you can install DCEVM using the gradle script:
  * Run `./gradlew installFastdebug -PtargetJre=$JAVA_HOME/jre` or `./gradlew installProduct -PtargetJre=$JAVA_HOME/jre`
  * DCEVM will be installed as "alternative" JVM. To use it, add `-XXaltjvm=dcevm`
 
+Alternatively, on Debian and Ubuntu systems DCEVM can be installed with the
+[`openjdk-7-jre-dcevm`](https://tracker.debian.org/pkg/openjdk-7-jre-dcevm)
+package and invoked by adding the `-dcevm` command line parameter:
+
+ * Run `apt-get install openjdk-7-jre-dcevm`
+ * Run `java -dcevm -version`, it should include `Dynamic Code Evolution` string.
+
 ### Testing DCEVM
 
 * Configure version you want in [gradle.properties](gradle.properties).

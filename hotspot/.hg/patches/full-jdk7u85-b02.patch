@@ -14,18 +14,6 @@ index 3de1dea..8bf7f94 100644
  # version 4 and above support fvisibility=hidden (matches jni_x86.h file)
  # except 4.1.2 gives pointless warnings that can't be disabled (afaik)
  ifneq "$(shell expr \( $(CC_VER_MAJOR) \> 4 \) \| \( \( $(CC_VER_MAJOR) = 4 \) \& \( $(CC_VER_MINOR) \>= 3 \) \))" "0"
-diff --git a/make/openjdk_distro b/make/openjdk_distro
-index 520b33d..ea7eff0 100644
---- a/make/openjdk_distro
-+++ b/make/openjdk_distro
-@@ -27,6 +27,6 @@
- #
- 
- # Don't put quotes (fail windows build).
--HOTSPOT_VM_DISTRO=OpenJDK
-+HOTSPOT_VM_DISTRO=Dynamic Code Evolution
- COMPANY_NAME=
- PRODUCT_NAME=OpenJDK
 diff --git a/src/cpu/x86/vm/templateTable_x86_32.cpp b/src/cpu/x86/vm/templateTable_x86_32.cpp
 index fc19edc..d2cddd3 100644
 --- a/src/cpu/x86/vm/templateTable_x86_32.cpp

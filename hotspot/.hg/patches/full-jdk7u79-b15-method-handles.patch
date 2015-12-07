@@ -1,9 +1,9 @@
 # HG changeset patch
-# Parent  a51cdc4778871d65e004c6858c2d4afa806dbe42
+# Parent  9792762e75f795196a5ff68e8cd5a52380b332d0
 
-diff -r a51cdc477887 src/share/vm/classfile/javaClasses.cpp
---- a/src/share/vm/classfile/javaClasses.cpp	Fri Jul 10 14:23:50 2015 -0700
-+++ b/src/share/vm/classfile/javaClasses.cpp	Fri Jul 10 14:30:29 2015 -0700
+diff -r 9792762e75f7 src/share/vm/classfile/javaClasses.cpp
+--- a/src/share/vm/classfile/javaClasses.cpp	Mon Dec 07 11:59:52 2015 -0800
++++ b/src/share/vm/classfile/javaClasses.cpp	Mon Dec 07 13:08:09 2015 -0800
 @@ -2409,6 +2409,52 @@
    }
  }
@@ -66,9 +66,9 @@ diff -r a51cdc477887 src/share/vm/classfile/javaClasses.cpp
      java_lang_invoke_MemberName::compute_offsets();
      java_lang_invoke_LambdaForm::compute_offsets();
      java_lang_invoke_MethodType::compute_offsets();
-diff -r a51cdc477887 src/share/vm/classfile/javaClasses.hpp
---- a/src/share/vm/classfile/javaClasses.hpp	Fri Jul 10 14:23:50 2015 -0700
-+++ b/src/share/vm/classfile/javaClasses.hpp	Fri Jul 10 14:30:29 2015 -0700
+diff -r 9792762e75f7 src/share/vm/classfile/javaClasses.hpp
+--- a/src/share/vm/classfile/javaClasses.hpp	Mon Dec 07 11:59:52 2015 -0800
++++ b/src/share/vm/classfile/javaClasses.hpp	Mon Dec 07 13:08:09 2015 -0800
 @@ -940,6 +940,54 @@
    static int member_offset_in_bytes() { return _member_offset; }
  };
@@ -124,9 +124,35 @@ diff -r a51cdc477887 src/share/vm/classfile/javaClasses.hpp
  // Interface to java.lang.invoke.LambdaForm objects
  // (These are a private interface for managing adapter code generation.)
  
-diff -r a51cdc477887 src/share/vm/classfile/systemDictionary.hpp
---- a/src/share/vm/classfile/systemDictionary.hpp	Fri Jul 10 14:23:50 2015 -0700
-+++ b/src/share/vm/classfile/systemDictionary.hpp	Fri Jul 10 14:30:29 2015 -0700
+diff -r 9792762e75f7 src/share/vm/classfile/systemDictionary.cpp
+--- a/src/share/vm/classfile/systemDictionary.cpp	Mon Dec 07 11:59:52 2015 -0800
++++ b/src/share/vm/classfile/systemDictionary.cpp	Mon Dec 07 13:08:09 2015 -0800
+@@ -44,6 +44,7 @@
+ #include "oops/oop.inline2.hpp"
+ #include "oops/typeArrayKlass.hpp"
+ #include "prims/jvmtiEnvBase.hpp"
++#include "prims/jvmtiRedefineClassesTrace.hpp"
+ #include "prims/methodHandles.hpp"
+ #include "runtime/biasedLocking.hpp"
+ #include "runtime/fieldType.hpp"
+@@ -2032,9 +2033,11 @@
+       assert(check->klass_part()->oop_is_instance(), "noninstance in systemdictionary");
+       if ((defining == true) && ((k() != check) && k->old_version() != check)) {
+         ResourceMark rm(Thread::current());
+-        tty->print_cr("(%d / %d) (%s/%s)", k->revision_number(), check->klass_part()->revision_number(), k->name()->as_C_string(), check->klass_part()->name()->as_C_string());
+-        k()->print();
+-        check->print();
++        if (RC_TRACE_ENABLED(0x00000001)) {
++          tty->print_cr("(%d / %d) (%s/%s)", k->revision_number(), check->klass_part()->revision_number(), k->name()->as_C_string(), check->klass_part()->name()->as_C_string());
++          k()->print();
++          check->print();
++        }
+         linkage_error = "loader (instance of  %s): attempted  duplicate class "
+           "definition for name: \"%s\"";
+       } else {
+diff -r 9792762e75f7 src/share/vm/classfile/systemDictionary.hpp
+--- a/src/share/vm/classfile/systemDictionary.hpp	Mon Dec 07 11:59:52 2015 -0800
++++ b/src/share/vm/classfile/systemDictionary.hpp	Mon Dec 07 13:08:09 2015 -0800
 @@ -148,6 +148,8 @@
    do_klass(reflect_UnsafeStaticFieldAccessorImpl_klass, sun_reflect_UnsafeStaticFieldAccessorImpl, Opt_Only_JDK15      ) \
                                                                                                                           \
@@ -136,9 +162,9 @@ diff -r a51cdc477887 src/share/vm/classfile/systemDictionary.hpp
    do_klass(MethodHandle_klass,                          java_lang_invoke_MethodHandle,             Pre_JSR292          ) \
    do_klass(MemberName_klass,                            java_lang_invoke_MemberName,               Pre_JSR292          ) \
    do_klass(MethodHandleNatives_klass,                   java_lang_invoke_MethodHandleNatives,      Pre_JSR292          ) \
-diff -r a51cdc477887 src/share/vm/classfile/vmSymbols.hpp
---- a/src/share/vm/classfile/vmSymbols.hpp	Fri Jul 10 14:23:50 2015 -0700
-+++ b/src/share/vm/classfile/vmSymbols.hpp	Fri Jul 10 14:30:29 2015 -0700
+diff -r 9792762e75f7 src/share/vm/classfile/vmSymbols.hpp
+--- a/src/share/vm/classfile/vmSymbols.hpp	Mon Dec 07 11:59:52 2015 -0800
++++ b/src/share/vm/classfile/vmSymbols.hpp	Mon Dec 07 13:08:09 2015 -0800
 @@ -248,6 +248,8 @@
    /* Support for JSR 292 & invokedynamic (JDK 1.7 and above) */                                   \
    template(java_lang_invoke_CallSite,                 "java/lang/invoke/CallSite")                \
@@ -159,9 +185,9 @@ diff -r a51cdc477887 src/share/vm/classfile/vmSymbols.hpp
    /* signature symbols needed by intrinsics */                                                                    \
    VM_INTRINSICS_DO(VM_INTRINSIC_IGNORE, VM_SYMBOL_IGNORE, VM_SYMBOL_IGNORE, template, VM_ALIAS_IGNORE)            \
                                                                                                                    \
-diff -r a51cdc477887 src/share/vm/prims/jvmtiRedefineClasses.cpp
---- a/src/share/vm/prims/jvmtiRedefineClasses.cpp	Fri Jul 10 14:23:50 2015 -0700
-+++ b/src/share/vm/prims/jvmtiRedefineClasses.cpp	Fri Jul 10 14:30:29 2015 -0700
+diff -r 9792762e75f7 src/share/vm/prims/jvmtiRedefineClasses.cpp
+--- a/src/share/vm/prims/jvmtiRedefineClasses.cpp	Mon Dec 07 11:59:52 2015 -0800
++++ b/src/share/vm/prims/jvmtiRedefineClasses.cpp	Mon Dec 07 13:08:09 2015 -0800
 @@ -2110,6 +2110,120 @@
  
  }
@@ -327,9 +353,9 @@ diff -r a51cdc477887 src/share/vm/prims/jvmtiRedefineClasses.cpp
  
  #ifdef ASSERT
  
-diff -r a51cdc477887 src/share/vm/runtime/mutexLocker.cpp
---- a/src/share/vm/runtime/mutexLocker.cpp	Fri Jul 10 14:23:50 2015 -0700
-+++ b/src/share/vm/runtime/mutexLocker.cpp	Fri Jul 10 14:30:29 2015 -0700
+diff -r 9792762e75f7 src/share/vm/runtime/mutexLocker.cpp
+--- a/src/share/vm/runtime/mutexLocker.cpp	Mon Dec 07 11:59:52 2015 -0800
++++ b/src/share/vm/runtime/mutexLocker.cpp	Mon Dec 07 13:08:09 2015 -0800
 @@ -267,7 +267,7 @@
    def(Heap_lock                    , Monitor, nonleaf+1,   false);
    def(JfieldIdCreation_lock        , Mutex  , nonleaf+1,   true ); // jfieldID, Used in VM_Operation

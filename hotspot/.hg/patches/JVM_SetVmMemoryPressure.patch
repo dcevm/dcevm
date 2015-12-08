@@ -1,9 +1,9 @@
 # HG changeset patch
-# Parent  8c8ce8112df68432b48c78539fa0bad4728a38a0
+# Parent  c903378d8d1d029168ca82a20c602369d6fb6c11
 
-diff -r 8c8ce8112df6 make/aix/makefiles/mapfile-vers-debug
---- a/make/aix/makefiles/mapfile-vers-debug	Mon Dec 07 17:11:22 2015 -0800
-+++ b/make/aix/makefiles/mapfile-vers-debug	Mon Dec 07 21:45:08 2015 -0800
+diff -r c903378d8d1d make/aix/makefiles/mapfile-vers-debug
+--- a/make/aix/makefiles/mapfile-vers-debug	Mon Dec 07 21:47:43 2015 -0800
++++ b/make/aix/makefiles/mapfile-vers-debug	Mon Dec 07 22:40:01 2015 -0800
 @@ -227,6 +227,8 @@
                  JVM_SetProtectionDomain;
                  JVM_SetSockOpt;
@@ -13,9 +13,9 @@ diff -r 8c8ce8112df6 make/aix/makefiles/mapfile-vers-debug
                  JVM_Sleep;
                  JVM_Socket;
                  JVM_SocketAvailable;
-diff -r 8c8ce8112df6 make/aix/makefiles/mapfile-vers-product
---- a/make/aix/makefiles/mapfile-vers-product	Mon Dec 07 17:11:22 2015 -0800
-+++ b/make/aix/makefiles/mapfile-vers-product	Mon Dec 07 21:45:08 2015 -0800
+diff -r c903378d8d1d make/aix/makefiles/mapfile-vers-product
+--- a/make/aix/makefiles/mapfile-vers-product	Mon Dec 07 21:47:43 2015 -0800
++++ b/make/aix/makefiles/mapfile-vers-product	Mon Dec 07 22:40:01 2015 -0800
 @@ -225,6 +225,8 @@
                  JVM_SetProtectionDomain;
                  JVM_SetSockOpt;
@@ -25,9 +25,9 @@ diff -r 8c8ce8112df6 make/aix/makefiles/mapfile-vers-product
                  JVM_Sleep;
                  JVM_Socket;
                  JVM_SocketAvailable;
-diff -r 8c8ce8112df6 make/bsd/makefiles/mapfile-vers-debug
---- a/make/bsd/makefiles/mapfile-vers-debug	Mon Dec 07 17:11:22 2015 -0800
-+++ b/make/bsd/makefiles/mapfile-vers-debug	Mon Dec 07 21:45:08 2015 -0800
+diff -r c903378d8d1d make/bsd/makefiles/mapfile-vers-debug
+--- a/make/bsd/makefiles/mapfile-vers-debug	Mon Dec 07 21:47:43 2015 -0800
++++ b/make/bsd/makefiles/mapfile-vers-debug	Mon Dec 07 22:40:01 2015 -0800
 @@ -228,6 +228,8 @@
                  _JVM_SetPrimitiveArrayElement
                  _JVM_SetSockOpt
@@ -37,9 +37,9 @@ diff -r 8c8ce8112df6 make/bsd/makefiles/mapfile-vers-debug
                  _JVM_Sleep
                  _JVM_Socket
                  _JVM_SocketAvailable
-diff -r 8c8ce8112df6 make/bsd/makefiles/mapfile-vers-product
---- a/make/bsd/makefiles/mapfile-vers-product	Mon Dec 07 17:11:22 2015 -0800
-+++ b/make/bsd/makefiles/mapfile-vers-product	Mon Dec 07 21:45:08 2015 -0800
+diff -r c903378d8d1d make/bsd/makefiles/mapfile-vers-product
+--- a/make/bsd/makefiles/mapfile-vers-product	Mon Dec 07 21:47:43 2015 -0800
++++ b/make/bsd/makefiles/mapfile-vers-product	Mon Dec 07 22:40:01 2015 -0800
 @@ -228,6 +228,8 @@
                  _JVM_SetPrimitiveArrayElement
                  _JVM_SetSockOpt
@@ -49,9 +49,9 @@ diff -r 8c8ce8112df6 make/bsd/makefiles/mapfile-vers-product
                  _JVM_Sleep
                  _JVM_Socket
                  _JVM_SocketAvailable
-diff -r 8c8ce8112df6 make/linux/makefiles/mapfile-vers-debug
---- a/make/linux/makefiles/mapfile-vers-debug	Mon Dec 07 17:11:22 2015 -0800
-+++ b/make/linux/makefiles/mapfile-vers-debug	Mon Dec 07 21:45:08 2015 -0800
+diff -r c903378d8d1d make/linux/makefiles/mapfile-vers-debug
+--- a/make/linux/makefiles/mapfile-vers-debug	Mon Dec 07 21:47:43 2015 -0800
++++ b/make/linux/makefiles/mapfile-vers-debug	Mon Dec 07 22:40:01 2015 -0800
 @@ -230,6 +230,8 @@
                  JVM_SetPrimitiveArrayElement;
                  JVM_SetSockOpt;
@@ -61,9 +61,9 @@ diff -r 8c8ce8112df6 make/linux/makefiles/mapfile-vers-debug
                  JVM_Sleep;
                  JVM_Socket;
                  JVM_SocketAvailable;
-diff -r 8c8ce8112df6 make/linux/makefiles/mapfile-vers-product
---- a/make/linux/makefiles/mapfile-vers-product	Mon Dec 07 17:11:22 2015 -0800
-+++ b/make/linux/makefiles/mapfile-vers-product	Mon Dec 07 21:45:08 2015 -0800
+diff -r c903378d8d1d make/linux/makefiles/mapfile-vers-product
+--- a/make/linux/makefiles/mapfile-vers-product	Mon Dec 07 21:47:43 2015 -0800
++++ b/make/linux/makefiles/mapfile-vers-product	Mon Dec 07 22:40:01 2015 -0800
 @@ -230,6 +230,8 @@
                  JVM_SetPrimitiveArrayElement;
                  JVM_SetSockOpt;
@@ -73,9 +73,9 @@ diff -r 8c8ce8112df6 make/linux/makefiles/mapfile-vers-product
                  JVM_Sleep;
                  JVM_Socket;
                  JVM_SocketAvailable;
-diff -r 8c8ce8112df6 make/solaris/makefiles/mapfile-vers
---- a/make/solaris/makefiles/mapfile-vers	Mon Dec 07 17:11:22 2015 -0800
-+++ b/make/solaris/makefiles/mapfile-vers	Mon Dec 07 21:45:08 2015 -0800
+diff -r c903378d8d1d make/solaris/makefiles/mapfile-vers
+--- a/make/solaris/makefiles/mapfile-vers	Mon Dec 07 21:47:43 2015 -0800
++++ b/make/solaris/makefiles/mapfile-vers	Mon Dec 07 22:40:01 2015 -0800
 @@ -230,6 +230,8 @@
                  JVM_SetPrimitiveArrayElement;
                  JVM_SetSockOpt;
@@ -85,15 +85,16 @@ diff -r 8c8ce8112df6 make/solaris/makefiles/mapfile-vers
                  JVM_Sleep;
                  JVM_Socket;
                  JVM_SocketAvailable;
-diff -r 8c8ce8112df6 src/share/vm/prims/jvm.cpp
---- a/src/share/vm/prims/jvm.cpp	Mon Dec 07 17:11:22 2015 -0800
-+++ b/src/share/vm/prims/jvm.cpp	Mon Dec 07 21:45:08 2015 -0800
-@@ -4305,6 +4305,14 @@
+diff -r c903378d8d1d src/share/vm/prims/jvm.cpp
+--- a/src/share/vm/prims/jvm.cpp	Mon Dec 07 21:47:43 2015 -0800
++++ b/src/share/vm/prims/jvm.cpp	Mon Dec 07 22:40:01 2015 -0800
+@@ -4305,6 +4305,15 @@
    return Management::get_jmm_interface(version);
  JVM_END
  
 +JVM_ENTRY_NO_ENV(jint, JVM_GetVmMemoryPressure())
 +  // Do nothing, this function is only to make management.dll happy
++  return 0;
 +JVM_END
 +
 +JVM_ENTRY_NO_ENV(void, JVM_SetVmMemoryPressure(jint pressure))
@@ -103,9 +104,9 @@ diff -r 8c8ce8112df6 src/share/vm/prims/jvm.cpp
  // com.sun.tools.attach.VirtualMachine agent properties support
  //
  // Initialize the agent properties with the properties maintained in the VM
-diff -r 8c8ce8112df6 src/share/vm/prims/jvm.h
---- a/src/share/vm/prims/jvm.h	Mon Dec 07 17:11:22 2015 -0800
-+++ b/src/share/vm/prims/jvm.h	Mon Dec 07 21:45:08 2015 -0800
+diff -r c903378d8d1d src/share/vm/prims/jvm.h
+--- a/src/share/vm/prims/jvm.h	Mon Dec 07 21:47:43 2015 -0800
++++ b/src/share/vm/prims/jvm.h	Mon Dec 07 22:40:01 2015 -0800
 @@ -1490,6 +1490,12 @@
  JNIEXPORT void* JNICALL
  JVM_GetManagement(jint version);

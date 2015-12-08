@@ -1,0 +1,234 @@
+# HG changeset patch
+# Parent  5c1a815b73abcb755c43eb820f6557d37aeb4f9f
+
+diff -r 5c1a815b73ab src/share/vm/classfile/classFileParser.cpp
+--- a/src/share/vm/classfile/classFileParser.cpp	Mon Dec 07 17:08:29 2015 -0800
++++ b/src/share/vm/classfile/classFileParser.cpp	Mon Dec 07 17:11:00 2015 -0800
+@@ -4257,6 +4257,11 @@
+       }
+     }
+ 
++    if (cfs->source() != NULL && HotswapDeoptClassPath != NULL) {
++      if (strstr(cfs->source(), HotswapDeoptClassPath) != NULL) 
++        this_klass->set_deoptimization_incl(true);
++    }
++
+     if (TraceClassResolution) {
+       ResourceMark rm;
+       // print out the superclass.
+diff -r 5c1a815b73ab src/share/vm/classfile/systemDictionary.cpp
+--- a/src/share/vm/classfile/systemDictionary.cpp	Mon Dec 07 17:08:29 2015 -0800
++++ b/src/share/vm/classfile/systemDictionary.cpp	Mon Dec 07 17:11:00 2015 -0800
+@@ -1245,6 +1245,11 @@
+       ik->restore_unshareable_info(loader_data, protection_domain, CHECK_(nh));
+     }
+ 
++    if (HotswapDeoptClassPath != NULL) {
++      if (strstr(HotswapDeoptClassPath, ik->external_name()) != NULL)
++        ik->set_deoptimization_incl(true);
++    }
++
+     if (TraceClassLoading) {
+       ResourceMark rm;
+       tty->print("[Loaded %s", ik->external_name());
+diff -r 5c1a815b73ab src/share/vm/code/codeCache.cpp
+--- a/src/share/vm/code/codeCache.cpp	Mon Dec 07 17:08:29 2015 -0800
++++ b/src/share/vm/code/codeCache.cpp	Mon Dec 07 17:11:00 2015 -0800
+@@ -707,6 +707,13 @@
+ }
+ #endif // HOTSWAP
+ 
++// Deoptimize all methods having deopt-include flag
++void CodeCache::mark_all_incl_nmethods_for_deoptimization() {
++  MutexLockerEx mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
++  FOR_ALL_ALIVE_NMETHODS(nm) {
++    nm->mark_for_deoptimization_incl();
++  }
++}
+ 
+ // Deoptimize all methods
+ void CodeCache::mark_all_nmethods_for_deoptimization() {
+diff -r 5c1a815b73ab src/share/vm/code/codeCache.hpp
+--- a/src/share/vm/code/codeCache.hpp	Mon Dec 07 17:08:29 2015 -0800
++++ b/src/share/vm/code/codeCache.hpp	Mon Dec 07 17:11:00 2015 -0800
+@@ -185,6 +185,7 @@
+     // tells how many nmethods have dependencies
+   static int number_of_nmethods_with_dependencies();
+ 
++  static void mark_all_incl_nmethods_for_deoptimization();
+   static int get_codemem_full_count() { return _codemem_full_count; }
+ };
+ 
+diff -r 5c1a815b73ab src/share/vm/code/nmethod.cpp
+--- a/src/share/vm/code/nmethod.cpp	Mon Dec 07 17:08:29 2015 -0800
++++ b/src/share/vm/code/nmethod.cpp	Mon Dec 07 17:11:00 2015 -0800
+@@ -476,6 +476,7 @@
+   _lazy_critical_native       = 0;
+   _has_wide_vectors           = 0;
+   _marked_for_deoptimization  = 0;
++  _deoptimization_incl        = false;
+   _lock_count                 = 0;
+   _stack_traversal_mark       = 0;
+   _unload_reported            = false;           // jvmti state
+@@ -688,6 +689,7 @@
+     _dependencies_offset     = _scopes_pcs_offset;
+     _handler_table_offset    = _dependencies_offset;
+     _nul_chk_table_offset    = _handler_table_offset;
++
+     _nmethod_end_offset      = _nul_chk_table_offset;
+     _compile_id              = compile_id;
+     _comp_level              = CompLevel_none;
+@@ -697,6 +699,8 @@
+     _exception_cache         = NULL;
+     _pc_desc_cache.reset_to(NULL);
+     _hotness_counter         = NMethodSweeper::hotness_counter_reset_val();
++    if (method != NULL)
++      _deoptimization_incl = method->method_holder()->is_deoptimization_incl();
+ 
+     code_buffer->copy_values_to(this);
+     if (ScavengeRootsInCode) {
+@@ -772,6 +776,7 @@
+     _metadata_offset         = _oops_offset         + round_to(code_buffer->total_oop_size(), oopSize);
+     _scopes_data_offset      = _metadata_offset     + round_to(code_buffer->total_metadata_size(), wordSize);
+     _scopes_pcs_offset       = _scopes_data_offset;
++
+     _dependencies_offset     = _scopes_pcs_offset;
+     _handler_table_offset    = _dependencies_offset;
+     _nul_chk_table_offset    = _handler_table_offset;
+@@ -784,6 +789,8 @@
+     _exception_cache         = NULL;
+     _pc_desc_cache.reset_to(NULL);
+     _hotness_counter         = NMethodSweeper::hotness_counter_reset_val();
++    if (method != NULL)
++      _deoptimization_incl = method->method_holder()->is_deoptimization_incl();
+ 
+     code_buffer->copy_values_to(this);
+     if (ScavengeRootsInCode) {
+@@ -900,6 +907,9 @@
+     _exception_cache         = NULL;
+     _pc_desc_cache.reset_to(scopes_pcs_begin());
+ 
++    if (method != NULL)
++      _deoptimization_incl = method->method_holder()->is_deoptimization_incl();
++
+     // Copy contents of ScopeDescRecorder to nmethod
+     code_buffer->copy_values_to(this);
+     debug_info->copy_to(this);
+diff -r 5c1a815b73ab src/share/vm/code/nmethod.hpp
+--- a/src/share/vm/code/nmethod.hpp	Mon Dec 07 17:08:29 2015 -0800
++++ b/src/share/vm/code/nmethod.hpp	Mon Dec 07 17:11:00 2015 -0800
+@@ -184,6 +184,8 @@
+   bool _marked_for_reclamation;              // Used by NMethodSweeper (set only by sweeper)
+   bool _marked_for_deoptimization;           // Used for stack deoptimization
+ 
++  bool _deoptimization_incl;
++
+   // used by jvmti to track if an unload event has been posted for this nmethod.
+   bool _unload_reported;
+ 
+@@ -470,6 +472,11 @@
+   bool  is_marked_for_deoptimization() const      { return _marked_for_deoptimization; }
+   void  mark_for_deoptimization()                 { _marked_for_deoptimization = true; }
+ 
++  bool  is_deoptimization_incl() const            { return _deoptimization_incl; }
++  void  set_deoptimization_incl(bool z)           { _deoptimization_incl = z; }
++
++  void  mark_for_deoptimization_incl()            { if (_deoptimization_incl) _marked_for_deoptimization = true; }
++
+   void  make_unloaded(BoolObjectClosure* is_alive, oop cause);
+ 
+   bool has_dependencies()                         { return dependencies_size() != 0; }
+diff -r 5c1a815b73ab src/share/vm/oops/klass.cpp
+--- a/src/share/vm/oops/klass.cpp	Mon Dec 07 17:08:29 2015 -0800
++++ b/src/share/vm/oops/klass.cpp	Mon Dec 07 17:11:00 2015 -0800
+@@ -188,6 +188,7 @@
+ 
+   set_redefinition_flags(Klass::NoRedefinition);
+   set_redefining(false);
++  set_deoptimization_incl(false);
+   set_new_version(NULL);
+   set_old_version(NULL);
+   set_redefinition_index(-1);
+@@ -236,6 +237,8 @@
+   if (FastSuperclassLimit == 0) {
+     // None of the other machinery matters.
+     set_super(k);
++    if (k != NULL && k->is_deoptimization_incl())
++      set_deoptimization_incl(true);
+     return;
+   }
+   if (k == NULL) {
+@@ -247,6 +250,8 @@
+            "initialize this only once to a non-trivial value");
+     set_super(k);
+     Klass* sup = k;
++    if (sup->is_deoptimization_incl())
++      set_deoptimization_incl(true);
+     int sup_depth = sup->super_depth();
+     juint my_depth  = MIN2(sup_depth + 1, (int)primary_super_limit());
+     if (!can_be_primary_super_slow())
+diff -r 5c1a815b73ab src/share/vm/oops/klass.hpp
+--- a/src/share/vm/oops/klass.hpp	Mon Dec 07 17:08:29 2015 -0800
++++ b/src/share/vm/oops/klass.hpp	Mon Dec 07 17:11:00 2015 -0800
+@@ -177,6 +177,7 @@
+   bool        _original_field_offsets_changed; // Did the original field offsets of this class change during class redefinition?
+   int *       _update_information;     // Update information
+   bool        _is_redefining;
++  bool        _deoptimization_incl; // True if class methods are included in deoptimization
+ 
+   // Biased locking implementation and statistics
+   // (the 64-bit chunk goes first, to avoid some fragmentation)
+@@ -263,6 +264,9 @@
+   int *update_information() const                      { return _update_information; }
+   void set_update_information(int *info)               { _update_information = info; }
+ 
++  bool  is_deoptimization_incl() const                 { return _deoptimization_incl; }
++  void  set_deoptimization_incl(bool z)                { _deoptimization_incl = z; }
++
+   // Revision number for redefined classes, -1 for originally loaded classes
+   bool was_redefined() const            { return _revision_number != -1; }
+   jint revision_number() const          { return _revision_number; }
+diff -r 5c1a815b73ab src/share/vm/prims/jvmtiRedefineClasses2.cpp
+--- a/src/share/vm/prims/jvmtiRedefineClasses2.cpp	Mon Dec 07 17:08:29 2015 -0800
++++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp	Mon Dec 07 17:11:00 2015 -0800
+@@ -443,6 +443,8 @@
+ 
+     new_class->set_redefinition_flags(redefinition_flags);
+ 
++    new_class->set_deoptimization_incl(true);
++
+     _max_redefinition_flags = _max_redefinition_flags | redefinition_flags;
+ 
+     if ((redefinition_flags & Klass::ModifyInstances) != 0) {
+@@ -1568,7 +1570,10 @@
+   if (0 && JvmtiExport::all_dependencies_are_recorded()) {
+     Universe::flush_evol_dependents_on(k_h);
+   } else {
+-    CodeCache::mark_all_nmethods_for_deoptimization();
++  	if (HotswapDeoptClassPath == NULL)
++  		CodeCache::mark_all_nmethods_for_deoptimization();
++  	else
++    	CodeCache::mark_all_incl_nmethods_for_deoptimization();
+ 
+     ResourceMark rm(THREAD);
+     DeoptimizationMarker dm;
+diff -r 5c1a815b73ab src/share/vm/runtime/globals.hpp
+--- a/src/share/vm/runtime/globals.hpp	Mon Dec 07 17:08:29 2015 -0800
++++ b/src/share/vm/runtime/globals.hpp	Mon Dec 07 17:11:00 2015 -0800
+@@ -3947,7 +3947,15 @@
+                                                                             \
+   product_pd(bool, PreserveFramePointer,                                    \
+              "Use the FP register for holding the frame pointer "           \
+-             "and not as a general purpose register.")
++             "and not as a general purpose register.")                      \
++                                                                            \
++  product(ccstr, HotswapDeoptClassPath, NULL,                               \
++          "Class path or fragment of the class path to a folder with "      \
++          "classes allowed to be deoptimized on hotswap. If is not "        \
++          "defined then all classes will be deoptimized on hotswap. "       \
++          "That's default behaviour. Using this option the performance "    \
++          "of hotswap can be considerably increased. ")
++
+ 
+ /*
+  *  Macros for factoring of globals

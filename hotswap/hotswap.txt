@@ -1,0 +1,6 @@
+Source code for the Dynamic Code Evolution VM (http://ssw.jku.at/dcevm).
+
+- hotswap.patch: Full patch including unit tests and all features.
+- hotswaplight.patch: Patch with the VM modifications only and a limited set of features to reduce differences to OpenJDK.
+
+Both patches are based against the OpenJDK changeset f5603a6e5042 (HS20 build number 03).

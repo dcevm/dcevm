@@ -39,54 +39,54 @@ import static org.junit.Assert.assertTrue;
  */
 public class ClassObjectHashcodeTest {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static class A {
+
+    public int value() {
+      return 1;
     }
+  }
 
-    // Version 0
-    public static class A {
+  // Version 1
+  public static class A___1 {
 
-        public int value() {
-            return 1;
-        }
+    public int value() {
+      return 2;
     }
+  }
 
-    // Version 1
-    public static class A___1 {
-
-        public int value() {
-            return 2;
-        }
+  @Test
+  public void testClassObjectHashcode() {
+    A a = new A();
+    Class clazz = a.getClass();
+    int hashCode = clazz.hashCode();
+    assertEquals(1, a.value());
+    __toVersion__(1);
+    assertEquals(2, a.value());
+    assertEquals(hashCode, clazz.hashCode());
+    assertEquals(hashCode, a.getClass().hashCode());
+    __toVersion__(0);
+    synchronized (clazz) {
+      assertEquals(1, a.value());
+      assertEquals(hashCode, clazz.hashCode());
+      assertEquals(hashCode, a.getClass().hashCode());
+      __toVersion__(1);
+      assertEquals(2, a.value());
+      assertTrue(a.getClass() == clazz);
+      assertTrue(a.getClass() == ClassObjectHashcodeTest.A.class);
+      assertEquals(hashCode, clazz.hashCode());
+      assertEquals(hashCode, a.getClass().hashCode());
     }
-
-    @Test
-    public void testClassObjectHashcode() {
-        A a = new A();
-        Class clazz = a.getClass();
-        int hashCode = clazz.hashCode();
-        assertEquals(1, a.value());
-        __toVersion__(1);
-        assertEquals(2, a.value());
-        assertEquals(hashCode, clazz.hashCode());
-        assertEquals(hashCode, a.getClass().hashCode());
-        __toVersion__(0);
-        synchronized (clazz) {
-            assertEquals(1, a.value());
-            assertEquals(hashCode, clazz.hashCode());
-            assertEquals(hashCode, a.getClass().hashCode());
-            __toVersion__(1);
-            assertEquals(2, a.value());
-            assertTrue(a.getClass() == clazz);
-            assertTrue(a.getClass() == ClassObjectHashcodeTest.A.class);
-            assertEquals(hashCode, clazz.hashCode());
-            assertEquals(hashCode, a.getClass().hashCode());
-        }
-        assertEquals(2, a.value());
-        assertTrue(a.getClass() == clazz);
-        __toVersion__(0);
-        assertTrue(a.getClass() == clazz);
-        assertEquals(hashCode, clazz.hashCode());
-        assertEquals(hashCode, a.getClass().hashCode());
-    }
+    assertEquals(2, a.value());
+    assertTrue(a.getClass() == clazz);
+    __toVersion__(0);
+    assertTrue(a.getClass() == clazz);
+    assertEquals(hashCode, clazz.hashCode());
+    assertEquals(hashCode, a.getClass().hashCode());
+  }
 }

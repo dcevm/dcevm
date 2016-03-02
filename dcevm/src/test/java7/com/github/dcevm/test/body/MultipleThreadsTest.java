@@ -40,168 +40,168 @@ import static org.junit.Assert.assertTrue;
  */
 public class MultipleThreadsTest {
 
-    public static final int COUNT = 10;
+  public static final int COUNT = 10;
 
-    // Version 0
-    public static class A extends Thread {
+  // Version 0
+  public static class A extends Thread {
 
-        private int value;
-        private int value2;
-        private boolean flag = false;
+    private int value;
+    private int value2;
+    private boolean flag = false;
 
-        @Override
-        public void run() {
-            while (doit()) {
-                flag = false;
-            }
-        }
-
-        public boolean doit() {
-            if (flag) {
-                throw new RuntimeException("Must not reach here");
-            }
-            flag = true;
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
-            }
-
-            value++;
-            return true;
-        }
-
-        public int getValue() {
-            return value;
-        }
-
-        public int getValue2() {
-            return value2;
-        }
+    @Override
+    public void run() {
+      while (doit()) {
+        flag = false;
+      }
     }
 
-    // Version 1
-    public static class A___1 extends Thread {
+    public boolean doit() {
+      if (flag) {
+        throw new RuntimeException("Must not reach here");
+      }
+      flag = true;
+      try {
+        Thread.sleep(1);
+      } catch (InterruptedException e) {
+      }
 
-        private int value;
-        private int value2;
-        private boolean flag = false;
-
-        @Override
-        public void run() {
-            while (doit()) {
-                flag = false;
-            }
-        }
-
-        public boolean doit() {
-            if (flag) {
-                throw new RuntimeException("Must not reach here");
-            }
-            flag = true;
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
-            }
-
-            value2++;
-            return true;
-        }
-
-        public int getValue() {
-            return value;
-        }
-
-        public int getValue2() {
-            return value2;
-        }
+      value++;
+      return true;
     }
 
-    // Version 2
-    public static class A___2 extends Thread {
-
-        private int value;
-        private int value2;
-        private boolean flag = false;
-
-        @Override
-        public void run() {
-            while (doit()) {
-                flag = false;
-            }
-        }
-
-        public boolean doit() {
-            return false;
-        }
-
-        public int getValue() {
-            return value;
-        }
-
-        public int getValue2() {
-            return value2;
-        }
+    public int getValue() {
+      return value;
     }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+    public int getValue2() {
+      return value2;
+    }
+  }
+
+  // Version 1
+  public static class A___1 extends Thread {
+
+    private int value;
+    private int value2;
+    private boolean flag = false;
+
+    @Override
+    public void run() {
+      while (doit()) {
+        flag = false;
+      }
     }
 
-    @Test
-    public void testOneThread() {
-        test(1);
+    public boolean doit() {
+      if (flag) {
+        throw new RuntimeException("Must not reach here");
+      }
+      flag = true;
+      try {
+        Thread.sleep(1);
+      } catch (InterruptedException e) {
+      }
+
+      value2++;
+      return true;
     }
 
-    @Test
-    public void testThreads() {
-        test(COUNT);
+    public int getValue() {
+      return value;
     }
 
-    private void test(int count) {
-
-        assert __version__() == 0;
-
-        A[] arr = new A[count];
-        for (int i = 0; i < count; i++) {
-            arr[i] = new A();
-            arr[i].start();
-        }
-
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException e) {
-        }
-
-        for (int i = 0; i < count; i++) {
-            //assertTrue(arr[i].getValue() > 0);
-        }
-
-        __toVersion__(1);
-
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException e) {
-        }
-
-        for (int i = 0; i < count; i++) {
-            assertTrue(arr[i].getValue2() > 0);
-        }
-
-        __toVersion__(2);
-
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException e) {
-        }
-
-
-        for (int i = 0; i < count; i++) {
-            assertFalse(arr[i].isAlive());
-        }
-
-        __toVersion__(0);
-
-
+    public int getValue2() {
+      return value2;
     }
+  }
+
+  // Version 2
+  public static class A___2 extends Thread {
+
+    private int value;
+    private int value2;
+    private boolean flag = false;
+
+    @Override
+    public void run() {
+      while (doit()) {
+        flag = false;
+      }
+    }
+
+    public boolean doit() {
+      return false;
+    }
+
+    public int getValue() {
+      return value;
+    }
+
+    public int getValue2() {
+      return value2;
+    }
+  }
+
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  @Test
+  public void testOneThread() {
+    test(1);
+  }
+
+  @Test
+  public void testThreads() {
+    test(COUNT);
+  }
+
+  private void test(int count) {
+
+    assert __version__() == 0;
+
+    A[] arr = new A[count];
+    for (int i = 0; i < count; i++) {
+      arr[i] = new A();
+      arr[i].start();
+    }
+
+    try {
+      Thread.sleep(500);
+    } catch (InterruptedException e) {
+    }
+
+    for (int i = 0; i < count; i++) {
+      //assertTrue(arr[i].getValue() > 0);
+    }
+
+    __toVersion__(1);
+
+    try {
+      Thread.sleep(500);
+    } catch (InterruptedException e) {
+    }
+
+    for (int i = 0; i < count; i++) {
+      assertTrue(arr[i].getValue2() > 0);
+    }
+
+    __toVersion__(2);
+
+    try {
+      Thread.sleep(500);
+    } catch (InterruptedException e) {
+    }
+
+
+    for (int i = 0; i < count; i++) {
+      assertFalse(arr[i].isAlive());
+    }
+
+    __toVersion__(0);
+
+
+  }
 }

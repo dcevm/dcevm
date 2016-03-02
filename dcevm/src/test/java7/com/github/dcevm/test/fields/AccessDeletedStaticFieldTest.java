@@ -40,87 +40,87 @@ import static org.junit.Assert.assertEquals;
  */
 public class AccessDeletedStaticFieldTest {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static class A {
+
+    public static int x;
+
+    static int getFieldInOldCode() {
+
+      __toVersion__(1);
+
+      newMethodFromOldCode();
+
+      // This field does no longer exist
+      return x;
     }
 
-    // Version 0
-    public static class A {
-
-        public static int x;
-
-        static int getFieldInOldCode() {
-            
-            __toVersion__(1);
-
-            newMethodFromOldCode();
-
-            // This field does no longer exist
-            return x;
-        }
-
-        static int getFieldEMCPMethod() {
-            __toVersion__(2);
-            return A.x;
-        }
+    static int getFieldEMCPMethod() {
+      __toVersion__(2);
+      return A.x;
     }
+  }
 
-    // Version 1
-    public static class A___1 {
+  // Version 1
+  public static class A___1 {
+  }
+
+  // Version 2
+
+  public static class A___2 {
+
+    // EMCP to method in version 0
+    static int getFieldEMCPMethod() {
+      __toVersion__(2);
+      return A.x;
     }
+  }
 
-    // Version 2
+  private static void newMethodFromOldCode() {
+    TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
+      @Override
+      public void run() {
+        System.out.println(A.x);
+      }
+    });
+  }
 
-    public static class A___2 {
+  @Test
+  @Category(Full.class)
+  public void testAccessDeletedStaticField() {
 
-        // EMCP to method in version 0
-        static int getFieldEMCPMethod() {
-            __toVersion__(2);
-            return A.x;
-        }
-    }
+    assert __version__() == 0;
 
-    private static void newMethodFromOldCode() {
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
-          @Override
-          public void run() {
-            System.out.println(A.x);
-          }
-        });
-    }
+    A.x = 1;
+    assertEquals(1, A.getFieldInOldCode());
 
-    @Test
-    @Category(Full.class)
-    public void testAccessDeletedStaticField() {
+    assert __version__() == 1;
+    __toVersion__(0);
+    assertEquals(0, A.x);
 
-        assert __version__() == 0;
-
-        A.x = 1;
-        assertEquals(1, A.getFieldInOldCode());
-
-        assert __version__() == 1;
-        __toVersion__(0);
-        assertEquals(0, A.x);
-        
-        assert __version__() == 0;
-    }
+    assert __version__() == 0;
+  }
 
 
-    @Test
-    public void testAccessDeletedStaticFieldFromEMCPMethod() {
+  @Test
+  public void testAccessDeletedStaticFieldFromEMCPMethod() {
 
-        assert __version__() == 0;
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
-            @Override
-            public void run() {
-                System.out.println(A.getFieldEMCPMethod());
-            }
-        });
-        
-        __toVersion__(0);
-        assertEquals(0, A.x);
+    assert __version__() == 0;
+    TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
+      @Override
+      public void run() {
+        System.out.println(A.getFieldEMCPMethod());
+      }
+    });
 
-        assert __version__() == 0;
-    }
+    __toVersion__(0);
+    assertEquals(0, A.x);
+
+    assert __version__() == 0;
+  }
 }

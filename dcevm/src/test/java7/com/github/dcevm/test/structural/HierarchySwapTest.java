@@ -40,358 +40,358 @@ import static org.junit.Assert.*;
 @Ignore
 public class HierarchySwapTest {
 
-    // Version 0
-    public static class A {
+  // Version 0
+  public static class A {
 
-        public int value() {
-            return 1;
-        }
+    public int value() {
+      return 1;
+    }
+  }
+
+  public static class B extends A {
+
+    @Override
+    public int value() {
+      return super.value() * 2;
+    }
+  }
+
+  public static class C {
+
+    public boolean doInstanceCheckA(Object o) {
+      return o instanceof A;
     }
 
-    public static class B extends A {
+    public boolean doInstanceCheckB(Object o) {
+      return o instanceof B;
+    }
+  }
 
-        @Override
-        public int value() {
-            return super.value() * 2;
-        }
+  public static class Base {
+
+    public String className() {
+      return "Base";
+    }
+  }
+
+  public static class D extends Base {
+
+    @Override
+    public String className() {
+      return "D";
     }
 
-    public static class C {
+    public String superClassName() {
+      return super.className();
+    }
+  }
 
-        public boolean doInstanceCheckA(Object o) {
-            return o instanceof A;
-        }
+  public static class E extends Base {
 
-        public boolean doInstanceCheckB(Object o) {
-            return o instanceof B;
-        }
+    @Override
+    public String className() {
+      return "E";
     }
 
-    public static class Base {
+    public String superClassName() {
+      return super.className();
+    }
+  }
 
-        public String className() {
-            return "Base";
-        }
+  public static class F extends Base {
+
+    @Override
+    public String className() {
+      return "F";
     }
 
-    public static class D extends Base {
+    public String superClassName() {
+      return super.className();
+    }
+  }
 
-        @Override
-        public String className() {
-            return "D";
-        }
+  // Version 1
+  public static class A___1 extends B___1 {
 
-        public String superClassName() {
-            return super.className();
-        }
+    @Override
+    public int value() {
+      return super.value() * 2;
+    }
+  }
+
+  public static class B___1 {
+
+    public int value() {
+      return 4;
+    }
+  }
+
+  public static class C___1 {
+
+    public boolean doInstanceCheckA(Object o) {
+      return o instanceof A;
     }
 
-    public static class E extends Base {
+    public boolean doInstanceCheckB(Object o) {
+      return o instanceof B;
+    }
+  }
 
-        @Override
-        public String className() {
-            return "E";
-        }
+  // Version 2
+  public static class D___2 extends Base {
 
-        public String superClassName() {
-            return super.className();
-        }
+    @Override
+    public String className() {
+      return "D";
     }
 
-    public static class F extends Base {
+    public String superClassName() {
+      return super.className();
+    }
+  }
 
-        @Override
-        public String className() {
-            return "F";
-        }
+  public static class E___2 extends D {
 
-        public String superClassName() {
-            return super.className();
-        }
+    @Override
+    public String className() {
+      return "E";
     }
 
-    // Version 1
-    public static class A___1 extends B___1 {
+    @Override
+    public String superClassName() {
+      return super.className();
+    }
+  }
 
-        @Override
-        public int value() {
-            return super.value() * 2;
-        }
+  public static class F___2 extends E {
+
+    @Override
+    public String className() {
+      return "F";
     }
 
-    public static class B___1 {
+    @Override
+    public String superClassName() {
+      return super.className();
+    }
+  }
 
-        public int value() {
-            return 4;
-        }
+  // Version 3
+  public static class D___3 extends E {
+
+    @Override
+    public String className() {
+      return "D";
     }
 
-    public static class C___1 {
+    @Override
+    public String superClassName() {
+      return super.className();
+    }
+  }
 
-        public boolean doInstanceCheckA(Object o) {
-            return o instanceof A;
-        }
+  public static class E___3 extends F {
 
-        public boolean doInstanceCheckB(Object o) {
-            return o instanceof B;
-        }
+    @Override
+    public String className() {
+      return "E";
     }
 
-    // Version 2
-    public static class D___2 extends Base {
+    @Override
+    public String superClassName() {
+      return super.className();
+    }
+  }
 
-        @Override
-        public String className() {
-            return "D";
-        }
+  public static class F___3 extends Base {
 
-        public String superClassName() {
-            return super.className();
-        }
+    @Override
+    public String className() {
+      return "F";
     }
 
-    public static class E___2 extends D {
+    public String superClassName() {
+      return super.className();
+    }
+  }
 
-        @Override
-        public String className() {
-            return "E";
-        }
+  // Version 4
+  public static class D___4 extends E {
 
-        @Override
-        public String superClassName() {
-            return super.className();
-        }
+    @Override
+    public String className() {
+      return "D";
     }
 
-    public static class F___2 extends E {
+    @Override
+    public String superClassName() {
+      return super.className();
+    }
+  }
 
-        @Override
-        public String className() {
-            return "F";
-        }
+  public static class E___4 extends Base {
 
-        @Override
-        public String superClassName() {
-            return super.className();
-        }
+    @Override
+    public String className() {
+      return "E";
     }
 
-    // Version 3
-    public static class D___3 extends E {
+    public String superClassName() {
+      return super.className();
+    }
+  }
 
-        @Override
-        public String className() {
-            return "D";
-        }
+  public static class F___4 extends E {
 
-        @Override
-        public String superClassName() {
-            return super.className();
-        }
+    @Override
+    public String className() {
+      return "F";
     }
 
-    public static class E___3 extends F {
-
-        @Override
-        public String className() {
-            return "E";
-        }
-
-        @Override
-        public String superClassName() {
-            return super.className();
-        }
+    @Override
+    public String superClassName() {
+      return super.className();
     }
+  }
 
-    public static class F___3 extends Base {
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-        @Override
-        public String className() {
-            return "F";
-        }
+  @Test
+  public void testHierarchySwap() {
 
-        public String superClassName() {
-            return super.className();
-        }
-    }
+    assert __version__() == 0;
 
-    // Version 4
-    public static class D___4 extends E {
+    A a = new A();
+    B b = new B();
 
-        @Override
-        public String className() {
-            return "D";
-        }
+    assertEquals(1, a.value());
+    assertEquals(2, b.value());
+    assertTrue(b.getClass().getSuperclass().equals(A.class));
+    assertFalse(a.getClass().getSuperclass().equals(B.class));
 
-        @Override
-        public String superClassName() {
-            return super.className();
-        }
-    }
+    __toVersion__(1);
 
-    public static class E___4 extends Base {
+    assertEquals(8, a.value());
+    assertEquals(4, b.value());
+    assertFalse(b.getClass().getSuperclass().equals(A.class));
+    assertTrue(a.getClass().getSuperclass().equals(B.class));
 
-        @Override
-        public String className() {
-            return "E";
-        }
+    __toVersion__(0);
 
-        public String superClassName() {
-            return super.className();
-        }
-    }
+    assertEquals(1, a.value());
+    assertEquals(2, b.value());
+    assertTrue(b.getClass().getSuperclass().equals(A.class));
+    assertFalse(a.getClass().getSuperclass().equals(B.class));
+  }
 
-    public static class F___4 extends E {
+  @Test
+  public void testHierarchySwapWithInstanceOfTest() {
 
-        @Override
-        public String className() {
-            return "F";
-        }
+    assert __version__() == 0;
 
-        @Override
-        public String superClassName() {
-            return super.className();
-        }
-    }
+    A a = new A();
+    B b = new B();
+    C c = new C();
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
+    assertEquals(1, a.value());
+    assertEquals(2, b.value());
+    assertTrue(c.doInstanceCheckA(b));
+    assertFalse(c.doInstanceCheckB(a));
 
-    @Test
-    public void testHierarchySwap() {
+    __toVersion__(1);
 
-        assert __version__() == 0;
+    assertEquals(8, a.value());
+    assertEquals(4, b.value());
+    assertFalse(c.doInstanceCheckA(b));
+    assertTrue(c.doInstanceCheckB(a));
 
-        A a = new A();
-        B b = new B();
+    __toVersion__(0);
 
-        assertEquals(1, a.value());
-        assertEquals(2, b.value());
-        assertTrue(b.getClass().getSuperclass().equals(A.class));
-        assertFalse(a.getClass().getSuperclass().equals(B.class));
+    assertEquals(1, a.value());
+    assertEquals(2, b.value());
+    assertTrue(c.doInstanceCheckA(b));
+    assertFalse(c.doInstanceCheckB(a));
+  }
 
-        __toVersion__(1);
+  @Test
+  public void testHierarchySwapWithInstanceOf() {
 
-        assertEquals(8, a.value());
-        assertEquals(4, b.value());
-        assertFalse(b.getClass().getSuperclass().equals(A.class));
-        assertTrue(a.getClass().getSuperclass().equals(B.class));
+    assert __version__() == 0;
 
-        __toVersion__(0);
+    A a = new A();
+    B b = new B();
 
-        assertEquals(1, a.value());
-        assertEquals(2, b.value());
-        assertTrue(b.getClass().getSuperclass().equals(A.class));
-        assertFalse(a.getClass().getSuperclass().equals(B.class));
-    }
+    assertEquals(1, a.value());
+    assertEquals(2, b.value());
+    assertTrue(b instanceof A);
+    assertFalse(a instanceof B);
 
-    @Test
-    public void testHierarchySwapWithInstanceOfTest() {
+    __toVersion__(1);
 
-        assert __version__() == 0;
+    assertEquals(8, a.value());
+    assertEquals(4, b.value());
+    assertFalse(b instanceof A);
+    assertTrue(a instanceof B);
 
-        A a = new A();
-        B b = new B();
-        C c = new C();
+    __toVersion__(0);
 
-        assertEquals(1, a.value());
-        assertEquals(2, b.value());
-        assertTrue(c.doInstanceCheckA(b));
-        assertFalse(c.doInstanceCheckB(a));
+    assertEquals(1, a.value());
+    assertEquals(2, b.value());
+    assertTrue(b instanceof A);
+    assertFalse(a instanceof B);
+  }
 
-        __toVersion__(1);
-
-        assertEquals(8, a.value());
-        assertEquals(4, b.value());
-        assertFalse(c.doInstanceCheckA(b));
-        assertTrue(c.doInstanceCheckB(a));
-
-        __toVersion__(0);
-
-        assertEquals(1, a.value());
-        assertEquals(2, b.value());
-        assertTrue(c.doInstanceCheckA(b));
-        assertFalse(c.doInstanceCheckB(a));
-    }
-
-    @Test
-    public void testHierarchySwapWithInstanceOf() {
-
-        assert __version__() == 0;
-
-        A a = new A();
-        B b = new B();
-
-        assertEquals(1, a.value());
-        assertEquals(2, b.value());
-        assertTrue(b instanceof A);
-        assertFalse(a instanceof B);
-
-        __toVersion__(1);
-
-        assertEquals(8, a.value());
-        assertEquals(4, b.value());
-        assertFalse(b instanceof A);
-        assertTrue(a instanceof B);
-
-        __toVersion__(0);
-
-        assertEquals(1, a.value());
-        assertEquals(2, b.value());
-        assertTrue(b instanceof A);
-        assertFalse(a instanceof B);
-    }
-
-    @Test
-    public void testTripleSwap() {
+  @Test
+  public void testTripleSwap() {
 
 
-        assert __version__() == 0;
+    assert __version__() == 0;
 
-        D d = new D();
-        E e = new E();
-        F f = new F();
+    D d = new D();
+    E e = new E();
+    F f = new F();
 
-        assertEquals(d.superClassName(), "Base");
-        assertEquals(e.superClassName(), "Base");
-        assertEquals(f.superClassName(), "Base");
+    assertEquals(d.superClassName(), "Base");
+    assertEquals(e.superClassName(), "Base");
+    assertEquals(f.superClassName(), "Base");
 
-        __toVersion__(2);
+    __toVersion__(2);
 
-        assertEquals(d.superClassName(), "Base");
-        assertEquals(e.superClassName(), "D");
-        assertEquals(f.superClassName(), "E");
+    assertEquals(d.superClassName(), "Base");
+    assertEquals(e.superClassName(), "D");
+    assertEquals(f.superClassName(), "E");
 
-        __toVersion__(3);
+    __toVersion__(3);
 
-        assertEquals(d.superClassName(), "E");
-        assertEquals(e.superClassName(), "F");
-        assertEquals(f.superClassName(), "Base");
+    assertEquals(d.superClassName(), "E");
+    assertEquals(e.superClassName(), "F");
+    assertEquals(f.superClassName(), "Base");
 
-        __toVersion__(4);
+    __toVersion__(4);
 
-        assertEquals(d.superClassName(), "E");
-        assertEquals(e.superClassName(), "Base");
-        assertEquals(f.superClassName(), "E");
+    assertEquals(d.superClassName(), "E");
+    assertEquals(e.superClassName(), "Base");
+    assertEquals(f.superClassName(), "E");
 
-        __toVersion__(3);
+    __toVersion__(3);
 
-        assertEquals(d.superClassName(), "E");
-        assertEquals(e.superClassName(), "F");
-        assertEquals(f.superClassName(), "Base");
+    assertEquals(d.superClassName(), "E");
+    assertEquals(e.superClassName(), "F");
+    assertEquals(f.superClassName(), "Base");
 
-        __toVersion__(2);
+    __toVersion__(2);
 
-        assertEquals(d.superClassName(), "Base");
-        assertEquals(e.superClassName(), "D");
-        assertEquals(f.superClassName(), "E");
+    assertEquals(d.superClassName(), "Base");
+    assertEquals(e.superClassName(), "D");
+    assertEquals(f.superClassName(), "E");
 
-        __toVersion__(0);
+    __toVersion__(0);
 
-        assertEquals(d.superClassName(), "Base");
-        assertEquals(e.superClassName(), "Base");
-        assertEquals(f.superClassName(), "Base");
-    }
+    assertEquals(d.superClassName(), "Base");
+    assertEquals(e.superClassName(), "Base");
+    assertEquals(f.superClassName(), "Base");
+  }
 }

@@ -42,126 +42,126 @@ import static org.junit.Assert.assertEquals;
  */
 public class DeleteActiveMethodTest {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static class A {
+
+    boolean firstCall;
+
+    public int value() {
+      firstCall = true;
+      return helperValue();
     }
 
-    // Version 0
-    public static class A {
+    public int helperValue() {
 
-        boolean firstCall;
+      if (!firstCall) {
+        return -1;
+      }
+      firstCall = false;
 
-        public int value() {
-            firstCall = true;
-            return helperValue();
+      Thread t = new Thread(new Runnable() {
+
+        @Override
+        public void run() {
+          __toVersion__(1);
         }
+      });
+      t.start();
 
-        public int helperValue() {
-
-            if (!firstCall) {
-                return -1;
-            }
-            firstCall = false;
-
-            Thread t = new Thread(new Runnable() {
-
-                @Override
-                public void run() {
-                    __toVersion__(1);
-                }
-            });
-            t.start();
-
-            try {
-                while (t.isAlive()) {
-                    try {
-                        this.helperValue();
-                        Thread.sleep(500);
-                    } catch (InterruptedException e) {
-                    }
-                    helperValue();
-                }
-                Assert.fail("Exception expected!");
-            } catch (NoSuchMethodError e) {
-            }
-
-            try {
-                t.join();
-            } catch (InterruptedException e) {
-            }
-
-            return 1;
+      try {
+        while (t.isAlive()) {
+          try {
+            this.helperValue();
+            Thread.sleep(500);
+          } catch (InterruptedException e) {
+          }
+          helperValue();
         }
+        Assert.fail("Exception expected!");
+      } catch (NoSuchMethodError e) {
+      }
+
+      try {
+        t.join();
+      } catch (InterruptedException e) {
+      }
+
+      return 1;
     }
+  }
 
-    public static class B {
+  public static class B {
 
-        public int fac(int x) {
-            if (x == 0) {
-                __toVersion__(1);
-            }
+    public int fac(int x) {
+      if (x == 0) {
+        __toVersion__(1);
+      }
 
-            return x * fac(x - 1);
-        }
+      return x * fac(x - 1);
     }
+  }
 
-    // Version 1
-    @MethodRedefinitionPolicy(RedefinitionPolicy.DynamicCheck)
-    public static class A___1 {
+  // Version 1
+  @MethodRedefinitionPolicy(RedefinitionPolicy.DynamicCheck)
+  public static class A___1 {
 
-        boolean firstCall;
+    boolean firstCall;
 
-        public int value() {
-            __toVersion__(0);
-            return 2;
-        }
+    public int value() {
+      __toVersion__(0);
+      return 2;
     }
+  }
 
-    @MethodRedefinitionPolicy(RedefinitionPolicy.DynamicCheck)
-    public static class B___1 {
-    }
+  @MethodRedefinitionPolicy(RedefinitionPolicy.DynamicCheck)
+  public static class B___1 {
+  }
 
-    @Test
-    public void testDeleteActiveMethodSimple() {
-        assert __version__() == 0;
+  @Test
+  public void testDeleteActiveMethodSimple() {
+    assert __version__() == 0;
 
-        final B b = new B();
-        TestUtil.assertException(NoSuchMethodError.class, new Runnable() {
-            @Override
-            public void run() {
-                b.fac(5);
-            }
-        });
-       
-        assert __version__() == 1;
-        
-        __toVersion__(0);
-        assert __version__() == 0;
-    }
+    final B b = new B();
+    TestUtil.assertException(NoSuchMethodError.class, new Runnable() {
+      @Override
+      public void run() {
+        b.fac(5);
+      }
+    });
 
-    @Test
-    public void testDeleteActiveMethod() {
-        assert __version__() == 0;
+    assert __version__() == 1;
 
-        A a = new A();
+    __toVersion__(0);
+    assert __version__() == 0;
+  }
 
-        assertEquals(1, a.value());
-        assert __version__() == 1;
+  @Test
+  public void testDeleteActiveMethod() {
+    assert __version__() == 0;
 
-        assertEquals(2, a.value());
-        assert __version__() == 0;
+    A a = new A();
 
-        assertEquals(1, a.value());
-        assert __version__() == 1;
+    assertEquals(1, a.value());
+    assert __version__() == 1;
 
-        assertEquals(2, a.value());
-        assert __version__() == 0;
+    assertEquals(2, a.value());
+    assert __version__() == 0;
 
-        assertEquals(1, a.value());
-        assert __version__() == 1;
+    assertEquals(1, a.value());
+    assert __version__() == 1;
 
-        assertEquals(2, a.value());
-        assert __version__() == 0;
-    }
+    assertEquals(2, a.value());
+    assert __version__() == 0;
+
+    assertEquals(1, a.value());
+    assert __version__() == 1;
+
+    assertEquals(2, a.value());
+    assert __version__() == 0;
+  }
 }

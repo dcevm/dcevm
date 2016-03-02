@@ -44,80 +44,80 @@ import static org.junit.Assert.assertEquals;
  */
 public class YieldTest {
 
-    // Version 0
-    public static class Base {
+  // Version 0
+  public static class Base {
 
-        protected List<Integer> arr = new ArrayList<Integer>();
+    protected List<Integer> arr = new ArrayList<Integer>();
 
-        public void reset() {
-            __toVersion__(0);
-        }
-
-        public void next() {
-            __toVersion__(__version__() + 1);
-        }
+    public void reset() {
+      __toVersion__(0);
     }
 
-    public static abstract class A extends Base {
+    public void next() {
+      __toVersion__(__version__() + 1);
+    }
+  }
 
-        public List<Integer> gen() {
-            arr.add(produce());
-            next();
-            return gen();
-        }
+  public static abstract class A extends Base {
 
-        public abstract int produce();
+    public List<Integer> gen() {
+      arr.add(produce());
+      next();
+      return gen();
     }
 
-    public static class B extends A {
+    public abstract int produce();
+  }
 
-        @Override
-        public int produce() {
-            return 1;
-        }
+  public static class B extends A {
+
+    @Override
+    public int produce() {
+      return 1;
     }
+  }
 
-    public static class B___10 extends A {
+  public static class B___10 extends A {
 
-        @Override
-        public int produce() {
-            return 2;
-        }
+    @Override
+    public int produce() {
+      return 2;
     }
+  }
 
-    public static class B___20 extends A {
+  public static class B___20 extends A {
 
-        private int x;
+    private int x;
 
-        @Override
-        public int produce() {
-            return ++x;
-        }
+    @Override
+    public int produce() {
+      return ++x;
     }
+  }
 
-    public static class A___30 extends Base {
+  public static class A___30 extends Base {
 
-        public List<Integer> gen() {
-            reset();
-            return arr;
-        }
+    public List<Integer> gen() {
+      reset();
+      return arr;
     }
+  }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-    @Test
-    public void testYield() {
+  @Test
+  public void testYield() {
 
-        assert __version__() == 0;
+    assert __version__() == 0;
 
-        B b = new B();
-        assertEquals(Arrays.asList(
-                1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-                2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-                1, 2, 3, 4, 5, 6, 7, 8, 9, 10), b.gen());
-        assert __version__() == 0;
-    }
+    B b = new B();
+    assertEquals(Arrays.asList(
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10), b.gen());
+    assert __version__() == 0;
+  }
 }

@@ -39,128 +39,128 @@ import static org.junit.Assert.assertTrue;
  */
 public class AddMethodTest {
 
-    // Version 0
-    public static class A {
-        public int value(int newVersion) {
-            return newVersion;
-        }
+  // Version 0
+  public static class A {
+    public int value(int newVersion) {
+      return newVersion;
+    }
+  }
+
+  // Version 1
+  public static class A___1 {
+
+    public int value(int newVersion) {
+
+      int x = 1;
+      try {
+        x = 2;
+      } catch (NumberFormatException e) {
+        x = 3;
+      } catch (Exception e) {
+        x = 4;
+      } finally {
+        x = x * 2;
+      }
+      __toVersion__(newVersion);
+      throw new IllegalArgumentException();
+    }
+  }
+
+  // Version 2
+  public static class A___2 {
+
+    public int value2() {
+      return 2;
     }
 
-    // Version 1
-    public static class A___1 {
+    public int value(int newVersion) {
 
-        public int value(int newVersion) {
-
-            int x = 1;
-            try {
-                x = 2;
-            } catch (NumberFormatException e) {
-                x = 3;
-            } catch (Exception e) {
-                x = 4;
-            } finally {
-                x = x * 2;
-            }
-            __toVersion__(newVersion);
-            throw new IllegalArgumentException();
-        }
+      int x = 1;
+      try {
+        x = 2;
+      } catch (NumberFormatException e) {
+        x = 3;
+      } catch (Exception e) {
+        x = 4;
+      } finally {
+        x = x * 2;
+      }
+      __toVersion__(newVersion);
+      throw new IllegalArgumentException();
     }
 
-    // Version 2
-    public static class A___2 {
-
-        public int value2() {
-            return 2;
-        }
-
-        public int value(int newVersion) {
-
-            int x = 1;
-            try {
-                x = 2;
-            } catch (NumberFormatException e) {
-                x = 3;
-            } catch (Exception e) {
-                x = 4;
-            } finally {
-                x = x * 2;
-            }
-            __toVersion__(newVersion);
-            throw new IllegalArgumentException();
-        }
-
-        public int value3() {
-            return 3;
-        }
-
-        public int value4() {
-            return 4;
-        }
-
-        public int value5() {
-            return 5;
-        }
+    public int value3() {
+      return 3;
     }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+    public int value4() {
+      return 4;
     }
 
-    private void checkLineNumbers(int first, int second) {
-        assertTrue("Must have different line numbers (A.value is an EMCP method and therefore execution has to be transferred). Exception line numbers: " + first + " and " + second, first != second);
+    public int value5() {
+      return 5;
     }
+  }
 
-    @Test
-    public void testAddMethodToKlassWithEMCPExceptionMethod() {
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-        assert __version__() == 0;
+  private void checkLineNumbers(int first, int second) {
+    assertTrue("Must have different line numbers (A.value is an EMCP method and therefore execution has to be transferred). Exception line numbers: " + first + " and " + second, first != second);
+  }
 
-        final A a = new A();
+  @Test
+  public void testAddMethodToKlassWithEMCPExceptionMethod() {
 
-        assertEquals(1, a.value(1));
+    assert __version__() == 0;
 
-        __toVersion__(1);
+    final A a = new A();
 
-        int firstLineNumber = TestUtil.assertException(IllegalArgumentException.class, new Runnable() {
-            @Override
-            public void run() {
-                assertEquals(4, a.value(1));
-            }
-        });
+    assertEquals(1, a.value(1));
 
-        int secondLineNumber = TestUtil.assertException(IllegalArgumentException.class, new Runnable() {
-            @Override
-            public void run() {
-                assertEquals(4, a.value(2));
-            }
-        });
+    __toVersion__(1);
 
-        checkLineNumbers(firstLineNumber, secondLineNumber);
+    int firstLineNumber = TestUtil.assertException(IllegalArgumentException.class, new Runnable() {
+      @Override
+      public void run() {
+        assertEquals(4, a.value(1));
+      }
+    });
 
-        assert __version__() == 2;
+    int secondLineNumber = TestUtil.assertException(IllegalArgumentException.class, new Runnable() {
+      @Override
+      public void run() {
+        assertEquals(4, a.value(2));
+      }
+    });
 
-        int newFirstLineNumber = TestUtil.assertException(IllegalArgumentException.class, new Runnable() {
-            @Override
-            public void run() {
-                assertEquals(4, a.value(2));
-            }
-        });
+    checkLineNumbers(firstLineNumber, secondLineNumber);
 
-        assertEquals(secondLineNumber, newFirstLineNumber);
+    assert __version__() == 2;
 
-        int newSecondLineNumber = TestUtil.assertException(IllegalArgumentException.class, new Runnable() {
-            @Override
-            public void run() {
-                assertEquals(4, a.value(1));
-            }
-        });
+    int newFirstLineNumber = TestUtil.assertException(IllegalArgumentException.class, new Runnable() {
+      @Override
+      public void run() {
+        assertEquals(4, a.value(2));
+      }
+    });
 
-        assertEquals(newSecondLineNumber, firstLineNumber);
-        checkLineNumbers(firstLineNumber, secondLineNumber);
+    assertEquals(secondLineNumber, newFirstLineNumber);
 
-        __toVersion__(0);
-        assertEquals(1, a.value(1));
-        assert __version__() == 0;
-    }
+    int newSecondLineNumber = TestUtil.assertException(IllegalArgumentException.class, new Runnable() {
+      @Override
+      public void run() {
+        assertEquals(4, a.value(1));
+      }
+    });
+
+    assertEquals(newSecondLineNumber, firstLineNumber);
+    checkLineNumbers(firstLineNumber, secondLineNumber);
+
+    __toVersion__(0);
+    assertEquals(1, a.value(1));
+    assert __version__() == 0;
+  }
 }

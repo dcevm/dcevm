@@ -37,27 +37,27 @@ import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
  */
 public class FieldAlignmentTest {
 
-    // Version 0
-    public static class A {
-    }
+  // Version 0
+  public static class A {
+  }
 
-    // Version 1
-    public static class A___1 {
-        public boolean booleanFld; // note: gap betweer booleanFld and stringFld, should be properly filled.
-        public String stringFld = "NEW";
-    }
+  // Version 1
+  public static class A___1 {
+    public boolean booleanFld; // note: gap betweer booleanFld and stringFld, should be properly filled.
+    public String stringFld = "NEW";
+  }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-    @Test
-    public void testComplexFieldChange() {
-        assert __version__() == 0;
-        A a = new A();
-        __toVersion__(1);
-        System.gc(); // induce GC to verify that gap is properly filled
-        __toVersion__(0);
-    }
+  @Test
+  public void testComplexFieldChange() {
+    assert __version__() == 0;
+    A a = new A();
+    __toVersion__(1);
+    System.gc(); // induce GC to verify that gap is properly filled
+    __toVersion__(0);
+  }
 }

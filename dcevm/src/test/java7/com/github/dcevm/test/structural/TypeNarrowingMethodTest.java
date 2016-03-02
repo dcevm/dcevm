@@ -40,74 +40,74 @@ import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
 @Ignore
 public class TypeNarrowingMethodTest {
 
-    // Version 0
-    public static class A {
+  // Version 0
+  public static class A {
 
-        int x = 1;
-        int y = 2;
-        int z = 3;
+    int x = 1;
+    int y = 2;
+    int z = 3;
 
-        public int value() {
-            return x;
-        }
-
-        public static int badMethod(B b) {
-            A a = b;
-            return a.y;
-        }
+    public int value() {
+      return x;
     }
 
-    public static class B extends A {
+    public static int badMethod(B b) {
+      A a = b;
+      return a.y;
+    }
+  }
 
+  public static class B extends A {
+
+  }
+
+
+  // Version 1
+  public static class B___1 {
+  }
+
+  // Version 2
+  public static class A___2 {
+
+    int x = 1;
+    int y = 2;
+    int z = 3;
+
+    public int value() {
+      return x;
     }
 
-
-    // Version 1
-    public static class B___1 {
+    public static int badMethod(B b) {
+      return 5;
     }
+  }
 
-    // Version 2
-    public static class A___2 {
-
-        int x = 1;
-        int y = 2;
-        int z = 3;
-
-        public int value() {
-            return x;
-        }
-
-        public static int badMethod(B b) {
-            return 5;
-        }
-    }
-
-    public static class B___2 {
-    }
+  public static class B___2 {
+  }
 
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-        A a = new A();
-        B b = new B();
-    }
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+    A a = new A();
+    B b = new B();
+  }
 
 
-    @Test
-    public void testTypeNarrowingWithViolatingMethod() {
+  @Test
+  public void testTypeNarrowingWithViolatingMethod() {
 
-        TestUtil.assertException(UnsupportedOperationException.class, new Runnable() {
-          @Override
-          public void run() {
-            __toVersion__(1);
-          }
-        });
+    TestUtil.assertException(UnsupportedOperationException.class, new Runnable() {
+      @Override
+      public void run() {
+        __toVersion__(1);
+      }
+    });
 
-        assert __version__() == 0;
+    assert __version__() == 0;
 
-        __toVersion__(2);
+    __toVersion__(2);
 
-        __toVersion__(0);
-    }
+    __toVersion__(0);
+  }
 }

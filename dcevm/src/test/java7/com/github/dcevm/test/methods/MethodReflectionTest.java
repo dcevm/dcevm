@@ -41,112 +41,112 @@ import static org.junit.Assert.assertEquals;
  */
 public class MethodReflectionTest {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static class A {
+
+    public int value() {
+      return 1;
+    }
+  }
+
+  public static class B extends A {
+
+    @Override
+    public int value() {
+      return 2;
+    }
+  }
+
+  public static class C extends A {
+
+    @Override
+    public int value() {
+      return 3;
+    }
+  }
+
+  // Version 1
+  public static class A___1 {
+
+    public int value() {
+      return 1;
     }
 
-    // Version 0
-    public static class A {
+    public int value2() {
+      return 2;
+    }
+  }
 
-        public int value() {
-            return 1;
-        }
+  // Version 2
+  public static class C___2 extends B {
+
+    @Override
+    public int value() {
+      return super.value();
+    }
+  }
+
+  @Test
+  public void testMethodReflection() {
+
+    assert __version__() == 0;
+
+    A a = new A();
+    B b = new B();
+    C c = new C();
+
+    assertEquals(1, a.value());
+    assertEquals(2, b.value());
+    assertEquals(3, c.value());
+
+    assertContainsMethod(A.class, "value");
+    assertDoesNotContainMethod(A.class, "value2");
+
+    __toVersion__(1);
+
+    assertEquals(1, a.value());
+    assertEquals(2, b.value());
+    assertEquals(3, c.value());
+
+    assertContainsMethod(A.class, "value");
+    assertContainsMethod(A.class, "value2");
+
+    __toVersion__(0);
+
+    assertEquals(1, a.value());
+    assertEquals(2, b.value());
+    assertEquals(3, c.value());
+
+    assertContainsMethod(A.class, "value");
+    assertDoesNotContainMethod(A.class, "value2");
+  }
+
+  private void assertContainsMethod(Class<?> c, String methodName) {
+    boolean found = false;
+    for (Method m : c.getDeclaredMethods()) {
+      if (m.getName().equals(methodName)) {
+        found = true;
+        break;
+      }
     }
 
-    public static class B extends A {
+    Assert.assertTrue(found);
+  }
 
-        @Override
-        public int value() {
-            return 2;
-        }
+  private void assertDoesNotContainMethod(Class<?> c, String methodName) {
+    boolean found = false;
+    for (Method m : c.getDeclaredMethods()) {
+      if (m.getName().equals(methodName)) {
+        found = true;
+        break;
+      }
     }
 
-    public static class C extends A {
-
-        @Override
-        public int value() {
-            return 3;
-        }
-    }
-
-    // Version 1
-    public static class A___1 {
-
-        public int value() {
-            return 1;
-        }
-
-        public int value2() {
-            return 2;
-        }
-    }
-
-    // Version 2
-    public static class C___2 extends B {
-
-        @Override
-        public int value() {
-            return super.value();
-        }
-    }
-
-    @Test
-    public void testMethodReflection() {
-
-        assert __version__() == 0;
-
-        A a = new A();
-        B b = new B();
-        C c = new C();
-
-        assertEquals(1, a.value());
-        assertEquals(2, b.value());
-        assertEquals(3, c.value());
-
-        assertContainsMethod(A.class, "value");
-        assertDoesNotContainMethod(A.class, "value2");
-
-        __toVersion__(1);
-
-        assertEquals(1, a.value());
-        assertEquals(2, b.value());
-        assertEquals(3, c.value());
-
-        assertContainsMethod(A.class, "value");
-        assertContainsMethod(A.class, "value2");
-
-        __toVersion__(0);
-
-        assertEquals(1, a.value());
-        assertEquals(2, b.value());
-        assertEquals(3, c.value());
-
-        assertContainsMethod(A.class, "value");
-        assertDoesNotContainMethod(A.class, "value2");
-    }
-
-    private void assertContainsMethod(Class<?> c, String methodName) {
-        boolean found = false;
-        for (Method m : c.getDeclaredMethods()) {
-            if (m.getName().equals(methodName)) {
-                found = true;
-                break;
-            }
-        }
-
-        Assert.assertTrue(found);
-    }
-
-    private void assertDoesNotContainMethod(Class<?> c, String methodName) {
-        boolean found = false;
-        for (Method m : c.getDeclaredMethods()) {
-            if (m.getName().equals(methodName)) {
-                found = true;
-                break;
-            }
-        }
-
-        Assert.assertFalse(found);
-    }
+    Assert.assertFalse(found);
+  }
 }

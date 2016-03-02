@@ -38,86 +38,86 @@ import static org.junit.Assert.assertEquals;
  */
 public class SingleClassTest {
 
-    // Version 0
-    public static class A {
+  // Version 0
+  public static class A {
 
-        public int value() {
-            return 5;
-        }
+    public int value() {
+      return 5;
+    }
+  }
+
+  // Version 3
+  public static class A___3 {
+
+    public int value() {
+      return 5;
+    }
+  }
+
+  // Version 1
+  public static class A___1 {
+
+    public int value() {
+      return 6;
     }
 
-    // Version 3
-    public static class A___3 {
+    public int testValue() {
+      return 1;
 
-        public int value() {
-            return 5;
-        }
+    }
+  }
+
+  // Version 2
+  public static class A___2 {
+
+    public int value() {
+      return baseValue() * 2;
     }
 
-    // Version 1
-    public static class A___1 {
-
-        public int value() {
-            return 6;
-        }
-
-        public int testValue() {
-            return 1;
-
-        }
+    public int baseValue() {
+      return 10;
     }
+  }
 
-    // Version 2
-    public static class A___2 {
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-        public int value() {
-            return baseValue() * 2;
-        }
+  @Test
+  public void testSimpleReplacement() {
 
-        public int baseValue() {
-            return 10;
-        }
-    }
+    assert __version__() == 0;
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
+    A a = new A();
 
-    @Test
-    public void testSimpleReplacement() {
+    assertEquals(5, a.value());
 
-        assert __version__() == 0;
+    __toVersion__(1);
 
-        A a = new A();
+    assertEquals(6, a.value());
 
-        assertEquals(5, a.value());
+    __toVersion__(3);
 
-        __toVersion__(1);
+    assertEquals(5, a.value());
 
-        assertEquals(6, a.value());
+    __toVersion__(0);
 
-        __toVersion__(3);
+    assertEquals(5, a.value());
+  }
 
-        assertEquals(5, a.value());
+  @Test
+  public void testAddMethod() {
 
-        __toVersion__(0);
+    assert __version__() == 0;
 
-        assertEquals(5, a.value());
-    }
+    A a = new A();
+    assertEquals(a.value(), 5);
 
-    @Test
-    public void testAddMethod() {
+    __toVersion__(2);
+    assertEquals(a.value(), 20);
 
-        assert __version__() == 0;
-
-        A a = new A();
-        assertEquals(a.value(), 5);
-
-        __toVersion__(2);
-        assertEquals(a.value(), 20);
-
-        __toVersion__(0);
-        assertEquals(a.value(), 5);
-    }
+    __toVersion__(0);
+    assertEquals(a.value(), 5);
+  }
 }

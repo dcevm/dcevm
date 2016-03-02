@@ -33,42 +33,42 @@ import org.junit.Assert;
  * @author Thomas Wuerthinger
  */
 public class TestUtil {
-    public static final boolean LIGHT = Boolean.getBoolean("dcevm.test.light");
+  public static final boolean LIGHT = Boolean.getBoolean("dcevm.test.light");
 
-    public static int assertException(Class exceptionClass, Runnable run) {
+  public static int assertException(Class exceptionClass, Runnable run) {
 
-        try {
-            run.run();
-        } catch (Throwable t) {
-            if (t.getClass().equals(exceptionClass)) {
-                return t.getStackTrace()[0].getLineNumber();
-            }
-            Assert.assertTrue("An exception of type " + t.getClass().getSimpleName() + " instead of " + exceptionClass.getSimpleName() + " has been thrown!", false);
-        }
-
-        Assert.assertTrue("No exception has been thrown!", false);
-        return -1;
+    try {
+      run.run();
+    } catch (Throwable t) {
+      if (t.getClass().equals(exceptionClass)) {
+        return t.getStackTrace()[0].getLineNumber();
+      }
+      Assert.assertTrue("An exception of type " + t.getClass().getSimpleName() + " instead of " + exceptionClass.getSimpleName() + " has been thrown!", false);
     }
 
-    public static int assertUnsupportedWithLight(Runnable run) {
-        if (TestUtil.LIGHT) {
-            return assertUnsupported(run);
-        }
-        run.run();
-        return -1;
-    }
+    Assert.assertTrue("No exception has been thrown!", false);
+    return -1;
+  }
 
-    public static int assertUnsupported(Runnable run) {
-        return assertException(UnsupportedOperationException.class, run);
+  public static int assertUnsupportedWithLight(Runnable run) {
+    if (TestUtil.LIGHT) {
+      return assertUnsupported(run);
     }
+    run.run();
+    return -1;
+  }
 
-    public static void assertUnsupportedToVersionWithLight(final Class clazz, final int version) {
-        TestUtil.assertUnsupportedWithLight(new Runnable() {
-            @Override
-            public void run() {
-                HotSwapTool.toVersion(clazz, version);
-            }
-        });
-    }
+  public static int assertUnsupported(Runnable run) {
+    return assertException(UnsupportedOperationException.class, run);
+  }
+
+  public static void assertUnsupportedToVersionWithLight(final Class clazz, final int version) {
+    TestUtil.assertUnsupportedWithLight(new Runnable() {
+      @Override
+      public void run() {
+        HotSwapTool.toVersion(clazz, version);
+      }
+    });
+  }
 
 }

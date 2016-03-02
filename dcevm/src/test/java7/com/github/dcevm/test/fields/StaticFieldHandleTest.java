@@ -36,7 +36,7 @@ import static org.junit.Assert.assertEquals;
 
 /**
  * Test for replacing field with MethodHandle pointing to it.
- *
+ * <p>
  * Technically, should work for Java 7, but currently is not supported in Java 7.
  *
  * @author Ivan Dubrov

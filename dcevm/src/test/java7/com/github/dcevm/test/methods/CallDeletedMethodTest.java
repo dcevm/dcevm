@@ -44,74 +44,74 @@ import static org.junit.Assert.assertEquals;
 @Category(Full.class)
 public class CallDeletedMethodTest {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static class A {
+
+    public int value() {
+      return 5;
     }
 
-    // Version 0
-    public static class A {
-
-        public int value() {
-            return 5;
-        }
-
-        public int oldMethod() {
-            __toVersion__(1);
-            return deletedMethod();
-        }
-
-        public int deletedMethod() {
-            return 1;
-        }
+    public int oldMethod() {
+      __toVersion__(1);
+      return deletedMethod();
     }
 
-    // Version 1
-    @MethodRedefinitionPolicy(RedefinitionPolicy.AccessDeletedMembers)
-    public static class A___1 {
+    public int deletedMethod() {
+      return 1;
+    }
+  }
 
-        public int oldMethod() {
-            return 2;
-        }
+  // Version 1
+  @MethodRedefinitionPolicy(RedefinitionPolicy.AccessDeletedMembers)
+  public static class A___1 {
+
+    public int oldMethod() {
+      return 2;
+    }
+  }
+
+  @Test
+  public void testOldCodeCallsDeletedMethod() {
+
+    assert __version__() == 0;
+    A a = new A();
+
+    assertEquals(1, a.oldMethod());
+    assert __version__() == 1;
+    assertEquals(2, a.oldMethod());
+
+    __toVersion__(0);
+
+    assertEquals(1, a.oldMethod());
+    assert __version__() == 1;
+    assertEquals(2, a.oldMethod());
+
+    __toVersion__(0);
+  }
+
+  @Test
+  public void testNewCodeCallsDeletedMethod() {
+
+    assert __version__() == 0;
+
+    A a = new A();
+    assertEquals(5, a.value());
+
+    __toVersion__(1);
+
+    try {
+      a.value();
+      Assert.fail("NoSuchMethodError exception must be thrown!");
+    } catch (NoSuchMethodError e) {
+      // Expected exception
     }
 
-    @Test
-    public void testOldCodeCallsDeletedMethod() {
-
-        assert __version__() == 0;
-        A a = new A();
-
-        assertEquals(1, a.oldMethod());
-        assert __version__() == 1;
-        assertEquals(2, a.oldMethod());
-
-        __toVersion__(0);
-
-        assertEquals(1, a.oldMethod());
-        assert __version__() == 1;
-        assertEquals(2, a.oldMethod());
-
-        __toVersion__(0);
-    }
-
-    @Test
-    public void testNewCodeCallsDeletedMethod() {
-
-        assert __version__() == 0;
-
-        A a = new A();
-        assertEquals(5, a.value());
-        
-        __toVersion__(1);
-
-        try {
-            a.value();
-            Assert.fail("NoSuchMethodError exception must be thrown!");
-        } catch (NoSuchMethodError e) {
-            // Expected exception
-        }
-
-        __toVersion__(0);
-        assertEquals(5, a.value());
-    }
+    __toVersion__(0);
+    assertEquals(5, a.value());
+  }
 }

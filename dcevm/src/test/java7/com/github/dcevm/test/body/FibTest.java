@@ -38,73 +38,73 @@ import static org.junit.Assert.assertEquals;
  */
 public class FibTest {
 
-    public static abstract class Base {
+  public static abstract class Base {
 
-        protected int calc() {
-            return calc(__version__());
-        }
-
-        public int calcAt(int version) {
-            __toVersion__(version);
-            int result = calc();
-            __toVersion__(0);
-            return result;
-        }
-
-        protected int calc(int version) {
-            return calc();
-        }
+    protected int calc() {
+      return calc(__version__());
     }
 
-    public static class Fib extends Base {
-
-        @Override
-        protected int calc(int n) {
-            return calcAt(n - 1) + calcAt(n - 2);
-        }
+    public int calcAt(int version) {
+      __toVersion__(version);
+      int result = calc();
+      __toVersion__(0);
+      return result;
     }
 
-    public static class Fib___1 extends Base {
-
-        @Override
-        protected int calc() {
-            return 1;
-        }
+    protected int calc(int version) {
+      return calc();
     }
+  }
 
-    public static class Fib___2 extends Base {
+  public static class Fib extends Base {
 
-        @Override
-        protected int calc() {
-            return 2;
-        }
+    @Override
+    protected int calc(int n) {
+      return calcAt(n - 1) + calcAt(n - 2);
     }
+  }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  public static class Fib___1 extends Base {
+
+    @Override
+    protected int calc() {
+      return 1;
     }
+  }
 
-    @Test
-    public void testFib() {
+  public static class Fib___2 extends Base {
 
-        // 0 1 2 3 4 5
-        // 1 1 2 3 5 8
-        assert __version__() == 0;
-        Fib f = new Fib();
-
-        assertEquals(1, f.calcAt(1));
-
-        assert __version__() == 0;
-        assertEquals(2, f.calcAt(2));
-
-        assert __version__() == 0;
-        assertEquals(3, f.calcAt(3));
-
-        assert __version__() == 0;
-        assertEquals(5, f.calcAt(4));
-
-        assert __version__() == 0;
-        assertEquals(8, f.calcAt(5));
+    @Override
+    protected int calc() {
+      return 2;
     }
+  }
+
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  @Test
+  public void testFib() {
+
+    // 0 1 2 3 4 5
+    // 1 1 2 3 5 8
+    assert __version__() == 0;
+    Fib f = new Fib();
+
+    assertEquals(1, f.calcAt(1));
+
+    assert __version__() == 0;
+    assertEquals(2, f.calcAt(2));
+
+    assert __version__() == 0;
+    assertEquals(3, f.calcAt(3));
+
+    assert __version__() == 0;
+    assertEquals(5, f.calcAt(4));
+
+    assert __version__() == 0;
+    assertEquals(8, f.calcAt(5));
+  }
 }

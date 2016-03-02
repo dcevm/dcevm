@@ -35,54 +35,54 @@ import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
  */
 public class StaticConstructorTransformerTest {
 
-    //Version 0
-    public static class Static_TestClass {
+  //Version 0
+  public static class Static_TestClass {
 
-        // remove static --> no fatal error occurs
-        public static int x = 0;
-        //public int x = 0;
+    // remove static --> no fatal error occurs
+    public static int x = 0;
+    //public int x = 0;
 
-        static {
-            System.out.println("Start Static_TestClass Version 0");
+    static {
+      System.out.println("Start Static_TestClass Version 0");
 
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException ex) {
-            }
-            System.out.println("End Static_TestClass Version 0");
-        }
+      try {
+        Thread.sleep(1000);
+      } catch (InterruptedException ex) {
+      }
+      System.out.println("End Static_TestClass Version 0");
+    }
+  }
+
+  //Version 1
+  public static class Static_TestClass___1 {
+
+    public int version = 1;
+
+    static {
+      System.out.println("Static_TestClass Version 1");
     }
 
-    //Version 1
-    public static class Static_TestClass___1 {
-
-        public int version = 1;
-
-        static {
-            System.out.println("Static_TestClass Version 1");
-        }
-
-        public void $transformer() {
-            System.out.println(":::::::::transformerExecuted:::::::::::");
-        }
+    public void $transformer() {
+      System.out.println(":::::::::transformerExecuted:::::::::::");
     }
+  }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  @Test
+  public void testStaticConstructorTransformerTest() {
+
+    assert __version__() == 0;
+    try {
+      Class.forName("at.ssw.hotswap.test.transformer.StaticConstructorTransformerTest$Static_TestClass");
+    } catch (ClassNotFoundException ex) {
+      ex.printStackTrace();
     }
+    Static_TestClass clazz = new Static_TestClass();
 
-    @Test
-    public void testStaticConstructorTransformerTest() {
-
-        assert __version__() == 0;
-        try {
-            Class.forName("at.ssw.hotswap.test.transformer.StaticConstructorTransformerTest$Static_TestClass");
-        } catch (ClassNotFoundException ex) {
-            ex.printStackTrace();
-        }
-        Static_TestClass clazz = new Static_TestClass();
-
-        __toVersion__(1);
-    }
+    __toVersion__(1);
+  }
 }

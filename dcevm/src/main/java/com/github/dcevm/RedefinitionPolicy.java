@@ -25,12 +25,11 @@
 package com.github.dcevm;
 
 /**
- *
  * @author Thomas Wuerthinger
  */
 public enum RedefinitionPolicy {
-    StaticCheck,
-    DynamicCheck,
-    AccessDeletedMembers,
-    AccessOldMembers
+  StaticCheck,
+  DynamicCheck,
+  AccessDeletedMembers,
+  AccessOldMembers
 }

@@ -24,7 +24,10 @@
 
 package com.github.dcevm.test.lambdas;
 
-import org.junit.*;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
@@ -36,7 +39,7 @@ import static org.junit.Assert.fail;
 
 /**
  * Tests for lambda expressions.
- *
+ * <p>
  * These lambdas are sneaky. First, it seems like generated lambda method names are arbitrary and depend
  * on the compilation order. However, for redefinition test we want to make sure that generated method names would
  * actually match in old and new versions, so we have keep classes being redefined outside of this inner class.

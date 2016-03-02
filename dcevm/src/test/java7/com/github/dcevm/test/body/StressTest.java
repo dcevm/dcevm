@@ -36,47 +36,47 @@ import static org.junit.Assert.assertEquals;
  */
 public class StressTest {
 
-    public final static int COUNT = 10;
+  public final static int COUNT = 10;
 
-    // Version 0
-    public static class A {
+  // Version 0
+  public static class A {
 
-        public int value() {
-            return 1;
-        }
+    public int value() {
+      return 1;
+    }
+  }
+
+  // Version 1
+  public static class A___1 {
+
+    public int value() {
+      return 2;
+    }
+  }
+
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  @Test
+  public void testStressSwap() {
+
+    assert __version__() == 0;
+
+    A a = new A();
+
+    for (int i = 0; i < COUNT; i++) {
+
+      assertEquals(1, a.value());
+
+      __toVersion__(1);
+
+      assertEquals(2, a.value());
+
+      __toVersion__(0);
     }
 
-    // Version 1
-    public static class A___1 {
-
-        public int value() {
-            return 2;
-        }
-    }
-
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
-
-    @Test
-    public void testStressSwap() {
-
-        assert __version__() == 0;
-
-        A a = new A();
-
-        for (int i = 0; i < COUNT; i++) {
-
-            assertEquals(1, a.value());
-
-            __toVersion__(1);
-
-            assertEquals(2, a.value());
-
-            __toVersion__(0);
-        }
-
-        assertEquals(1, a.value());
-    }
+    assertEquals(1, a.value());
+  }
 }

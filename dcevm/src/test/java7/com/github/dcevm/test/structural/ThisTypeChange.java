@@ -41,87 +41,87 @@ import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
 @Category(Light.class)
 public class ThisTypeChange {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static class A {
+
+    public int valueOK() {
+      return 1;
     }
 
-    // Version 0
-    public static class A {
+    public int value() {
+      __toVersion__(1);
+      return 1;
+    }
+  }
 
-        public int valueOK() {
-            return 1;
-        }
+  public static class B extends A {
 
-        public int value() {
-            __toVersion__(1);
-            return 1;
-        }
+    @Override
+    public int value() {
+      return super.value();
     }
 
-    public static class B extends A {
 
-        @Override
-        public int value() {
-            return super.value();
-        }
-
-
-        @Override
-        public int valueOK() {
-            __toVersion__(1);
-            return super.valueOK();
-        }
+    @Override
+    public int valueOK() {
+      __toVersion__(1);
+      return super.valueOK();
     }
+  }
 
-    // Version 1
-    public static class A___1 {
+  // Version 1
+  public static class A___1 {
 
-        public int valueOK() {
-            return 2;
-        }
+    public int valueOK() {
+      return 2;
     }
+  }
 
-    // Version 1
-    public static class B___1 {
-    }
+  // Version 1
+  public static class B___1 {
+  }
 
-    // Method to enforce cast (otherwise bytecodes become invalid in version 2)
-    public static A convertBtoA(Object b) {
-        return (A) b;
-    }
+  // Method to enforce cast (otherwise bytecodes become invalid in version 2)
+  public static A convertBtoA(Object b) {
+    return (A) b;
+  }
 
-    @Test
-    public void testThisTypeChange() {
+  @Test
+  public void testThisTypeChange() {
 
-        assert __version__() == 0;
+    assert __version__() == 0;
 
-        final B b = new B();
-        TestUtil.assertUnsupported(new Runnable() {
-            @Override
-            public void run() {
-                b.value();
-            }
-        });
+    final B b = new B();
+    TestUtil.assertUnsupported(new Runnable() {
+      @Override
+      public void run() {
+        b.value();
+      }
+    });
 
-        assert __version__() == 0;
+    assert __version__() == 0;
 
-        TestUtil.assertUnsupported(new Runnable() {
-            @Override
-            public void run() {
-                b.valueOK();
-            }
-        });
+    TestUtil.assertUnsupported(new Runnable() {
+      @Override
+      public void run() {
+        b.valueOK();
+      }
+    });
 
-        assert __version__() == 0;
+    assert __version__() == 0;
 
-        TestUtil.assertUnsupported(new Runnable() {
-            @Override
-            public void run() {
-                b.valueOK();
-            }
-        });
+    TestUtil.assertUnsupported(new Runnable() {
+      @Override
+      public void run() {
+        b.valueOK();
+      }
+    });
 
-        assert __version__() == 0;
-    }
+    assert __version__() == 0;
+  }
 }

@@ -36,61 +36,61 @@ import static org.junit.Assert.assertEquals;
  */
 public class RefactorActiveMethodTest {
 
-    // Version 0
-    public static class A {
+  // Version 0
+  public static class A {
 
-        public int value() {
-            __toVersion__(1);
-            return 5;
-        }
-
-        public int secondValue() {
-            return 1;
-        }
+    public int value() {
+      __toVersion__(1);
+      return 5;
     }
 
-    // Version 1
-    public static class A___1 {
+    public int secondValue() {
+      return 1;
+    }
+  }
 
-        public int value() {
-            return secondValue() * 2;
-        }
+  // Version 1
+  public static class A___1 {
 
-        public int secondValue() {
-            return 2;
-        }
+    public int value() {
+      return secondValue() * 2;
     }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+    public int secondValue() {
+      return 2;
     }
+  }
 
-    @Test
-    public void testActiveMethodReplacement() {
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-        assert __version__() == 0;
+  @Test
+  public void testActiveMethodReplacement() {
 
-        A a = new A();
+    assert __version__() == 0;
 
-        assertEquals(5, a.value());
+    A a = new A();
 
-        assert __version__() == 1;
+    assertEquals(5, a.value());
 
-        assertEquals(2, a.secondValue());
-        assertEquals(4, a.value());
-        assertEquals(2, a.secondValue());
+    assert __version__() == 1;
 
-        assert __version__() == 1;
+    assertEquals(2, a.secondValue());
+    assertEquals(4, a.value());
+    assertEquals(2, a.secondValue());
 
-        __toVersion__(0);
+    assert __version__() == 1;
 
-        assertEquals(1, a.secondValue());
-        assertEquals(5, a.value());
-        assertEquals(4, a.value());
+    __toVersion__(0);
 
-        __toVersion__(0);
+    assertEquals(1, a.secondValue());
+    assertEquals(5, a.value());
+    assertEquals(4, a.value());
 
-        assertEquals(1, a.secondValue());
-    }
+    __toVersion__(0);
+
+    assertEquals(1, a.secondValue());
+  }
 }

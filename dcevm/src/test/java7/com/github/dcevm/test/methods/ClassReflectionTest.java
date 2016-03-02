@@ -42,73 +42,96 @@ import static org.junit.Assert.assertEquals;
  */
 public class ClassReflectionTest {
 
-    @Before
-    public void setUp() throws Exception {
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static class A {
+
+    public int value() {
+      return 1;
+    }
+  }
+
+  public static class B extends A {
+
+    @Override
+    public int value() {
+      return 2;
+    }
+  }
+
+  public static class C extends A {
+
+    @Override
+    public int value() {
+      return 3;
+    }
+  }
+
+  // Version 1
+  public static class A___1 {
+
+    public int value() {
+      return 1;
+    }
+
+    public int value2() {
+      return 2;
+    }
+  }
+
+  // Version 2
+  public static class C___2 extends B {
+
+    @Override
+    public int value() {
+      return super.value();
+    }
+  }
+
+  private void assertIsSuper(Class<?> s, Class<?> c) {
+    assertEquals(s, c.getSuperclass());
+  }
+
+  private void assertIsNotSuper(Class<?> s, Class<?> c) {
+    Assert.assertFalse(s.equals(c.getSuperclass()));
+  }
+
+  @Test
+  public void testClassReflection() {
+
+    checkWeakReference();
+    assert __version__() == 0;
+
+    final A a = new A();
+    final B b = new B();
+    final C c = new C();
+
+    assertIsSuper(A.class, B.class);
+    assertIsSuper(A.class, C.class);
+    assertIsNotSuper(B.class, C.class);
+
+    assertEquals(1, a.value());
+    assertEquals(2, b.value());
+    assertEquals(3, c.value());
+
+    __toVersion__(2);
+
+    assertIsSuper(A.class, B.class);
+    assertIsSuper(B.class, C.class);
+    assertIsNotSuper(A.class, C.class);
+
+    assertEquals(1, a.value());
+    assertEquals(2, b.value());
+    assertEquals(2, c.value());
+
+    TestUtil.assertUnsupportedWithLight(new Runnable() {
+      @Override
+      public void run() {
         __toVersion__(0);
-    }
-
-    // Version 0
-    public static class A {
-
-        public int value() {
-            return 1;
-        }
-    }
-
-    public static class B extends A {
-
-        @Override
-        public int value() {
-            return 2;
-        }
-    }
-
-    public static class C extends A {
-
-        @Override
-        public int value() {
-            return 3;
-        }
-    }
-
-    // Version 1
-    public static class A___1 {
-
-        public int value() {
-            return 1;
-        }
-
-        public int value2() {
-            return 2;
-        }
-    }
-
-    // Version 2
-    public static class C___2 extends B {
-
-        @Override
-        public int value() {
-            return super.value();
-        }
-    }
-
-    private void assertIsSuper(Class<?> s, Class<?> c) {
-        assertEquals(s, c.getSuperclass());
-    }
-
-    private void assertIsNotSuper(Class<?> s, Class<?> c) {
-        Assert.assertFalse(s.equals(c.getSuperclass()));
-    }
-
-    @Test
-    public void testClassReflection() {
-
-        checkWeakReference();
-        assert __version__() == 0;
-
-        final A a = new A();
-        final B b = new B();
-        final C c = new C();
 
         assertIsSuper(A.class, B.class);
         assertIsSuper(A.class, C.class);
@@ -117,43 +140,20 @@ public class ClassReflectionTest {
         assertEquals(1, a.value());
         assertEquals(2, b.value());
         assertEquals(3, c.value());
+      }
+    });
+  }
 
-        __toVersion__(2);
+  public void checkWeakReference() {
+    A a = new A();
+    Class<?> strongRef = a.getClass();
+    SoftReference<Class<?>> softRef = new SoftReference<Class<?>>(a.getClass());
 
-        assertIsSuper(A.class, B.class);
-        assertIsSuper(B.class, C.class);
-        assertIsNotSuper(A.class, C.class);
+    assertEquals(1, a.value());
+    __toVersion__(1);
+    assertEquals(1, a.value());
+    Assert.assertTrue(strongRef == softRef.get());
 
-        assertEquals(1, a.value());
-        assertEquals(2, b.value());
-        assertEquals(2, c.value());
-
-        TestUtil.assertUnsupportedWithLight(new Runnable() {
-            @Override
-            public void run() {
-                __toVersion__(0);
-
-                assertIsSuper(A.class, B.class);
-                assertIsSuper(A.class, C.class);
-                assertIsNotSuper(B.class, C.class);
-
-                assertEquals(1, a.value());
-                assertEquals(2, b.value());
-                assertEquals(3, c.value());
-            }
-        });
-    }
-
-    public void checkWeakReference() {
-        A a = new A();
-        Class<?> strongRef = a.getClass();
-        SoftReference<Class<?>> softRef = new SoftReference<Class<?>>(a.getClass());
-
-        assertEquals(1, a.value());
-        __toVersion__(1);
-        assertEquals(1, a.value());
-        Assert.assertTrue(strongRef == softRef.get());
-
-        __toVersion__(0);
-    }
+    __toVersion__(0);
+  }
 }

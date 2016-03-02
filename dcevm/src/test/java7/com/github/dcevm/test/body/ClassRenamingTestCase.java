@@ -35,34 +35,34 @@ import static org.junit.Assert.assertEquals;
  */
 public class ClassRenamingTestCase {
 
-    public static class B {
+  public static class B {
 
-        public int a() {
-            return 1;
-        }
+    public int a() {
+      return 1;
     }
+  }
 
-    @ClassRedefinitionPolicy(alias = B.class)
-    public static class A___1 {
+  @ClassRedefinitionPolicy(alias = B.class)
+  public static class A___1 {
 
-        public int a() {
-            return 2;
-        }
+    public int a() {
+      return 2;
     }
+  }
 
-    @Test
-    public void testRenaming() {
-        __toVersion__(0);
+  @Test
+  public void testRenaming() {
+    __toVersion__(0);
 
-        B b = new B();
-        assertEquals(1, b.a());
+    B b = new B();
+    assertEquals(1, b.a());
 
-        __toVersion__(1);
+    __toVersion__(1);
 
-        assertEquals(2, b.a());
+    assertEquals(2, b.a());
 
-        __toVersion__(0);
+    __toVersion__(0);
 
-        assertEquals(1, b.a());
-    }
+    assertEquals(1, b.a());
+  }
 }

@@ -38,121 +38,121 @@ import static org.junit.Assert.assertEquals;
  */
 public class OldActivationTest {
 
-    // Version 0
-    public static class A {
+  // Version 0
+  public static class A {
 
-        public int value() {
-            __toVersion__(1);
-            return 1 + this.value();
-        }
+    public int value() {
+      __toVersion__(1);
+      return 1 + this.value();
     }
+  }
 
-    // Version 1
-    public static class A___1 {
+  // Version 1
+  public static class A___1 {
 
-        public int value() {
-            __toVersion__(2);
-            return 2 + this.value();
-        }
+    public int value() {
+      __toVersion__(2);
+      return 2 + this.value();
     }
+  }
 
-    // Version 2
-    public static class A___2 {
+  // Version 2
+  public static class A___2 {
 
-        public int value() {
-            __toVersion__(3);
-            return 3 + this.value();
-        }
+    public int value() {
+      __toVersion__(3);
+      return 3 + this.value();
     }
+  }
 
-    // Version 3
-    public static class A___3 {
+  // Version 3
+  public static class A___3 {
 
-        public int value() {
-            __toVersion__(4);
-            return 4 + this.value();
-        }
+    public int value() {
+      __toVersion__(4);
+      return 4 + this.value();
     }
+  }
 
-    // Version 4
-    public static class A___4 {
+  // Version 4
+  public static class A___4 {
 
-        public int value() {
-            __toVersion__(5);
-            return 5 + this.value();
-        }
+    public int value() {
+      __toVersion__(5);
+      return 5 + this.value();
     }
+  }
 
-    // Version 5
-    public static class A___5 {
+  // Version 5
+  public static class A___5 {
 
-        public int value() {
-            __toVersion__(6);
-            return 6 + this.value();
-        }
+    public int value() {
+      __toVersion__(6);
+      return 6 + this.value();
     }
+  }
 
-    // Version 6
-    public static class A___6 {
+  // Version 6
+  public static class A___6 {
 
-        public int value() {
-            __toVersion__(7);
-            return 7 + this.value();
-        }
+    public int value() {
+      __toVersion__(7);
+      return 7 + this.value();
     }
+  }
 
-    // Version 7
-    public static class A___7 {
+  // Version 7
+  public static class A___7 {
 
-        public int value() {
-            __toVersion__(8);
-            return 8 + this.value();
-        }
+    public int value() {
+      __toVersion__(8);
+      return 8 + this.value();
     }
+  }
 
-    // Version 8
-    public static class A___8 {
+  // Version 8
+  public static class A___8 {
 
-        public int value() {
-            __toVersion__(9);
-            return 9 + this.value();
-        }
+    public int value() {
+      __toVersion__(9);
+      return 9 + this.value();
     }
+  }
 
-    // Version 9
-    public static class A___9 {
+  // Version 9
+  public static class A___9 {
 
-        public int value() {
-            __toVersion__(0);
-            return 10;
-        }
+    public int value() {
+      __toVersion__(0);
+      return 10;
     }
+  }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-    @Test
-    public void testOldActivationTest() {
+  @Test
+  public void testOldActivationTest() {
 
-        assert __version__() == 0;
+    assert __version__() == 0;
 
-        A a = new A();
+    A a = new A();
 
-        assertEquals(1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10, a.value());
-        assert __version__() == 0;
+    assertEquals(1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10, a.value());
+    assert __version__() == 0;
 
-        __toVersion__(1);
-        assertEquals(2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10, a.value());
-        assert __version__() == 0;
+    __toVersion__(1);
+    assertEquals(2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10, a.value());
+    assert __version__() == 0;
 
-        __toVersion__(8);
-        assertEquals(9 + 10, a.value());
-        assert __version__() == 0;
+    __toVersion__(8);
+    assertEquals(9 + 10, a.value());
+    assert __version__() == 0;
 
-        __toVersion__(4);
-        assertEquals(5 + 6 + 7 + 8 + 9 + 10, a.value());
-        assert __version__() == 0;
-    }
+    __toVersion__(4);
+    assertEquals(5 + 6 + 7 + 8 + 9 + 10, a.value());
+    assert __version__() == 0;
+  }
 }

@@ -37,34 +37,34 @@ import static org.junit.Assert.assertNotNull;
  */
 public class EnumTest {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-    static enum A {
-        FIRST,
-        SECOND;
-    }
+  static enum A {
+    FIRST,
+    SECOND;
+  }
 
-    static enum A___1 {
-        SECOND,
-        THIRD,
-        FOURTH;
-    }
+  static enum A___1 {
+    SECOND,
+    THIRD,
+    FOURTH;
+  }
 
-    @Test
-    @Ignore
-    public void testEnumFields() throws Exception {
-        assertEquals(2, A.values().length);
-        assertNotNull(A.values()[0]);
-        assertNotNull(A.values()[1]);
+  @Test
+  @Ignore
+  public void testEnumFields() throws Exception {
+    assertEquals(2, A.values().length);
+    assertNotNull(A.values()[0]);
+    assertNotNull(A.values()[1]);
 
-        __toVersion__(1);
+    __toVersion__(1);
 
-        assertEquals(3, A.values().length);
-        assertNotNull(A.values()[0]);
-        assertNotNull(A.values()[1]);
-        assertNotNull(A.values()[2]);
-    }
+    assertEquals(3, A.values().length);
+    assertNotNull(A.values()[0]);
+    assertNotNull(A.values()[1]);
+    assertNotNull(A.values()[2]);
+  }
 }

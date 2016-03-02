@@ -42,142 +42,142 @@ import static org.junit.Assert.assertEquals;
 @Category(Full.class)
 public class TypeNarrowingHeapTest {
 
-    // Version 0
-    public static class A {
+  // Version 0
+  public static class A {
 
-        int x = 1;
-        int y = 2;
-        int z = 3;
+    int x = 1;
+    int y = 2;
+    int z = 3;
 
-        public int value() {
-            return x;
-        }
+    public int value() {
+      return x;
     }
+  }
 
-    public static class C {
-        private A a;
+  public static class C {
+    private A a;
 
-        public C(A a) {
-            this.a = a;
-        }
+    public C(A a) {
+      this.a = a;
     }
+  }
 
-    public static class B extends A {
+  public static class B extends A {
 
-    }
-
-
-    // Version 1
-    public static class B___1 {
-    }
+  }
 
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-        A a = new A();
+  // Version 1
+  public static class B___1 {
+  }
+
+
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+    A a = new A();
+    B b = new B();
+  }
+
+  @Test
+  public void testSimpleTypeNarrowing() {
+
+    assert __version__() == 0;
+
+    A a = convertBtoA(new B());
+
+    assertEquals(1, a.value());
+
+    // Cannot do conversion if A object is on the stack!
+    a = null;
+
+    __toVersion__(1);
+
+    TestUtil.assertException(NoSuchMethodError.class, new Runnable() {
+      @Override
+      public void run() {
         B b = new B();
-    }
+        b.value();
+      }
+    });
 
-    @Test
-    public void testSimpleTypeNarrowing() {
+    __toVersion__(0);
+    assert __version__() == 0;
+  }
 
-        assert __version__() == 0;
+  @Test
+  public void testTypeNarrowingWithField() {
+    C c = new C(new A());
 
-        A a = convertBtoA(new B());
+    __toVersion__(1);
 
-        assertEquals(1, a.value());
+    __toVersion__(0);
 
-        // Cannot do conversion if A object is on the stack!
-        a = null;
+    c = new C(convertBtoA(new B()));
 
+    TestUtil.assertException(UnsupportedOperationException.class, new Runnable() {
+      @Override
+      public void run() {
         __toVersion__(1);
+      }
+    });
 
-        TestUtil.assertException(NoSuchMethodError.class, new Runnable() {
-          @Override
-          public void run() {
-            B b = new B();
-            b.value();
-          }
-        });
+    assert __version__() == 0;
 
-        __toVersion__(0);
-        assert __version__() == 0;
-    }
+    c.a = null;
 
-    @Test
-    public void testTypeNarrowingWithField() {
-        C c = new C(new A());
+    __toVersion__(1);
 
+    __toVersion__(0);
+  }
+
+  // Method to enforce cast (otherwise bytecodes become invalid in version 2)
+  public static A convertBtoA(Object b) {
+    return (A) b;
+  }
+
+  @Test
+  public void testTypeNarrowingWithArray() {
+    final B b = new B();
+    final A[] arr = new A[3];
+    arr[0] = new A();
+
+    assert b instanceof A;
+
+    __toVersion__(1);
+
+    assert !(b instanceof A);
+
+    TestUtil.assertException(ArrayStoreException.class, new Runnable() {
+      @Override
+      public void run() {
+        arr[1] = b;
+      }
+    });
+
+    __toVersion__(0);
+
+    arr[1] = new B();
+
+    TestUtil.assertException(UnsupportedOperationException.class, new Runnable() {
+      @Override
+      public void run() {
         __toVersion__(1);
+      }
+    });
 
-        __toVersion__(0);
+    assert __version__() == 0;
 
-        c = new C(convertBtoA(new B()));
+    assert b instanceof A;
 
-        TestUtil.assertException(UnsupportedOperationException.class, new Runnable() {
-            @Override
-            public void run() {
-                __toVersion__(1);
-            }
-        });
+    arr[1] = new A();
 
-        assert __version__() == 0;
+    __toVersion__(1);
 
-        c.a = null;
+    assert !(b instanceof A);
 
-        __toVersion__(1);
+    __toVersion__(0);
 
-        __toVersion__(0);
-    }
-
-    // Method to enforce cast (otherwise bytecodes become invalid in version 2)
-    public static A convertBtoA(Object b) {
-        return (A)b;
-    }
-
-    @Test
-    public void testTypeNarrowingWithArray() {
-        final B b = new B();
-        final A[] arr = new A[3];
-        arr[0] = new A();
-
-        assert b instanceof A;
-
-        __toVersion__(1);
-
-        assert !(b instanceof A);
-
-        TestUtil.assertException(ArrayStoreException.class, new Runnable() {
-            @Override
-            public void run() {
-                arr[1] = b;
-            }
-        });
-
-        __toVersion__(0);
-
-        arr[1] = new B();
-
-        TestUtil.assertException(UnsupportedOperationException.class, new Runnable() {
-            @Override
-            public void run() {
-                __toVersion__(1);
-            }
-        });
-
-        assert __version__() == 0;
-
-        assert b instanceof A;
-
-        arr[1] = new A();
-
-        __toVersion__(1);
-
-        assert !(b instanceof A);
-
-        __toVersion__(0);
-
-        assert b instanceof A;
-    }
+    assert b instanceof A;
+  }
 }

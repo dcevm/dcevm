@@ -38,59 +38,59 @@ import static org.junit.Assert.assertTrue;
  */
 public class ArrayTest {
 
-    public class A {
-    }
+  public class A {
+  }
 
-    public class A___1 {
-    }
+  public class A___1 {
+  }
 
-    public class B extends A {
-    }
+  public class B extends A {
+  }
 
-    public class B___1 extends A {
-    }
+  public class B___1 extends A {
+  }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-    @Test
-    public void testArray() {
-        Object[] arr = new A[] { new A(), new A() };
-        A[] arr2 = new B[] { new B(), new B() };
-        A[][] arr3 = new B[10][];
+  @Test
+  public void testArray() {
+    Object[] arr = new A[]{new A(), new A()};
+    A[] arr2 = new B[]{new B(), new B()};
+    A[][] arr3 = new B[10][];
 
-        __toVersion__(1);
+    __toVersion__(1);
 
-        assertTrue(arr instanceof A[]);
-        assertTrue(arr instanceof Object[]);
-        assertEquals(arr.getClass(), Array.newInstance(A.class, 0).getClass());
+    assertTrue(arr instanceof A[]);
+    assertTrue(arr instanceof Object[]);
+    assertEquals(arr.getClass(), Array.newInstance(A.class, 0).getClass());
 
-        assertTrue(arr2 instanceof B[]);
-        assertTrue(arr2 instanceof A[]);
-        assertTrue(arr2 instanceof Object[]);
-        assertEquals(arr2.getClass(), Array.newInstance(B.class, 0).getClass());
+    assertTrue(arr2 instanceof B[]);
+    assertTrue(arr2 instanceof A[]);
+    assertTrue(arr2 instanceof Object[]);
+    assertEquals(arr2.getClass(), Array.newInstance(B.class, 0).getClass());
 
-        assertTrue(arr3 instanceof B[][]);
-        assertTrue(arr3 instanceof A[][]);
-        assertTrue(arr3 instanceof Object[][]);
-        assertEquals(arr3.getClass(), Array.newInstance(B[].class, 0).getClass());
+    assertTrue(arr3 instanceof B[][]);
+    assertTrue(arr3 instanceof A[][]);
+    assertTrue(arr3 instanceof Object[][]);
+    assertEquals(arr3.getClass(), Array.newInstance(B[].class, 0).getClass());
 
-        __toVersion__(0);
+    __toVersion__(0);
 
-        assertTrue(arr instanceof A[]);
-        assertTrue(arr instanceof Object[]);
-        assertEquals(arr.getClass(), Array.newInstance(A.class, 0).getClass());
+    assertTrue(arr instanceof A[]);
+    assertTrue(arr instanceof Object[]);
+    assertEquals(arr.getClass(), Array.newInstance(A.class, 0).getClass());
 
-        assertTrue(arr2 instanceof B[]);
-        assertTrue(arr2 instanceof A[]);
-        assertTrue(arr2 instanceof Object[]);
-        assertEquals(arr2.getClass(), Array.newInstance(B.class, 0).getClass());
+    assertTrue(arr2 instanceof B[]);
+    assertTrue(arr2 instanceof A[]);
+    assertTrue(arr2 instanceof Object[]);
+    assertEquals(arr2.getClass(), Array.newInstance(B.class, 0).getClass());
 
-        assertTrue(arr3 instanceof B[][]);
-        assertTrue(arr3 instanceof A[][]);
-        assertTrue(arr3 instanceof Object[][]);
-        assertEquals(arr3.getClass(), Array.newInstance(B[].class, 0).getClass());
-    }
+    assertTrue(arr3 instanceof B[][]);
+    assertTrue(arr3 instanceof A[][]);
+    assertTrue(arr3 instanceof Object[][]);
+    assertEquals(arr3.getClass(), Array.newInstance(B[].class, 0).getClass());
+  }
 }

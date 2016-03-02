@@ -42,33 +42,33 @@ import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
 @Ignore
 public class RedefineClassClassTest {
 
-    // Version 0
-    public interface Type {
-    }
+  // Version 0
+  public interface Type {
+  }
 
-    // Version 1
-    @ClassRedefinitionPolicy(alias = java.lang.reflect.Type.class)
-    public interface Type___1 {
-    }
+  // Version 1
+  @ClassRedefinitionPolicy(alias = java.lang.reflect.Type.class)
+  public interface Type___1 {
+  }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-    @Test
-    public void testRedefineClass() {
+  @Test
+  public void testRedefineClass() {
 
-        assert __version__() == 0;
+    assert __version__() == 0;
 
-        __toVersion__(1);
+    __toVersion__(1);
 
-        __toVersion__(0);
+    __toVersion__(0);
 
-        __toVersion__(1);
+    __toVersion__(1);
 
-        __toVersion__(0);
+    __toVersion__(0);
 
 
-    }
+  }
 }

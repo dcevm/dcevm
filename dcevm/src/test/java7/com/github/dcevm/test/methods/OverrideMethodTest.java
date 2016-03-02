@@ -38,210 +38,210 @@ import static org.junit.Assert.assertEquals;
  */
 public class OverrideMethodTest {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static class A {
+
+    public int value() {
+      return 5;
+    }
+  }
+
+  public static class B extends A {
+
+    public int doubled() {
+      return value() * 2;
+    }
+  }
+
+  public static class C extends B {
+  }
+
+  // Version 1
+  public static class A___1 {
+
+    public int value() {
+      return 10;
+    }
+  }
+
+  // Version 2
+  public static class B___2 extends A {
+
+    public int doubled() {
+      return value() * 3;
+    }
+  }
+
+  // Version 3
+  public static class C___3 extends B {
+
+    @Override
+    public int value() {
+      return 1;
+    }
+  }
+
+  // Verison 4
+  public static class A___4 {
+
+    public int value() {
+      return baseValue();
     }
 
-    // Version 0
-    public static class A {
+    public int baseValue() {
+      return 20;
+    }
+  }
 
-        public int value() {
-            return 5;
-        }
+  public static class B___4 extends A {
+
+    public int doubled() {
+      return value() * 2;
+    }
+  }
+
+  public static class C___4 extends B {
+  }
+
+  // Verison 5
+  public static class A___5 {
+
+    public int value() {
+      return baseValue();
     }
 
-    public static class B extends A {
-
-        public int doubled() {
-            return value() * 2;
-        }
+    public int baseValue() {
+      return 20;
     }
+  }
 
-    public static class C extends B {
-    }
+  @Test
+  public void testSimple() {
 
-    // Version 1
-    public static class A___1 {
+    assert __version__() == 0;
 
-        public int value() {
-            return 10;
-        }
-    }
+    A a = new A();
+    B b = new B();
+    C c = new C();
 
-    // Version 2
-    public static class B___2 extends A {
+    assertEquals(5, a.value());
+    assertEquals(5, b.value());
+    assertEquals(10, b.doubled());
+    assertEquals(5, c.value());
+    assertEquals(10, c.doubled());
 
-        public int doubled() {
-            return value() * 3;
-        }
-    }
+    __toVersion__(1);
+    assertEquals(10, a.value());
+    assertEquals(10, b.value());
+    assertEquals(20, b.doubled());
+    assertEquals(10, c.value());
+    assertEquals(20, c.doubled());
 
-    // Version 3
-    public static class C___3 extends B {
+    __toVersion__(2);
+    assertEquals(10, a.value());
+    assertEquals(10, b.value());
+    assertEquals(30, b.doubled());
+    assertEquals(10, c.value());
+    assertEquals(30, c.doubled());
 
-        @Override
-        public int value() {
-            return 1;
-        }
-    }
+    __toVersion__(0);
+    assertEquals(5, a.value());
+    assertEquals(5, b.value());
+    assertEquals(10, b.doubled());
+    assertEquals(5, c.value());
+    assertEquals(10, c.doubled());
+  }
 
-    // Verison 4
-    public static class A___4 {
+  @Test
+  public void testMethodAdd() {
 
-        public int value() {
-            return baseValue();
-        }
+    assert __version__() == 0;
+    A a = new A();
+    B b = new B();
+    C c = new C();
 
-        public int baseValue() {
-            return 20;
-        }
-    }
+    assertEquals(5, a.value());
+    assertEquals(5, b.value());
+    assertEquals(10, b.doubled());
+    assertEquals(5, c.value());
+    assertEquals(10, c.doubled());
 
-    public static class B___4 extends A {
+    __toVersion__(4);
+    assertEquals(20, a.value());
+    assertEquals(40, b.doubled());
+    assertEquals(20, b.value());
+    assertEquals(20, c.value());
+    assertEquals(40, c.doubled());
 
-        public int doubled() {
-            return value() * 2;
-        }
-    }
+    __toVersion__(0);
+    assertEquals(5, a.value());
+    assertEquals(5, b.value());
+    assertEquals(10, b.doubled());
+    assertEquals(5, c.value());
+    assertEquals(10, c.doubled());
+  }
 
-    public static class C___4 extends B {
-    }
+  @Test
+  public void testOverride() {
 
-    // Verison 5
-    public static class A___5 {
+    assert __version__() == 0;
 
-        public int value() {
-            return baseValue();
-        }
+    A a = new A();
+    B b = new B();
+    C c = new C();
 
-        public int baseValue() {
-            return 20;
-        }
-    }
+    assertEquals(5, a.value());
+    assertEquals(5, b.value());
+    assertEquals(10, b.doubled());
+    assertEquals(5, c.value());
+    assertEquals(10, c.doubled());
 
-    @Test
-    public void testSimple() {
+    __toVersion__(3);
+    assertEquals(5, a.value());
+    assertEquals(5, b.value());
+    assertEquals(10, b.doubled());
+    assertEquals(1, c.value());
+    assertEquals(2, c.doubled());
 
-        assert __version__() == 0;
+    __toVersion__(0);
+    assertEquals(5, a.value());
+    assertEquals(5, b.value());
+    assertEquals(10, b.doubled());
+    assertEquals(5, c.value());
+    assertEquals(10, c.doubled());
+  }
 
-        A a = new A();
-        B b = new B();
-        C c = new C();
+  @Test
+  public void testMethodAddAdvanced() {
 
-        assertEquals(5, a.value());
-        assertEquals(5, b.value());
-        assertEquals(10, b.doubled());
-        assertEquals(5, c.value());
-        assertEquals(10, c.doubled());
+    assert __version__() == 0;
+    A a = new A();
+    B b = new B();
+    C c = new C();
 
-        __toVersion__(1);
-        assertEquals(10, a.value());
-        assertEquals(10, b.value());
-        assertEquals(20, b.doubled());
-        assertEquals(10, c.value());
-        assertEquals(20, c.doubled());
+    assertEquals(5, a.value());
+    assertEquals(5, b.value());
+    assertEquals(10, b.doubled());
+    assertEquals(5, c.value());
+    assertEquals(10, c.doubled());
 
-        __toVersion__(2);
-        assertEquals(10, a.value());
-        assertEquals(10, b.value());
-        assertEquals(30, b.doubled());
-        assertEquals(10, c.value());
-        assertEquals(30, c.doubled());
+    __toVersion__(5);
+    assertEquals(20, a.value());
+    assertEquals(20, b.value());
+    assertEquals(40, b.doubled());
+    assertEquals(20, c.value());
+    assertEquals(40, c.doubled());
 
-        __toVersion__(0);
-        assertEquals(5, a.value());
-        assertEquals(5, b.value());
-        assertEquals(10, b.doubled());
-        assertEquals(5, c.value());
-        assertEquals(10, c.doubled());
-    }
-
-    @Test
-    public void testMethodAdd() {
-
-        assert __version__() == 0;
-        A a = new A();
-        B b = new B();
-        C c = new C();
-
-        assertEquals(5, a.value());
-        assertEquals(5, b.value());
-        assertEquals(10, b.doubled());
-        assertEquals(5, c.value());
-        assertEquals(10, c.doubled());
-
-        __toVersion__(4);
-        assertEquals(20, a.value());
-        assertEquals(40, b.doubled());
-        assertEquals(20, b.value());
-        assertEquals(20, c.value());
-        assertEquals(40, c.doubled());
-
-        __toVersion__(0);
-        assertEquals(5, a.value());
-        assertEquals(5, b.value());
-        assertEquals(10, b.doubled());
-        assertEquals(5, c.value());
-        assertEquals(10, c.doubled());
-    }
-
-    @Test
-    public void testOverride() {
-
-        assert __version__() == 0;
-
-        A a = new A();
-        B b = new B();
-        C c = new C();
-
-        assertEquals(5, a.value());
-        assertEquals(5, b.value());
-        assertEquals(10, b.doubled());
-        assertEquals(5, c.value());
-        assertEquals(10, c.doubled());
-
-        __toVersion__(3);
-        assertEquals(5, a.value());
-        assertEquals(5, b.value());
-        assertEquals(10, b.doubled());
-        assertEquals(1, c.value());
-        assertEquals(2, c.doubled());
-
-        __toVersion__(0);
-        assertEquals(5, a.value());
-        assertEquals(5, b.value());
-        assertEquals(10, b.doubled());
-        assertEquals(5, c.value());
-        assertEquals(10, c.doubled());
-    }
-
-    @Test
-    public void testMethodAddAdvanced() {
-
-        assert __version__() == 0;
-        A a = new A();
-        B b = new B();
-        C c = new C();
-
-        assertEquals(5, a.value());
-        assertEquals(5, b.value());
-        assertEquals(10, b.doubled());
-        assertEquals(5, c.value());
-        assertEquals(10, c.doubled());
-
-        __toVersion__(5);
-        assertEquals(20, a.value());
-        assertEquals(20, b.value());
-        assertEquals(40, b.doubled());
-        assertEquals(20, c.value());
-        assertEquals(40, c.doubled());
-
-        __toVersion__(0);
-        assertEquals(5, a.value());
-        assertEquals(5, b.value());
-        assertEquals(10, b.doubled());
-        assertEquals(5, c.value());
-        assertEquals(10, c.doubled());
-    }
+    __toVersion__(0);
+    assertEquals(5, a.value());
+    assertEquals(5, b.value());
+    assertEquals(10, b.doubled());
+    assertEquals(5, c.value());
+    assertEquals(10, c.doubled());
+  }
 }

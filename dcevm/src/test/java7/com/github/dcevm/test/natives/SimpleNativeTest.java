@@ -37,52 +37,52 @@ import static org.junit.Assert.assertEquals;
  * @author Thomas Wuerthinger
  */
 public class SimpleNativeTest {
-    static {
-        System.loadLibrary("natives");
+  static {
+    System.loadLibrary("natives");
+  }
+
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static class A {
+
+    public static int get() {
+      return value();
     }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+    public static native int value();
+  }
+
+  // Version 1
+  public static class A___1 {
+
+    public static int get() {
+      return value() + value2();
     }
 
-    // Version 0
-    public static class A {
+    public static native int value();
 
-        public static int get() {
-            return value();
-        }
+    public static native int value2();
+  }
 
-        public static native int value();
-    }
-
-    // Version 1
-    public static class A___1 {
-
-        public static int get() {
-            return value() + value2();
-        }
-
-        public static native int value();
-
-        public static native int value2();
-    }
-
-    @Test
-    public void testSimpleNativeCalls() {
-        assert __version__() == 0;
+  @Test
+  public void testSimpleNativeCalls() {
+    assert __version__() == 0;
 
 
-        assertEquals(1, A.get());
+    assertEquals(1, A.get());
 
-        __toVersion__(1);
+    __toVersion__(1);
 
-        assertEquals(3, A.get());
+    assertEquals(3, A.get());
 
-        __toVersion__(0);
+    __toVersion__(0);
 
-        assertEquals(1, A.get());
+    assertEquals(1, A.get());
 
-    }
+  }
 
 }

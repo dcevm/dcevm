@@ -39,218 +39,218 @@ import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
  */
 public class FractionTest {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-        assert __version__() == 0;
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+    assert __version__() == 0;
+  }
+
+  // Version 0
+  public static class NoChange {
+
+    int i1;
+    int i2;
+    int i3;
+    Object o1;
+    Object o2;
+    Object o3;
+  }
+
+  public static class Change {
+
+    int i1;
+    int i2;
+    int i3;
+    Object o1;
+    Object o2;
+    Object o3;
+  }
+
+  // Version 1
+  public static class Change___1 {
+
+    int i1;
+    int i2;
+    int i3;
+    Object o1;
+    Object o2;
+    Object o3;
+    Object o4;
+  }
+
+  // Version 2
+  public static class Change___2 {
+
+    int i1;
+    int i2;
+    int i3;
+    Object o1;
+  }
+
+  // Version 3
+  public static class Change___3 {
+
+    int i3;
+    int i1;
+    int i2;
+    Object o3;
+    Object o1;
+    Object o2;
+  }
+
+  // Version 3
+  public static class Change___4 {
+
+    int i1;
+    int i2;
+    int i3;
+    Object o1;
+    Object o2;
+    Object o3;
+  }
+
+  // Version 2
+  public static class Change___5 {
+
+  }
+
+  private static List<Long> measurements = new ArrayList<Long>();
+  private final int BASE = 10;
+  private Object[] objects;
+
+  private void clear() {
+    objects = null;
+    System.gc();
+    System.gc();
+    __toVersion__(0);
+    System.gc();
+    System.gc();
+
+  }
+
+  private void init(int count, int percent) {
+    objects = new Object[count];
+    int changed = 0;
+    int unchanged = 0;
+    for (int k = 0; k < count; k++) {
+      if ((count / BASE) * percent <= k/* && k >= 200000*/) {
+        objects[k] = new NoChange();
+        unchanged++;
+      } else {
+        objects[k] = new Change();
+        changed++;
+      }
     }
 
-    // Version 0
-    public static class NoChange {
+    System.gc();
 
-        int i1;
-        int i2;
-        int i3;
-        Object o1;
-        Object o2;
-        Object o3;
-    }
+    System.out.println(changed + " changed objects allocated");
+  }
 
-    public static class Change {
+  @Test
+  public void testBase() {
 
-        int i1;
-        int i2;
-        int i3;
-        Object o1;
-        Object o2;
-        Object o3;
-    }
+    assert __version__() == 0;
 
-    // Version 1
-    public static class Change___1 {
+    final int N = 1;
+    final int INC = 4;
+    final int SIZE = 4000;
 
-        int i1;
-        int i2;
-        int i3;
-        Object o1;
-        Object o2;
-        Object o3;
-        Object o4;
-    }
+    int[] benchmarking = new int[]{SIZE};
+    int base = BASE;
+    int start = 0;
 
-    // Version 2
-    public static class Change___2 {
+    MicroBenchmark[] benchmarks = new MicroBenchmark[]{new GCMicroBenchmark(), new IncreaseMicroBenchmark(), new DecreaseMicroBenchmark(), new ReorderMicroBenchmark(), new NoRealChangeMicroBenchmark(), new BigDecreaseMicroBenchmark()};
 
-        int i1;
-        int i2;
-        int i3;
-        Object o1;
-    }
-
-    // Version 3
-    public static class Change___3 {
-
-        int i3;
-        int i1;
-        int i2;
-        Object o3;
-        Object o1;
-        Object o2;
-    }
-
-    // Version 3
-    public static class Change___4 {
-
-        int i1;
-        int i2;
-        int i3;
-        Object o1;
-        Object o2;
-        Object o3;
-    }
-
-    // Version 2
-    public static class Change___5 {
-
-    }
-
-    private static List<Long> measurements = new ArrayList<Long>();
-    private final int BASE = 10;
-    private Object[] objects;
-
-    private void clear() {
-        objects = null;
-        System.gc();
-        System.gc();
-        __toVersion__(0);
-        System.gc();
-        System.gc();
-
-    }
-
-    private void init(int count, int percent) {
-        objects = new Object[count];
-        int changed = 0;
-        int unchanged = 0;
-        for (int k = 0; k < count; k++) {
-            if ((count / BASE) * percent <= k/* && k >= 200000*/) {
-                objects[k] = new NoChange();
-                unchanged++;
-            } else {
-                objects[k] = new Change();
-                changed++;
-            }
+    clear();
+    for (int k = 0; k < N; k++) {
+      for (MicroBenchmark m : benchmarks) {
+        for (int i : benchmarking) {
+          System.out.println(m.getClass().getName() + " with " + i + " objects");
+          for (int j = start; j <= base; j += INC) {
+            System.out.println(j);
+            m.init(i);
+            init(i, j);
+            m.doit(i, measurements);
+            clear();
+          }
         }
-
-        System.gc();
-
-        System.out.println(changed + " changed objects allocated");
+      }
     }
 
-    @Test
-    public void testBase() {
-
-        assert __version__() == 0;
-
-        final int N = 1;
-        final int INC = 4;
-        final int SIZE = 4000;
-
-        int[] benchmarking = new int[]{SIZE};
-        int base = BASE;
-        int start = 0;
-
-        MicroBenchmark[] benchmarks = new MicroBenchmark[]{new GCMicroBenchmark(), new IncreaseMicroBenchmark(), new DecreaseMicroBenchmark(), new ReorderMicroBenchmark(), new NoRealChangeMicroBenchmark(), new BigDecreaseMicroBenchmark()};
-
-        clear();
-        for (int k = 0; k < N; k++) {
-            for (MicroBenchmark m : benchmarks) {
-                for (int i : benchmarking) {
-                    System.out.println(m.getClass().getName() + " with " + i + " objects");
-                    for (int j = start; j <= base; j += INC) {
-                        System.out.println(j);
-                        m.init(i);
-                        init(i, j);
-                        m.doit(i, measurements);
-                        clear();
-                    }
-                }
-            }
-        }
-
-        System.out.println("Results:");
-        for (long l : measurements) {
-            System.out.println(l);
-        }
-        measurements.clear();
+    System.out.println("Results:");
+    for (long l : measurements) {
+      System.out.println(l);
     }
+    measurements.clear();
+  }
 }
 
 abstract class MicroBenchmark {
 
-    public void init(int count) {
-    }
+  public void init(int count) {
+  }
 
-    public abstract void doit(int count, List<Long> measurements);
+  public abstract void doit(int count, List<Long> measurements);
 }
 
 class GCMicroBenchmark extends MicroBenchmark {
 
-    @Override
-    public void doit(int count, List<Long> measurements) {
-        long startTime = System.currentTimeMillis();
-        System.gc();
-        long curTime = System.currentTimeMillis() - startTime;
-        measurements.add(curTime);
-    }
+  @Override
+  public void doit(int count, List<Long> measurements) {
+    long startTime = System.currentTimeMillis();
+    System.gc();
+    long curTime = System.currentTimeMillis() - startTime;
+    measurements.add(curTime);
+  }
 }
 
 class IncreaseMicroBenchmark extends MicroBenchmark {
 
-    @Override
-    public void doit(int count, List<Long> measurements) {
-        HotSwapTool.resetTimings();
-        __toVersion__(1);
-        measurements.add(HotSwapTool.getTotalTime());
-    }
+  @Override
+  public void doit(int count, List<Long> measurements) {
+    HotSwapTool.resetTimings();
+    __toVersion__(1);
+    measurements.add(HotSwapTool.getTotalTime());
+  }
 }
 
 class DecreaseMicroBenchmark extends MicroBenchmark {
 
-    @Override
-    public void doit(int count, List<Long> measurements) {
-        HotSwapTool.resetTimings();
-        __toVersion__(2);
-        measurements.add(HotSwapTool.getTotalTime());
-    }
+  @Override
+  public void doit(int count, List<Long> measurements) {
+    HotSwapTool.resetTimings();
+    __toVersion__(2);
+    measurements.add(HotSwapTool.getTotalTime());
+  }
 }
 
 class ReorderMicroBenchmark extends MicroBenchmark {
 
-    @Override
-    public void doit(int count, List<Long> measurements) {
-        HotSwapTool.resetTimings();
-        __toVersion__(3);
-        measurements.add(HotSwapTool.getTotalTime());
-    }
+  @Override
+  public void doit(int count, List<Long> measurements) {
+    HotSwapTool.resetTimings();
+    __toVersion__(3);
+    measurements.add(HotSwapTool.getTotalTime());
+  }
 }
 
 class NoRealChangeMicroBenchmark extends MicroBenchmark {
 
-    @Override
-    public void doit(int count, List<Long> measurements) {
-        HotSwapTool.resetTimings();
-        __toVersion__(4);
-        measurements.add(HotSwapTool.getTotalTime());
-    }
+  @Override
+  public void doit(int count, List<Long> measurements) {
+    HotSwapTool.resetTimings();
+    __toVersion__(4);
+    measurements.add(HotSwapTool.getTotalTime());
+  }
 }
 
 class BigDecreaseMicroBenchmark extends MicroBenchmark {
 
-    @Override
-    public void doit(int count, List<Long> measurements) {
-        HotSwapTool.resetTimings();
-        __toVersion__(5);
-        measurements.add(HotSwapTool.getTotalTime());
-    }
+  @Override
+  public void doit(int count, List<Long> measurements) {
+    HotSwapTool.resetTimings();
+    __toVersion__(5);
+    measurements.add(HotSwapTool.getTotalTime());
+  }
 }

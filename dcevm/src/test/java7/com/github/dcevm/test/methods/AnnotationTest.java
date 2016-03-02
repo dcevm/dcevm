@@ -26,11 +26,7 @@ package com.github.dcevm.test.methods;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.lang.annotation.Annotation;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.lang.annotation.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
@@ -46,80 +42,80 @@ import static org.junit.Assert.assertEquals;
  */
 public class AnnotationTest {
 
-    @Retention(RetentionPolicy.RUNTIME)
-    @Target({ElementType.METHOD, ElementType.FIELD, ElementType.TYPE})
-    public @interface TestAnnotation {
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target({ElementType.METHOD, ElementType.FIELD, ElementType.TYPE})
+  public @interface TestAnnotation {
+  }
+
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target({ElementType.METHOD, ElementType.FIELD, ElementType.TYPE})
+  public @interface TestAnnotation2 {
+  }
+
+
+  // Version 0
+  public static class A {
+    public int testField;
+
+    public void testMethod() {
     }
+  }
 
-    @Retention(RetentionPolicy.RUNTIME)
-    @Target({ElementType.METHOD, ElementType.FIELD, ElementType.TYPE})
-    public @interface TestAnnotation2 {
-    }
-
-
-    // Version 0
-    public static class A {
-        public int testField;
-
-        public void testMethod() {
-        }
-    }
-
-    // Version 1
+  // Version 1
+  @TestAnnotation
+  public static class A___1 {
     @TestAnnotation
-    public static class A___1 {
-        @TestAnnotation
-        public int testField;
+    public int testField;
 
-        @TestAnnotation
-        public void testMethod() {
-        }
+    @TestAnnotation
+    public void testMethod() {
     }
+  }
 
-    // Version 2
+  // Version 2
+  @TestAnnotation2
+  public static class A___2 {
     @TestAnnotation2
-    public static class A___2 {
-        @TestAnnotation2
-        public int testField;
+    public int testField;
 
-        @TestAnnotation2
-        public void testMethod() {
-        }
+    @TestAnnotation2
+    public void testMethod() {
     }
+  }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-    private void checkAnnotation(Class<?> c, Class<? extends Annotation> expectedAnnotation) throws NoSuchMethodException, NoSuchFieldException {
-        Class<? extends Annotation> annotation = c.getAnnotation(expectedAnnotation).annotationType();
-        assertEquals(expectedAnnotation, annotation);
-        Method m = c.getMethod("testMethod");
-        annotation = m.getAnnotation(expectedAnnotation).annotationType();
-        assertEquals(expectedAnnotation, annotation);
-        Field f = c.getField("testField");
-        annotation = f.getAnnotation(expectedAnnotation).annotationType();
-        assertEquals(expectedAnnotation, annotation);
-    }
+  private void checkAnnotation(Class<?> c, Class<? extends Annotation> expectedAnnotation) throws NoSuchMethodException, NoSuchFieldException {
+    Class<? extends Annotation> annotation = c.getAnnotation(expectedAnnotation).annotationType();
+    assertEquals(expectedAnnotation, annotation);
+    Method m = c.getMethod("testMethod");
+    annotation = m.getAnnotation(expectedAnnotation).annotationType();
+    assertEquals(expectedAnnotation, annotation);
+    Field f = c.getField("testField");
+    annotation = f.getAnnotation(expectedAnnotation).annotationType();
+    assertEquals(expectedAnnotation, annotation);
+  }
 
-    private void checkAnnotationMissing(Class<A> c) throws NoSuchMethodException, NoSuchFieldException {
-        assertEquals(0, c.getAnnotations().length);
-        assertEquals(0, c.getField("testField").getAnnotations().length);
-        assertEquals(0, c.getMethod("testMethod").getAnnotations().length);
-    }
+  private void checkAnnotationMissing(Class<A> c) throws NoSuchMethodException, NoSuchFieldException {
+    assertEquals(0, c.getAnnotations().length);
+    assertEquals(0, c.getField("testField").getAnnotations().length);
+    assertEquals(0, c.getMethod("testMethod").getAnnotations().length);
+  }
 
-    @Test
-    public void testAddMethodToKlassWithEMCPExceptionMethod() throws NoSuchMethodException, NoSuchFieldException {
+  @Test
+  public void testAddMethodToKlassWithEMCPExceptionMethod() throws NoSuchMethodException, NoSuchFieldException {
 
-        assert __version__() == 0;
-        checkAnnotationMissing(A.class);
-        __toVersion__(1);
-        checkAnnotation(A.class, TestAnnotation.class);
-        __toVersion__(2);
-        checkAnnotation(A.class, TestAnnotation2.class);
-        __toVersion__(0);
-        checkAnnotationMissing(A.class);
-    }
+    assert __version__() == 0;
+    checkAnnotationMissing(A.class);
+    __toVersion__(1);
+    checkAnnotation(A.class, TestAnnotation.class);
+    __toVersion__(2);
+    checkAnnotation(A.class, TestAnnotation2.class);
+    __toVersion__(0);
+    checkAnnotationMissing(A.class);
+  }
 
 }

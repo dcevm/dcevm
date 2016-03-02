@@ -41,86 +41,86 @@ import static org.junit.Assert.assertEquals;
 @Category(Full.class)
 public class OldCodeNonOSRTest {
 
-    // Chose high enough to make sure method could get OSR (usually the OSR flag in the VM is set to about 15000)
-    private static final int N = 100000;
+  // Chose high enough to make sure method could get OSR (usually the OSR flag in the VM is set to about 15000)
+  private static final int N = 100000;
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static class A {
+
+    public int value() {
+      return 5;
     }
 
-    // Version 0
-    public static class A {
-
-        public int value() {
-            return 5;
-        }
-
-        public int oldMethod() {
-            __toVersion__(1);
-            int sum = 0;
-            for (int i=0; i<N; i++) {
-                sum += i;
-            }
-            return (sum & deletedMethod()) | 1;
-        }
-
-        public int oldMethod2() {
-            int sum = 0;
-            for (int i=0; i<N; i++) {
-                sum += i;
-            }
-            __toVersion__(1);
-            return (sum & deletedMethod()) | 1;
-        }
-
-        public int oldMethod3() {
-            int sum = 0;
-            for (int i=0; i<N; i++) {
-                sum += i;
-            }
-            __toVersion__(1);
-            for (int i=0; i<N; i++) {
-                sum += i;
-            }
-            return (sum & deletedMethod()) | 1;
-        }
-
-        public int deletedMethod() {
-            return 1;
-        }
+    public int oldMethod() {
+      __toVersion__(1);
+      int sum = 0;
+      for (int i = 0; i < N; i++) {
+        sum += i;
+      }
+      return (sum & deletedMethod()) | 1;
     }
 
-    // Version 1
-    public static class A___1 {
-
-        public int oldMethod() {
-            return 2;
-        }
+    public int oldMethod2() {
+      int sum = 0;
+      for (int i = 0; i < N; i++) {
+        sum += i;
+      }
+      __toVersion__(1);
+      return (sum & deletedMethod()) | 1;
     }
 
-    @Test
-    public void testOldCodeNonOSR() {
-
-        assert __version__() == 0;
-        A a = new A();
-
-        assertEquals(1, a.oldMethod());
-        assert __version__() == 1;
-        assertEquals(2, a.oldMethod());
-
-        __toVersion__(0);
-
-        assertEquals(1, a.oldMethod2());
-        assert __version__() == 1;
-        assertEquals(2, a.oldMethod());
-
-        __toVersion__(0);
-
-        assertEquals(1, a.oldMethod3());
-        assert __version__() == 1;
-        assertEquals(2, a.oldMethod());
-
-        __toVersion__(0);
+    public int oldMethod3() {
+      int sum = 0;
+      for (int i = 0; i < N; i++) {
+        sum += i;
+      }
+      __toVersion__(1);
+      for (int i = 0; i < N; i++) {
+        sum += i;
+      }
+      return (sum & deletedMethod()) | 1;
     }
+
+    public int deletedMethod() {
+      return 1;
+    }
+  }
+
+  // Version 1
+  public static class A___1 {
+
+    public int oldMethod() {
+      return 2;
+    }
+  }
+
+  @Test
+  public void testOldCodeNonOSR() {
+
+    assert __version__() == 0;
+    A a = new A();
+
+    assertEquals(1, a.oldMethod());
+    assert __version__() == 1;
+    assertEquals(2, a.oldMethod());
+
+    __toVersion__(0);
+
+    assertEquals(1, a.oldMethod2());
+    assert __version__() == 1;
+    assertEquals(2, a.oldMethod());
+
+    __toVersion__(0);
+
+    assertEquals(1, a.oldMethod3());
+    assert __version__() == 1;
+    assertEquals(2, a.oldMethod());
+
+    __toVersion__(0);
+  }
 }

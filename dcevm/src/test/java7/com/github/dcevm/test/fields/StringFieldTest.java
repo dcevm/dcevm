@@ -38,41 +38,41 @@ import static org.junit.Assert.assertEquals;
  */
 public class StringFieldTest {
 
-    // Version 0
-    public static class A {
-        public String stringFld = "OLD";
-    }
+  // Version 0
+  public static class A {
+    public String stringFld = "OLD";
+  }
 
-    // Version 1
-    public static class A___1 {
-        public String stringFld = "NEW";
-        public int intComplNewFld = 333;
-        public long longComplNewFld = 444L;
-        public String stringComplNewFld = "completely new String field";
-    }
+  // Version 1
+  public static class A___1 {
+    public String stringFld = "NEW";
+    public int intComplNewFld = 333;
+    public long longComplNewFld = 444L;
+    public String stringComplNewFld = "completely new String field";
+  }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-    /**
-     * Checks that the given object is unmodified (i.e. the values of the fields are correct)
-     *
-     * @param a the object to be checked
-     */
-    private void assertObjectOK(A a) {
-        assertEquals("OLD", a.stringFld);
-    }
+  /**
+   * Checks that the given object is unmodified (i.e. the values of the fields are correct)
+   *
+   * @param a the object to be checked
+   */
+  private void assertObjectOK(A a) {
+    assertEquals("OLD", a.stringFld);
+  }
 
-    @Test
-    public void testComplexFieldChange() {
-        assert __version__() == 0;
-        A a = new A();
-        assertObjectOK(a);
-        __toVersion__(1);
-        assertObjectOK(a);
-        __toVersion__(0);
-        assertObjectOK(a);
-    }
+  @Test
+  public void testComplexFieldChange() {
+    assert __version__() == 0;
+    A a = new A();
+    assertObjectOK(a);
+    __toVersion__(1);
+    assertObjectOK(a);
+    __toVersion__(0);
+    assertObjectOK(a);
+  }
 }

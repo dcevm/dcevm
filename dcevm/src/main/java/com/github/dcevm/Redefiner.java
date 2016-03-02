@@ -33,5 +33,5 @@ import java.util.Map;
  * @author Ivan Dubrov
  */
 public interface Redefiner extends Closeable {
-    void redefineClasses(Map<Class<?>, byte[]> classes) throws ClassNotFoundException, UnmodifiableClassException;
+  void redefineClasses(Map<Class<?>, byte[]> classes) throws ClassNotFoundException, UnmodifiableClassException;
 }

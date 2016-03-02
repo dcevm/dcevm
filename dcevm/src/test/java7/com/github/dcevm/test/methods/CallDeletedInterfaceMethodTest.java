@@ -41,57 +41,57 @@ import static org.junit.Assert.assertEquals;
 @Category(Full.class)
 public class CallDeletedInterfaceMethodTest {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static interface I {
+    public int foo();
+  }
+
+  public static class A implements I {
+    @Override
+    public int foo() {
+      return 1;
     }
+  }
 
-    // Version 0
-    public static interface I {
-        public int foo();
+  public static class Helper {
+    public static int process(I i) {
+      __toVersion__(1);
+      return i.foo();
     }
+  }
 
-    public static class A implements I {
-        @Override
-        public int foo() {
-            return 1;
-        }
+  // Version 1
+  public static interface I___1 {
+
+  }
+
+  public static class Helper___1 {
+    public static int process(I i) {
+      return 2;
     }
+  }
 
-    public static class Helper {
-        public static int process(I i) {
-            __toVersion__(1);
-            return i.foo();
-        }
-    }
+  @Test
+  public void testOldCodeCallsDeletedInterfaceMethod() {
 
-    // Version 1
-    public static interface I___1 {
-        
-    }
+    assert __version__() == 0;
+    A a = new A();
 
-    public static class Helper___1 {
-        public static int process(I i) {
-            return 2;
-        }
-    }
+    assertEquals(1, Helper.process(a));
+    assert __version__() == 1;
+    assertEquals(2, Helper.process(a));
 
-    @Test
-    public void testOldCodeCallsDeletedInterfaceMethod() {
+    __toVersion__(0);
 
-        assert __version__() == 0;
-        A a = new A();
+    assertEquals(1, Helper.process(a));
+    assert __version__() == 1;
+    assertEquals(2, Helper.process(a));
 
-        assertEquals(1, Helper.process(a));
-        assert __version__() == 1;
-        assertEquals(2, Helper.process(a));
-
-        __toVersion__(0);
-
-        assertEquals(1, Helper.process(a));
-        assert __version__() == 1;
-        assertEquals(2, Helper.process(a));
-
-        __toVersion__(0);
-    }
+    __toVersion__(0);
+  }
 }

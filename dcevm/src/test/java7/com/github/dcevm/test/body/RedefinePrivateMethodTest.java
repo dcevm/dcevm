@@ -38,59 +38,59 @@ import static org.junit.Assert.assertEquals;
  */
 public class RedefinePrivateMethodTest {
 
-    // Version 0
-    public static class A {
+  // Version 0
+  public static class A {
 
-        public int foo() {
-            int result = bar();
-            __toVersion__(1);
-            result += bar();
-            return result;
-        }
-
-        private int bar() {
-            return 1;
-        }
+    public int foo() {
+      int result = bar();
+      __toVersion__(1);
+      result += bar();
+      return result;
     }
 
-    // Version 1
-    public static class A___1 {
+    private int bar() {
+      return 1;
+    }
+  }
 
-        public int foo() {
-            return -1;
-        }
+  // Version 1
+  public static class A___1 {
 
-        private int bar() {
-            return 2;
-        }
+    public int foo() {
+      return -1;
     }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+    private int bar() {
+      return 2;
     }
+  }
 
-    @Test
-    public void testRedefinePrivateMethod() {
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-        assert __version__() == 0;
+  @Test
+  public void testRedefinePrivateMethod() {
 
-        A a = new A();
+    assert __version__() == 0;
 
-        assertEquals(3, a.foo());
+    A a = new A();
 
-        assert __version__() == 1;
+    assertEquals(3, a.foo());
 
-        assertEquals(-1, a.foo());
+    assert __version__() == 1;
 
-        __toVersion__(0);
+    assertEquals(-1, a.foo());
 
-        assertEquals(3, a.foo());
+    __toVersion__(0);
 
-        assert __version__() == 1;
+    assertEquals(3, a.foo());
 
-        assertEquals(-1, a.foo());
+    assert __version__() == 1;
 
-        __toVersion__(0);
-    }
+    assertEquals(-1, a.foo());
+
+    __toVersion__(0);
+  }
 }

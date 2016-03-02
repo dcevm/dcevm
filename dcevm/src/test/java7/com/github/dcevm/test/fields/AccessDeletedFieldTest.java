@@ -41,157 +41,157 @@ import static org.junit.Assert.assertEquals;
  */
 public class AccessDeletedFieldTest {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static class A {
+
+    public int x;
+
+    int getFieldInOldCode() {
+
+      __toVersion__(1);
+
+      // This field does no longer exist
+      return x;
     }
+  }
 
-    // Version 0
-    public static class A {
+  public static class B extends A {
+  }
 
-        public int x;
+  // Version 1
+  public static class A___1 {
+  }
 
-        int getFieldInOldCode() {
-            
-            __toVersion__(1);
+  // Version 2
+  public static class B___2 {
+  }
 
-            // This field does no longer exist
-            return x;
-        }
-    }
+  // Method to enforce cast (otherwise bytecodes become invalid in version 2)
+  public static A convertBtoA(Object b) {
+    return (A) b;
+  }
 
-    public static class B extends A {
-    }
+  @Test
+  public void testOldCodeAccessesDeletedField() {
 
-    // Version 1
-    public static class A___1 {
-    }
+    assert __version__() == 0;
 
-    // Version 2
-    public static class B___2 {
-    }
+    final A a = new A();
+    a.x = 1;
 
-    // Method to enforce cast (otherwise bytecodes become invalid in version 2)
-    public static A convertBtoA(Object b) {
-        return (A) b;
-    }
+    TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
+      @Override
+      public void run() {
+        assertEquals(0, a.getFieldInOldCode());
+      }
+    });
 
-    @Test
-    public void testOldCodeAccessesDeletedField() {
+    assert __version__() == 1;
+    __toVersion__(0);
+    assertEquals(0, a.x);
+  }
 
-        assert __version__() == 0;
+  @Test
+  public void testAccessDeletedField() {
 
-        final A a = new A();
-        a.x = 1;
+    assert __version__() == 0;
 
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
-          @Override
-          public void run() {
-            assertEquals(0, a.getFieldInOldCode());
-          }
-        });
+    final A a = new A();
+    a.x = 1;
 
-        assert __version__() == 1;
-        __toVersion__(0);
-        assertEquals(0, a.x);
-    }
+    assertEquals(1, a.x);
 
-    @Test
-    public void testAccessDeletedField() {
+    __toVersion__(1);
 
-        assert __version__() == 0;
+    TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
+      @Override
+      public void run() {
+        System.out.println(a.x);
+      }
+    });
 
-        final A a = new A();
-        a.x = 1;
+    __toVersion__(0);
+    assertEquals(0, a.x);
+  }
 
-        assertEquals(1, a.x);
+  @Test
+  @Category(Full.class)
+  public void testAccessDeleteBaseClassFieldNormal() {
 
-        __toVersion__(1);
+    __toVersion__(0);
+    assert __version__() == 0;
+    final B b = new B();
+    b.x = 1;
+    final A a = new A();
+    a.x = 2;
 
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
-            @Override
-            public void run() {
-                System.out.println(a.x);
-            }
-        });
+    assertEquals(1, b.x);
+    assertEquals(2, a.x);
 
-        __toVersion__(0);
-        assertEquals(0, a.x);
-    }
+    __toVersion__(2);
 
-    @Test
-    @Category(Full.class)
-    public void testAccessDeleteBaseClassFieldNormal() {
+    TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
 
-        __toVersion__(0);
-        assert __version__() == 0;
-        final B b = new B();
-        b.x = 1;
-        final A a = new A();
-        a.x = 2;
+      @Override
+      public void run() {
+        System.out.println(b.x);
+      }
+    });
 
-        assertEquals(1, b.x);
-        assertEquals(2, a.x);
+    assertEquals(2, a.x);
 
+    __toVersion__(0);
+    assertEquals(0, b.x);
+  }
+
+  @Test
+  @Category(Full.class)
+  public void testAccessDeleteBaseClassFieldInvalid() {
+
+    __toVersion__(0);
+    assert __version__() == 0;
+    final B b = new B();
+    final A a1 = new A();
+    a1.x = 1;
+    b.x = 1;
+
+    __toVersion__(2);
+
+    TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
+
+      @Override
+      public void run() {
+        System.out.println(b.x);
+      }
+    });
+
+    assertEquals(1, a1.x);
+
+    __toVersion__(0);
+    assertEquals(0, b.x);
+    assertEquals(1, a1.x);
+
+    A a = convertBtoA(b);
+
+    assertEquals(0, b.x);
+
+    // Must fail, because now an instance of B is in a local variable of type A!
+    TestUtil.assertException(UnsupportedOperationException.class, new Runnable() {
+
+      @Override
+      public void run() {
         __toVersion__(2);
+      }
+    });
 
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
+    assertEquals(0, a.x);
 
-            @Override
-            public void run() {
-                System.out.println(b.x);
-            }
-        });
-
-        assertEquals(2, a.x);
-
-        __toVersion__(0);
-        assertEquals(0, b.x);
-    }
-
-    @Test
-    @Category(Full.class)
-    public void testAccessDeleteBaseClassFieldInvalid() {
-
-        __toVersion__(0);
-        assert __version__() == 0;
-        final B b = new B();
-        final A a1 = new A();
-        a1.x = 1;
-        b.x = 1;
-
-        __toVersion__(2);
-
-        TestUtil.assertException(NoSuchFieldError.class, new Runnable() {
-
-            @Override
-            public void run() {
-                System.out.println(b.x);
-            }
-        });
-
-        assertEquals(1, a1.x);
-
-        __toVersion__(0);
-        assertEquals(0, b.x);
-        assertEquals(1, a1.x);
-
-        A a = convertBtoA(b);
-
-        assertEquals(0, b.x);
-
-        // Must fail, because now an instance of B is in a local variable of type A!
-        TestUtil.assertException(UnsupportedOperationException.class, new Runnable() {
-
-            @Override
-            public void run() {
-                __toVersion__(2);
-            }
-        });
-
-        assertEquals(0, a.x);
-
-        // Still at version 0
-        assert __version__() == 0;
-    }
+    // Still at version 0
+    assert __version__() == 0;
+  }
 }

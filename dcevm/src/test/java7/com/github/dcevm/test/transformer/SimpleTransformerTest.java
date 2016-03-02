@@ -41,52 +41,52 @@ import static org.junit.Assert.assertEquals;
 @Category(Full.class)
 public class SimpleTransformerTest {
 
-    // Version 0
-    public static class A {
+  // Version 0
+  public static class A {
 
-        public int x = 2;
+    public int x = 2;
+  }
+
+  // Version 3
+  public static class A___1 {
+
+    public int x;
+
+    public void $transformer() {
+      System.out.println("Transformer of A executing...");
+      x = x * 2;
     }
-
-    // Version 3
-    public static class A___1 {
-
-        public int x;
-
-        public void $transformer() {
-            System.out.println("Transformer of A executing...");
-            x = x * 2;
-        }
-    }
+  }
 
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
-    }
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-    @Test
-    public void testSimpleTransformer() {
+  @Test
+  public void testSimpleTransformer() {
 
-        assert __version__() == 0;
+    assert __version__() == 0;
 
-        A a = new A();
+    A a = new A();
 
-        assertEquals(2, a.x);
+    assertEquals(2, a.x);
 
-        __toVersion__(1);
+    __toVersion__(1);
 
-        assertEquals(4, a.x);
+    assertEquals(4, a.x);
 
-        __toVersion__(0);
+    __toVersion__(0);
 
-        assertEquals(4, a.x);
+    assertEquals(4, a.x);
 
-        __toVersion__(1);
+    __toVersion__(1);
 
-        assertEquals(8, a.x);
+    assertEquals(8, a.x);
 
-        __toVersion__(0);
+    __toVersion__(0);
 
-        assertEquals(8, a.x);
-    }
+    assertEquals(8, a.x);
+  }
 }

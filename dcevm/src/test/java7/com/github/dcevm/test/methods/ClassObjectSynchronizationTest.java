@@ -39,41 +39,41 @@ import static org.junit.Assert.assertTrue;
  */
 public class ClassObjectSynchronizationTest {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static class A {
+
+    public int value() {
+      return 1;
     }
+  }
 
-    // Version 0
-    public static class A {
+  // Version 1
+  public static class A___1 {
 
-        public int value() {
-            return 1;
-        }
+    public int value() {
+      return 2;
     }
+  }
 
-    // Version 1
-    public static class A___1 {
-
-        public int value() {
-            return 2;
-        }
+  @Test
+  public void testClassObjectSynchronization() {
+    A a = new A();
+    Class clazz = a.getClass();
+    synchronized (clazz) {
+      assertEquals(1, a.value());
+      __toVersion__(1);
+      assertEquals(2, a.value());
+      assertTrue(a.getClass() == clazz);
+      assertTrue(a.getClass() == ClassObjectSynchronizationTest.A.class);
     }
-
-    @Test
-    public void testClassObjectSynchronization() {
-        A a = new A();
-        Class clazz = a.getClass();
-        synchronized (clazz) {
-            assertEquals(1, a.value());
-            __toVersion__(1);
-            assertEquals(2, a.value());
-            assertTrue(a.getClass() == clazz);
-            assertTrue(a.getClass() == ClassObjectSynchronizationTest.A.class);
-        }
-        assertEquals(2, a.value());
-        assertTrue(a.getClass() == clazz);
-        __toVersion__(0);
-        assertTrue(a.getClass() == clazz);
-    }
+    assertEquals(2, a.value());
+    assertTrue(a.getClass() == clazz);
+    __toVersion__(0);
+    assertTrue(a.getClass() == clazz);
+  }
 }

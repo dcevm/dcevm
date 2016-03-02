@@ -38,51 +38,51 @@ import static org.junit.Assert.assertEquals;
  */
 public class SingleClassReflectionTest {
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  // Version 0
+  public static class A {
+
+    public static synchronized void staticSynchronized() {
+      __toVersion__(1);
     }
+  }
 
-    // Version 0
-    public static class A {
 
-        public static synchronized void staticSynchronized() {
-            __toVersion__(1);
-        }
+  // Version 1
+  public static class A___1 {
+    public static synchronized void staticSynchronized() {
     }
+  }
 
 
-    // Version 1
-    public static class A___1 {
-        public static synchronized void staticSynchronized() {
-        }
-    }
+  @Test
+  public void testHashcode() {
 
+    assert __version__() == 0;
 
-    @Test
-    public void testHashcode() {
+    A a = new A();
 
-        assert __version__() == 0;
+    int hashcode = a.getClass().hashCode();
 
-        A a = new A();
+    __toVersion__(1);
 
-        int hashcode = a.getClass().hashCode();
+    assertEquals(hashcode, a.getClass().hashCode());
 
-        __toVersion__(1);
+    __toVersion__(0);
+  }
 
-        assertEquals(hashcode, a.getClass().hashCode());
+  @Test
+  public void testStaticSynchronized() {
 
-        __toVersion__(0);
-    }
+    A.staticSynchronized();
 
-    @Test
-    public void testStaticSynchronized() {
+    assertEquals(1, __version__());
 
-        A.staticSynchronized();
-
-        assertEquals(1, __version__());
-
-        __toVersion__(0);
-    }
+    __toVersion__(0);
+  }
 
 }

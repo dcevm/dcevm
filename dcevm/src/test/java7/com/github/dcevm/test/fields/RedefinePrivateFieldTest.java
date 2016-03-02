@@ -38,60 +38,60 @@ import static org.junit.Assert.assertEquals;
  */
 public class RedefinePrivateFieldTest {
 
-    // Version 0
-    public static class A {
+  // Version 0
+  public static class A {
 
-        private int f1;
+    private int f1;
 
-        public A() {
-            f1 = 5;
-        }
-
-        public int foo() {
-            int result = f1;
-            __toVersion__(1);
-            result += f1;
-            return result;
-        }
+    public A() {
+      f1 = 5;
     }
 
-    // Version 1
-    public static class A___1 {
-
-        int f0;
-        int f1;
-
-        public int foo() {
-            return -1;
-        }
+    public int foo() {
+      int result = f1;
+      __toVersion__(1);
+      result += f1;
+      return result;
     }
+  }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  // Version 1
+  public static class A___1 {
+
+    int f0;
+    int f1;
+
+    public int foo() {
+      return -1;
     }
+  }
 
-    @Test
-    public void testRedefinePrivateField() {
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
 
-        assert __version__() == 0;
+  @Test
+  public void testRedefinePrivateField() {
 
-        A a = new A();
+    assert __version__() == 0;
 
-        assertEquals(10, a.foo());
+    A a = new A();
 
-        assert __version__() == 1;
+    assertEquals(10, a.foo());
 
-        assertEquals(-1, a.foo());
+    assert __version__() == 1;
 
-        __toVersion__(0);
+    assertEquals(-1, a.foo());
 
-        assertEquals(10, a.foo());
+    __toVersion__(0);
 
-        assert __version__() == 1;
+    assertEquals(10, a.foo());
 
-        assertEquals(-1, a.foo());
+    assert __version__() == 1;
 
-        __toVersion__(0);
-    }
+    assertEquals(-1, a.foo());
+
+    __toVersion__(0);
+  }
 }

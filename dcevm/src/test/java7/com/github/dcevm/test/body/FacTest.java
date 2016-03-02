@@ -38,66 +38,66 @@ import static org.junit.Assert.assertEquals;
  */
 public class FacTest {
 
-    public static abstract class Base {
+  public static abstract class Base {
 
-        protected int calc() {
-            return calc(__version__());
-        }
-
-        public int calcAt(int version) {
-            __toVersion__(version);
-            int result = calc();
-            __toVersion__(0);
-            return result;
-        }
-
-        protected int calc(int version) {
-            return calc();
-        }
+    protected int calc() {
+      return calc(__version__());
     }
 
-    public static class Factorial extends Base {
-
-        @Override
-        protected int calc(int n) {
-            return n * calcAt(n - 1);
-        }
+    public int calcAt(int version) {
+      __toVersion__(version);
+      int result = calc();
+      __toVersion__(0);
+      return result;
     }
 
-    public static class Factorial___1 extends Base {
-
-        @Override
-        protected int calc() {
-            return 1;
-        }
+    protected int calc(int version) {
+      return calc();
     }
+  }
 
-    @Before
-    public void setUp() throws Exception {
-        __toVersion__(0);
+  public static class Factorial extends Base {
+
+    @Override
+    protected int calc(int n) {
+      return n * calcAt(n - 1);
     }
+  }
 
-    @Test
-    public void testFac() {
+  public static class Factorial___1 extends Base {
 
-        assert __version__() == 0;
-        Factorial f = new Factorial();
-
-        assertEquals(1, f.calcAt(1));
-
-        assert __version__() == 0;
-        assertEquals(2, f.calcAt(2));
-
-        assert __version__() == 0;
-        assertEquals(6, f.calcAt(3));
-
-        assert __version__() == 0;
-        assertEquals(24, f.calcAt(4));
-
-        assert __version__() == 0;
-        assertEquals(120, f.calcAt(5));
-
-        assert __version__() == 0;
-        assertEquals(479001600, f.calcAt(12));
+    @Override
+    protected int calc() {
+      return 1;
     }
+  }
+
+  @Before
+  public void setUp() throws Exception {
+    __toVersion__(0);
+  }
+
+  @Test
+  public void testFac() {
+
+    assert __version__() == 0;
+    Factorial f = new Factorial();
+
+    assertEquals(1, f.calcAt(1));
+
+    assert __version__() == 0;
+    assertEquals(2, f.calcAt(2));
+
+    assert __version__() == 0;
+    assertEquals(6, f.calcAt(3));
+
+    assert __version__() == 0;
+    assertEquals(24, f.calcAt(4));
+
+    assert __version__() == 0;
+    assertEquals(120, f.calcAt(5));
+
+    assert __version__() == 0;
+    assertEquals(479001600, f.calcAt(12));
+  }
 }

@@ -38,182 +38,182 @@ import static org.junit.Assert.assertEquals;
  */
 public class EMCPTest {
 
-    public static class A {
+  public static class A {
 
-        public static int EMCPReturn() {
-            change();
-            PrintStream s = System.out;
-            return 1;
-        }
+    public static int EMCPReturn() {
+      change();
+      PrintStream s = System.out;
+      return 1;
     }
+  }
 
-    public static class B {
+  public static class B {
 
-        public static int b() {
-            change();
-            throw new RuntimeException();
-        }
+    public static int b() {
+      change();
+      throw new RuntimeException();
     }
+  }
 
-    public static class C {
+  public static class C {
 
-        public static int c() {
-            changeAndThrow();
-            return 0;
-        }
+    public static int c() {
+      changeAndThrow();
+      return 0;
     }
+  }
 
-    public static class D {
+  public static class D {
 
-        private static int value = 1;
+    private static int value = 1;
 
-        public static int EMCPReturn() {
-            change3();
-            return value;
-        }
+    public static int EMCPReturn() {
+      change3();
+      return value;
     }
+  }
 
-    public static class A___1 {
+  public static class A___1 {
 
-        public static int EMCPReturn() {
-            change();
-            PrintStream s = System.out;
-            return 1;
-        }
+    public static int EMCPReturn() {
+      change();
+      PrintStream s = System.out;
+      return 1;
     }
+  }
 
-    public static class B___1 {
+  public static class B___1 {
 
-        public static int b() {
-            change();
-            throw new RuntimeException();
-        }
+    public static int b() {
+      change();
+      throw new RuntimeException();
     }
+  }
 
-    public static class C___1 {
+  public static class C___1 {
 
-        public static int c() {
-            changeAndThrow();
-            return 0;
-        }
+    public static int c() {
+      changeAndThrow();
+      return 0;
     }
+  }
 
-    public static class D___1 {
-        private static int value = 1;
+  public static class D___1 {
+    private static int value = 1;
 
-        public static int EMCPReturn() {
-            change3();
-            return value;
-        }
+    public static int EMCPReturn() {
+      change3();
+      return value;
     }
+  }
 
-    public static class D___2 {
-        private static int value = 1;
+  public static class D___2 {
+    private static int value = 1;
 
-        public static int EMCPReturn() {
-            change3();
-            return value;
-        }
+    public static int EMCPReturn() {
+      change3();
+      return value;
     }
+  }
 
-    public static class D___3 {
-        private static int value = 1;
+  public static class D___3 {
+    private static int value = 1;
 
-        public static int EMCPReturn() {
-            change3();
-            return value;
-        }
+    public static int EMCPReturn() {
+      change3();
+      return value;
     }
+  }
 
-    public static void change() {
+  public static void change() {
 
-        __toVersion__(1);
-    }
+    __toVersion__(1);
+  }
 
-    public static void change3() {
+  public static void change3() {
 
-        __toVersion__(1);
-        __toVersion__(2);
-        __toVersion__(3);
-    }
+    __toVersion__(1);
+    __toVersion__(2);
+    __toVersion__(3);
+  }
 
-    public static void changeAndThrow() {
+  public static void changeAndThrow() {
 
-        __toVersion__(1);
+    __toVersion__(1);
 
-        throw new RuntimeException();
-    }
+    throw new RuntimeException();
+  }
 
 
-    @Test
-    public void testEMCPReturn() {
-        __toVersion__(0);
+  @Test
+  public void testEMCPReturn() {
+    __toVersion__(0);
 
-        assertEquals(1, A.EMCPReturn());
+    assertEquals(1, A.EMCPReturn());
 
-        __toVersion__(0);
+    __toVersion__(0);
 
-        assertEquals(1, A.EMCPReturn());
+    assertEquals(1, A.EMCPReturn());
 
-        __toVersion__(0);
-    }
+    __toVersion__(0);
+  }
 
-    @Test
-    public void testEMCPMultiChangeReturn() {
-        __toVersion__(0);
+  @Test
+  public void testEMCPMultiChangeReturn() {
+    __toVersion__(0);
 
-        assertEquals(1, D.EMCPReturn());
+    assertEquals(1, D.EMCPReturn());
 
-        __toVersion__(0);
+    __toVersion__(0);
 
-        assertEquals(1, D.EMCPReturn());
+    assertEquals(1, D.EMCPReturn());
 
-        __toVersion__(0);
-    }
+    __toVersion__(0);
+  }
 
-    @Test
-    public void testEMCPException() {
-        __toVersion__(0);
+  @Test
+  public void testEMCPException() {
+    __toVersion__(0);
 
-        TestUtil.assertException(RuntimeException.class, new Runnable() {
-            @Override
-            public void run() {
-                B.b();
-            }
-        });
+    TestUtil.assertException(RuntimeException.class, new Runnable() {
+      @Override
+      public void run() {
+        B.b();
+      }
+    });
 
-        __toVersion__(0);
+    __toVersion__(0);
 
-        TestUtil.assertException(RuntimeException.class, new Runnable() {
-            @Override
-            public void run() {
-                B.b();
-            }
-        });
+    TestUtil.assertException(RuntimeException.class, new Runnable() {
+      @Override
+      public void run() {
+        B.b();
+      }
+    });
 
-        __toVersion__(0);
-    }
+    __toVersion__(0);
+  }
 
-    @Test
-    public void testEMCPExceptionInCallee() {
-        __toVersion__(0);
+  @Test
+  public void testEMCPExceptionInCallee() {
+    __toVersion__(0);
 
-        TestUtil.assertException(RuntimeException.class, new Runnable() {
-            @Override
-            public void run() {
-                C.c();
-            }
-        });
+    TestUtil.assertException(RuntimeException.class, new Runnable() {
+      @Override
+      public void run() {
+        C.c();
+      }
+    });
 
-        __toVersion__(0);
+    __toVersion__(0);
 
-        TestUtil.assertException(RuntimeException.class, new Runnable() {
-            @Override
-            public void run() {
-                C.c();
-            }
-        });
+    TestUtil.assertException(RuntimeException.class, new Runnable() {
+      @Override
+      public void run() {
+        C.c();
+      }
+    });
 
-        __toVersion__(0);
-    }
+    __toVersion__(0);
+  }
 }

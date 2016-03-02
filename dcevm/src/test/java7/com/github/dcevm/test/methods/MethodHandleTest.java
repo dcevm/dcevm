@@ -36,7 +36,7 @@ import static org.junit.Assert.assertEquals;
 
 /**
  * Test for replacing method with MethodHandle pointing to it.
- *
+ * <p>
  * FIXME: add tests for case when we change type of the method (like static -> non-static). If that happens,
  * MemberName should be somehow marked as invalid...
  *
@@ -47,6 +47,7 @@ public class MethodHandleTest {
   // Version 0
   public static class A {
     public int field;
+
     public A(int value) {
       field = value;
     }
@@ -71,6 +72,7 @@ public class MethodHandleTest {
   // Version 1
   public static class A___1 {
     public int field;
+
     public A___1(int value) {
       field = value * 10;
     }

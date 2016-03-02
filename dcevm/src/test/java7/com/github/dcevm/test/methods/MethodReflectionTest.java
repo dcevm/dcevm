@@ -149,4 +149,47 @@ public class MethodReflectionTest {
 
     Assert.assertFalse(found);
   }
+
+  // Version 0
+  public static class TestArgumentRedefined {
+    public static String hello(TestArgumentRedefined arg) {
+      return arg.doHello();
+    }
+
+    public String doHello() {
+      return "hello0";
+    }
+  }
+
+  public static class TestArgumentRedefined___1 {
+    public static String hello(TestArgumentRedefined arg) {
+      return arg.doHello();
+    }
+
+    public String doHello() {
+      return "hello1";
+    }
+  }
+
+  @Test
+  public void testReflectionArgumentRedefined() throws Exception {
+
+    assert __version__() == 0;
+
+    TestArgumentRedefined t = new TestArgumentRedefined();
+    Method declaredMethod = TestArgumentRedefined.class.getDeclaredMethod("hello",
+            TestArgumentRedefined.class);
+
+
+    for (int i = 0; i < 10; i++) {
+      assertEquals("hello0", declaredMethod.invoke(null, t));
+
+      __toVersion__(1);
+
+      assertEquals("hello1", declaredMethod.invoke(null, t));
+
+      __toVersion__(0);
+    }
+  }
+
 }

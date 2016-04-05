@@ -9,6 +9,7 @@
 !/hotspot/.hg/patches/series
 build
 *.iml
-hs_err*
-core
-hotspot.log
+/hs_err*.log
+/replay_*.log
+/core
+/hotspot.log

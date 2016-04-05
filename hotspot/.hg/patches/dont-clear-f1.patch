@@ -1,0 +1,27 @@
+# HG changeset patch
+# Parent  6f6f329e829b021b30ff9d2b21c1308f6427af2f
+
+diff -r 6f6f329e829b -r f41a9c701b38 src/share/vm/oops/cpCache.cpp
+--- a/src/share/vm/oops/cpCache.cpp	Tue Apr 05 11:28:40 2016 -0700
++++ b/src/share/vm/oops/cpCache.cpp	Tue Apr 05 15:31:55 2016 -0700
+@@ -537,7 +537,7 @@
+ // Clear cached entry, let it be re-resolved
+ void ConstantPoolCacheEntry::clear_entry() {
+   _indices = constant_pool_index();
+-  _f1 = NULL;
++  //_f1 = NULL;
+   if (!is_resolved_reference()) {
+     _f2 = 0;
+   }
+diff -r 6f6f329e829b -r f41a9c701b38 src/share/vm/oops/cpCache.hpp
+--- a/src/share/vm/oops/cpCache.hpp	Tue Apr 05 11:28:40 2016 -0700
++++ b/src/share/vm/oops/cpCache.hpp	Tue Apr 05 15:31:55 2016 -0700
+@@ -141,7 +141,7 @@
+   void set_bytecode_2(Bytecodes::Code code);
+   void set_f1(Metadata* f1) {
+     Metadata* existing_f1 = (Metadata*)_f1; // read once
+-    assert(existing_f1 == NULL || existing_f1 == f1, "illegal field change");
++    //assert(existing_f1 == NULL || existing_f1 == f1, "illegal field change");
+     _f1 = f1;
+   }
+   void release_set_f1(Metadata* f1);

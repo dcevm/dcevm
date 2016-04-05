@@ -13,3 +13,4 @@ build
 /replay_*.log
 /core
 /hotspot.log
+/logs

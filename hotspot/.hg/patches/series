@@ -50,5 +50,6 @@ light-jdk8u40-b25.patch #+light-jdk8u40-b25 #+light-jdk8u45-b14 #+light-jdk8u51-
 light-jdk8u66-b17.patch #+light-jdk8u66-b17 #+light-jdk8u74-b02
 light-jdk8u20-deopt-cp.patch #+light-jdk8u20-b22 #+light-jdk8u31-b13 #+light-jdk8u40-b25 #+light-jdk8u45-b14 #+light-jdk8u51-b16
 light-jdk8u66-b17-deopt-cp.patch #+light-jdk8u66-b17 #+light-jdk8u74-b02
+dont-clear-f1.patch #+light-jdk8u74-b02
 
 

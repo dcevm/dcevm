@@ -28,6 +28,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.lang.reflect.Array;
+import java.util.Arrays;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static org.junit.Assert.assertEquals;
@@ -92,5 +93,18 @@ public class ArrayTest {
     assertTrue(arr3 instanceof A[][]);
     assertTrue(arr3 instanceof Object[][]);
     assertEquals(arr3.getClass(), Array.newInstance(B[].class, 0).getClass());
+  }
+
+  @Test
+  public void testArrayGetComponentType() {
+
+    A[] array = new A[10];
+
+    assertEquals(A.class, array.getClass().getComponentType());
+    __toVersion__(1);
+
+    assertEquals(A.class, array.getClass().getComponentType());
+    array = Arrays.copyOf(array, array.length);
+    assertEquals(A.class, array.getClass().getComponentType());
   }
 }

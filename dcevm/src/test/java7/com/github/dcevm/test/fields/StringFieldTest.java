@@ -69,10 +69,13 @@ public class StringFieldTest {
   public void testComplexFieldChange() {
     assert __version__() == 0;
     A a = new A();
-    assertObjectOK(a);
-    __toVersion__(1);
-    assertObjectOK(a);
-    __toVersion__(0);
-    assertObjectOK(a);
+
+    for (int i = 0; i < 100; i++) {
+      assertObjectOK(a);
+      __toVersion__(1);
+      assertObjectOK(a);
+      __toVersion__(0);
+      assertObjectOK(a);
+    }
   }
 }

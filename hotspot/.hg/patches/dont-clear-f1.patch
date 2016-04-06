@@ -1,21 +1,33 @@
 # HG changeset patch
-# Parent  6f6f329e829b021b30ff9d2b21c1308f6427af2f
+# Parent  89c7125da633a3b47b117c4c7ccbc60b6daa7581
 
-diff -r 6f6f329e829b -r f41a9c701b38 src/share/vm/oops/cpCache.cpp
---- a/src/share/vm/oops/cpCache.cpp	Tue Apr 05 11:28:40 2016 -0700
-+++ b/src/share/vm/oops/cpCache.cpp	Tue Apr 05 15:31:55 2016 -0700
-@@ -537,7 +537,7 @@
+diff -r 89c7125da633 src/share/vm/oops/cpCache.cpp
+--- a/src/share/vm/oops/cpCache.cpp	Wed Apr 06 12:04:17 2016 -0700
++++ b/src/share/vm/oops/cpCache.cpp	Wed Apr 06 13:37:24 2016 -0700
+@@ -536,8 +536,9 @@
+ // Enhanced RedefineClasses() API support (DCEVM):
  // Clear cached entry, let it be re-resolved
  void ConstantPoolCacheEntry::clear_entry() {
++  // Always clear for invokehandle/invokedynamic to re-resolve them
++  bool clearF1 = bytecode_1() == Bytecodes::_invokehandle || bytecode_1() == Bytecodes::_invokedynamic;
    _indices = constant_pool_index();
 -  _f1 = NULL;
-+  //_f1 = NULL;
    if (!is_resolved_reference()) {
      _f2 = 0;
    }
-diff -r 6f6f329e829b -r f41a9c701b38 src/share/vm/oops/cpCache.hpp
---- a/src/share/vm/oops/cpCache.hpp	Tue Apr 05 11:28:40 2016 -0700
-+++ b/src/share/vm/oops/cpCache.hpp	Tue Apr 05 15:31:55 2016 -0700
+@@ -547,6 +548,9 @@
+   // For example, it's used in TemplateInterpreterGenerator::generate_return_entry_for
+   // Also, we need to keep flag marking entry as one containing resolved_reference
+   _flags &= parameter_size_mask | (1 << is_resolved_ref_shift);
++  if (clearF1) {
++    _f1 = NULL;
++  }
+ }
+ #endif // INCLUDE_JVMTI
+ 
+diff -r 89c7125da633 src/share/vm/oops/cpCache.hpp
+--- a/src/share/vm/oops/cpCache.hpp	Wed Apr 06 12:04:17 2016 -0700
++++ b/src/share/vm/oops/cpCache.hpp	Wed Apr 06 13:37:24 2016 -0700
 @@ -141,7 +141,7 @@
    void set_bytecode_2(Bytecodes::Code code);
    void set_f1(Metadata* f1) {

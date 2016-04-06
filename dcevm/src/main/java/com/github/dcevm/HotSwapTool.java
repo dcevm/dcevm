@@ -50,6 +50,7 @@ public class HotSwapTool {
    * to make the IDE not complain about multiple defined classes.
    */
   public static final Pattern VERSION_PATTERN = Pattern.compile("___([0-9]+)");
+  public static final Pattern VERSION_MATCH = Pattern.compile(".*(___([0-9]+))$");
   private static final String CLASS_FILE_SUFFIX = ".class";
   private static Map<Class<?>, Integer> currentVersion = new Hashtable<Class<?>, Integer>();
   private static Redefiner redefiner;
@@ -216,13 +217,17 @@ public class HotSwapTool {
    * Parse version of the class from the class name. Classes are named in the form of [Name]___[Version]
    */
   private static int parseClassVersion(String simpleName) {
-    Matcher m = VERSION_PATTERN.matcher(simpleName);
-    return m.find() ? Integer.valueOf(m.group(1)) : 0;
+    Matcher m = VERSION_MATCH.matcher(simpleName);
+    return m.matches() ? Integer.valueOf(m.group(2)) : 0;
   }
 
   private static String stripVersion(String className) {
-    Matcher m = VERSION_PATTERN.matcher(className);
-    return m.replaceAll("");
+    Matcher m = VERSION_MATCH.matcher(className);
+    if (m.matches()) {
+      return className.substring(0, m.start(1)) + className.substring(m.end(1));
+    } else {
+      return className;
+    }
   }
 
   public static void resetTimings() {

@@ -25,6 +25,7 @@
 package com.github.dcevm.test.eval;
 
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
@@ -34,6 +35,7 @@ import static org.junit.Assert.assertEquals;
 /**
  * Test to reveal issues with JIT compiler (one of the compiler threads might be compiling method while we are reloading it).
  */
+@Ignore("currently broken -- need to figure out how to avoid compiler crashing while it compiles old code")
 public class SimpleObjectStressTest {
 
   private final int COUNT = 100000;

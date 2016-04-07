@@ -3,32 +3,43 @@
 
 diff -r 89c7125da633 src/share/vm/oops/cpCache.cpp
 --- a/src/share/vm/oops/cpCache.cpp	Wed Apr 06 12:04:17 2016 -0700
-+++ b/src/share/vm/oops/cpCache.cpp	Wed Apr 06 13:37:24 2016 -0700
-@@ -536,8 +536,9 @@
++++ b/src/share/vm/oops/cpCache.cpp	Wed Apr 06 20:11:06 2016 -0700
+@@ -536,17 +536,22 @@
  // Enhanced RedefineClasses() API support (DCEVM):
  // Clear cached entry, let it be re-resolved
  void ConstantPoolCacheEntry::clear_entry() {
 +  // Always clear for invokehandle/invokedynamic to re-resolve them
-+  bool clearF1 = bytecode_1() == Bytecodes::_invokehandle || bytecode_1() == Bytecodes::_invokedynamic;
++  bool clearData = bytecode_1() == Bytecodes::_invokehandle || bytecode_1() == Bytecodes::_invokedynamic;
    _indices = constant_pool_index();
 -  _f1 = NULL;
-   if (!is_resolved_reference()) {
-     _f2 = 0;
-   }
-@@ -547,6 +548,9 @@
-   // For example, it's used in TemplateInterpreterGenerator::generate_return_entry_for
-   // Also, we need to keep flag marking entry as one containing resolved_reference
-   _flags &= parameter_size_mask | (1 << is_resolved_ref_shift);
-+  if (clearF1) {
+-  if (!is_resolved_reference()) {
+-    _f2 = 0;
++
++  if (clearData) {
++    if (!is_resolved_reference()) {
++      _f2 = 0;
++    }
++    // FIXME: (DCEVM) we want to clear flags, but parameter size is actually used
++    // after we return from the method, before entry is re-initialized. So let's
++    // keep parameter size the same.
++    // For example, it's used in TemplateInterpreterGenerator::generate_return_entry_for
++    // Also, we need to keep flag marking entry as one containing resolved_reference
++    _flags &= parameter_size_mask | (1 << is_resolved_ref_shift);
 +    _f1 = NULL;
-+  }
+   }
+-  // FIXME: (DCEVM) we want to clear flags, but parameter size is actually used
+-  // after we return from the method, before entry is re-initialized. So let's
+-  // keep parameter size the same.
+-  // For example, it's used in TemplateInterpreterGenerator::generate_return_entry_for
+-  // Also, we need to keep flag marking entry as one containing resolved_reference
+-  _flags &= parameter_size_mask | (1 << is_resolved_ref_shift);
  }
  #endif // INCLUDE_JVMTI
  
 diff -r 89c7125da633 src/share/vm/oops/cpCache.hpp
 --- a/src/share/vm/oops/cpCache.hpp	Wed Apr 06 12:04:17 2016 -0700
-+++ b/src/share/vm/oops/cpCache.hpp	Wed Apr 06 13:37:24 2016 -0700
-@@ -141,7 +141,7 @@
++++ b/src/share/vm/oops/cpCache.hpp	Wed Apr 06 20:11:06 2016 -0700
+@@ -141,13 +141,13 @@
    void set_bytecode_2(Bytecodes::Code code);
    void set_f1(Metadata* f1) {
      Metadata* existing_f1 = (Metadata*)_f1; // read once
@@ -37,3 +48,10 @@ diff -r 89c7125da633 src/share/vm/oops/cpCache.hpp
      _f1 = f1;
    }
    void release_set_f1(Metadata* f1);
+   void set_f2(intx f2) {
+     intx existing_f2 = _f2; // read once
+-    assert(existing_f2 == 0 || existing_f2 == f2, "illegal field change");
++    //assert(existing_f2 == 0 || existing_f2 == f2, "illegal field change");
+     _f2 = f2;
+   }
+   void set_f2_as_vfinal_method(Method* f2) {

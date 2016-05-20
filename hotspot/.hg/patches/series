@@ -4,18 +4,18 @@ distro-name.patch
 # Add AllowEnhancedRedefinition argument
 arguments-java8.patch #+light-jdk8u5-b13 #+light-jdk8u20-b22
 arguments-java8u31.patch #+light-jdk8u31-b13
-arguments-java8u40.patch #+light-jdk8u40-b25 #+light-jdk8u45-b14 #+light-jdk8u51-b16 #+light-jdk8u66-b17 #+light-jdk8u74-b02
+arguments-java8u40.patch #+light-jdk8u40-b25 #+light-jdk8u45-b14 #+light-jdk8u51-b16 #+light-jdk8u66-b17 #+light-jdk8u74-b02 #+light-jdk8u92-b14
 
 # GC changes to allow modifying instances during redefinition run
 gc-java8.patch #+light-jdk8u5-b13 #+light-jdk8u20-b22 #+light-jdk8u31-b13
-gc-java8u40.patch #+light-jdk8u40-b25 #+light-jdk8u45-b14 #+light-jdk8u51-b16 #+light-jdk8u66-b17 #+light-jdk8u74-b02
+gc-java8u40.patch #+light-jdk8u40-b25 #+light-jdk8u45-b14 #+light-jdk8u51-b16 #+light-jdk8u66-b17 #+light-jdk8u74-b02 #+light-jdk8u92-b14
 
 # Add support for certain DMH implementations
 dmh-field-accessors-java8.patch #+light-jdk8u5-b13 #+light-jdk8u20-b22 #+light-jdk8u31-b13
-dmh-field-accessors-java8u40.patch #+light-jdk8u40-b25 #+light-jdk8u45-b14 #+light-jdk8u51-b16 #+light-jdk8u66-b17 #+light-jdk8u74-b02
+dmh-field-accessors-java8u40.patch #+light-jdk8u40-b25 #+light-jdk8u45-b14 #+light-jdk8u51-b16 #+light-jdk8u66-b17 #+light-jdk8u74-b02 #+light-jdk8u92-b14
 
 # Stub JVM_SetVmMemoryPressure function
-JVM_SetVmMemoryPressure.patch #+light-jdk8u45-b14 #+light-jdk8u51-b16 #+light-jdk8u66-b17 #+light-jdk8u74-b02
+JVM_SetVmMemoryPressure.patch #+light-jdk8u45-b14 #+light-jdk8u51-b16 #+light-jdk8u66-b17 #+light-jdk8u74-b02 #+light-jdk8u92-b14
 
 # Rest of the changes
 full-jdk7u11-b21.patch  #+full-jdk7u11-b21
@@ -48,8 +48,7 @@ light-jdk8u5-b13.patch  #+light-jdk8u5-b13
 light-jdk8u20-b22.patch  #+light-jdk8u20-b22 #+light-jdk8u31-b13
 light-jdk8u40-b25.patch #+light-jdk8u40-b25 #+light-jdk8u45-b14 #+light-jdk8u51-b16
 light-jdk8u66-b17.patch #+light-jdk8u66-b17 #+light-jdk8u74-b02
+light-jdk8u92-b14.patch #+light-jdk8u92-b14
 light-jdk8u20-deopt-cp.patch #+light-jdk8u20-b22 #+light-jdk8u31-b13 #+light-jdk8u40-b25 #+light-jdk8u45-b14 #+light-jdk8u51-b16
-light-jdk8u66-b17-deopt-cp.patch #+light-jdk8u66-b17 #+light-jdk8u74-b02
-dont-clear-f1.patch #+light-jdk8u74-b02
-
-
+light-jdk8u66-b17-deopt-cp.patch #+light-jdk8u66-b17 #+light-jdk8u74-b02 #+light-jdk8u92-b14
+dont-clear-f1.patch #+light-jdk8u74-b02 #+light-jdk8u92-b14

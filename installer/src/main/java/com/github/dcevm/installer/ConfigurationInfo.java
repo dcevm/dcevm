@@ -161,7 +161,7 @@ public enum ConfigurationInfo {
 
     // Utility methods to query installation directories
     public boolean isJRE(Path directory) {
-        if (Files.isDirectory(directory) && directory.getFileName().toString().startsWith("jre")) {
+        if (Files.isDirectory(directory)) {
             if (!Files.exists(directory.resolve(getJavaExecutable()))) {
                 return false;
             }

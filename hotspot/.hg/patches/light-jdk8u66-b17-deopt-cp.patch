@@ -1,40 +1,79 @@
-# HG changeset patch
-# Parent  5c1a815b73abcb755c43eb820f6557d37aeb4f9f
-
-diff -r 5c1a815b73ab src/share/vm/classfile/classFileParser.cpp
---- a/src/share/vm/classfile/classFileParser.cpp	Mon Dec 07 17:08:29 2015 -0800
-+++ b/src/share/vm/classfile/classFileParser.cpp	Mon Dec 07 17:11:00 2015 -0800
-@@ -4257,6 +4257,11 @@
+diff --git a/src/share/vm/classfile/classFileParser.cpp b/src/share/vm/classfile/classFileParser.cpp
+index fa7986b..0910a7d 100644
+--- a/src/share/vm/classfile/classFileParser.cpp
++++ b/src/share/vm/classfile/classFileParser.cpp
+@@ -4264,6 +4264,30 @@
        }
      }
  
-+    if (cfs->source() != NULL && HotswapDeoptClassPath != NULL) {
-+      if (strstr(cfs->source(), HotswapDeoptClassPath) != NULL) 
-+        this_klass->set_deoptimization_incl(true);
++    if (this_klass->external_name() != NULL && HotswapDeoptClassPath != NULL) {
++      const char* deopt_path = HotswapDeoptClassPath;
++      const char* const end = deopt_path + strlen(deopt_path);
++      bool deopt_found = false;
++      while (!deopt_found && deopt_path < end) {
++        const char* tmp_end = strchr(deopt_path, ',');
++        if (tmp_end == NULL) {
++          tmp_end = end;
++        }
++        char* deopt_segm_path = NEW_C_HEAP_ARRAY(char, tmp_end - deopt_path + 1, mtInternal);
++        memcpy(deopt_segm_path, deopt_path, tmp_end - deopt_path);
++        deopt_segm_path[tmp_end - deopt_path] = '\0';
++        if (strstr(this_klass->external_name(), deopt_segm_path) != NULL) {
++          if (TraceRedefineClasses > 0) {
++            tty->print_cr("Including in deoptimization : %s", this_klass->external_name());
++          }
++          this_klass->set_deoptimization_incl(true);
++          deopt_found = true;
++        }
++        FREE_C_HEAP_ARRAY(char, deopt_segm_path, mtInternal);
++        deopt_path = tmp_end + 1;
++      }
 +    }
 +
      if (TraceClassResolution) {
        ResourceMark rm;
        // print out the superclass.
-diff -r 5c1a815b73ab src/share/vm/classfile/systemDictionary.cpp
---- a/src/share/vm/classfile/systemDictionary.cpp	Mon Dec 07 17:08:29 2015 -0800
-+++ b/src/share/vm/classfile/systemDictionary.cpp	Mon Dec 07 17:11:00 2015 -0800
-@@ -1245,6 +1245,11 @@
+diff --git a/src/share/vm/classfile/systemDictionary.cpp b/src/share/vm/classfile/systemDictionary.cpp
+index e40b061..588e0e5 100644
+--- a/src/share/vm/classfile/systemDictionary.cpp
++++ b/src/share/vm/classfile/systemDictionary.cpp
+@@ -1255,6 +1255,31 @@
        ik->restore_unshareable_info(loader_data, protection_domain, CHECK_(nh));
      }
  
 +    if (HotswapDeoptClassPath != NULL) {
-+      if (strstr(HotswapDeoptClassPath, ik->external_name()) != NULL)
-+        ik->set_deoptimization_incl(true);
++      const char* deopt_path = HotswapDeoptClassPath;
++      const char* const end = deopt_path + strlen(deopt_path);
++      bool deopt_found = false;
++      while (!deopt_found && deopt_path < end) {
++        const char* tmp_end = strchr(deopt_path, ',');
++        if (tmp_end == NULL) {
++          tmp_end = end;
++        }
++        char* deopt_segm_path = NEW_C_HEAP_ARRAY(char, tmp_end - deopt_path + 1, mtInternal);
++        memcpy(deopt_segm_path, deopt_path, tmp_end - deopt_path);
++        deopt_segm_path[tmp_end - deopt_path] = '\0';
++        if (strstr(ik->external_name(), deopt_segm_path) != NULL) {
++          if (TraceRedefineClasses > 0) {
++            tty->print_cr("Including in deoptimization : %s", ik->external_name());
++          }
++          ik->set_deoptimization_incl(true);
++          deopt_found = true;
++        }
++        FREE_C_HEAP_ARRAY(char, deopt_segm_path, mtInternal);
++        deopt_path = tmp_end + 1;
++      }
 +    }
++
 +
      if (TraceClassLoading) {
        ResourceMark rm;
        tty->print("[Loaded %s", ik->external_name());
-diff -r 5c1a815b73ab src/share/vm/code/codeCache.cpp
---- a/src/share/vm/code/codeCache.cpp	Mon Dec 07 17:08:29 2015 -0800
-+++ b/src/share/vm/code/codeCache.cpp	Mon Dec 07 17:11:00 2015 -0800
-@@ -707,6 +707,13 @@
+diff --git a/src/share/vm/code/codeCache.cpp b/src/share/vm/code/codeCache.cpp
+index c9059d7..af10381 100644
+--- a/src/share/vm/code/codeCache.cpp
++++ b/src/share/vm/code/codeCache.cpp
+@@ -709,6 +709,13 @@
  }
  #endif // HOTSWAP
  
@@ -48,10 +87,11 @@ diff -r 5c1a815b73ab src/share/vm/code/codeCache.cpp
  
  // Deoptimize all methods
  void CodeCache::mark_all_nmethods_for_deoptimization() {
-diff -r 5c1a815b73ab src/share/vm/code/codeCache.hpp
---- a/src/share/vm/code/codeCache.hpp	Mon Dec 07 17:08:29 2015 -0800
-+++ b/src/share/vm/code/codeCache.hpp	Mon Dec 07 17:11:00 2015 -0800
-@@ -185,6 +185,7 @@
+diff --git a/src/share/vm/code/codeCache.hpp b/src/share/vm/code/codeCache.hpp
+index f098284..d4a1363 100644
+--- a/src/share/vm/code/codeCache.hpp
++++ b/src/share/vm/code/codeCache.hpp
+@@ -184,6 +184,7 @@
      // tells how many nmethods have dependencies
    static int number_of_nmethods_with_dependencies();
  
@@ -59,9 +99,10 @@ diff -r 5c1a815b73ab src/share/vm/code/codeCache.hpp
    static int get_codemem_full_count() { return _codemem_full_count; }
  };
  
-diff -r 5c1a815b73ab src/share/vm/code/nmethod.cpp
---- a/src/share/vm/code/nmethod.cpp	Mon Dec 07 17:08:29 2015 -0800
-+++ b/src/share/vm/code/nmethod.cpp	Mon Dec 07 17:11:00 2015 -0800
+diff --git a/src/share/vm/code/nmethod.cpp b/src/share/vm/code/nmethod.cpp
+index 6ea39ae..bf2db7e 100644
+--- a/src/share/vm/code/nmethod.cpp
++++ b/src/share/vm/code/nmethod.cpp
 @@ -476,6 +476,7 @@
    _lazy_critical_native       = 0;
    _has_wide_vectors           = 0;
@@ -114,9 +155,10 @@ diff -r 5c1a815b73ab src/share/vm/code/nmethod.cpp
      // Copy contents of ScopeDescRecorder to nmethod
      code_buffer->copy_values_to(this);
      debug_info->copy_to(this);
-diff -r 5c1a815b73ab src/share/vm/code/nmethod.hpp
---- a/src/share/vm/code/nmethod.hpp	Mon Dec 07 17:08:29 2015 -0800
-+++ b/src/share/vm/code/nmethod.hpp	Mon Dec 07 17:11:00 2015 -0800
+diff --git a/src/share/vm/code/nmethod.hpp b/src/share/vm/code/nmethod.hpp
+index b7d6890..3de4757 100644
+--- a/src/share/vm/code/nmethod.hpp
++++ b/src/share/vm/code/nmethod.hpp
 @@ -184,6 +184,8 @@
    bool _marked_for_reclamation;              // Used by NMethodSweeper (set only by sweeper)
    bool _marked_for_deoptimization;           // Used for stack deoptimization
@@ -138,9 +180,10 @@ diff -r 5c1a815b73ab src/share/vm/code/nmethod.hpp
    void  make_unloaded(BoolObjectClosure* is_alive, oop cause);
  
    bool has_dependencies()                         { return dependencies_size() != 0; }
-diff -r 5c1a815b73ab src/share/vm/oops/klass.cpp
---- a/src/share/vm/oops/klass.cpp	Mon Dec 07 17:08:29 2015 -0800
-+++ b/src/share/vm/oops/klass.cpp	Mon Dec 07 17:11:00 2015 -0800
+diff --git a/src/share/vm/oops/klass.cpp b/src/share/vm/oops/klass.cpp
+index 2e3d192..a889458 100644
+--- a/src/share/vm/oops/klass.cpp
++++ b/src/share/vm/oops/klass.cpp
 @@ -188,6 +188,7 @@
  
    set_redefinition_flags(Klass::NoRedefinition);
@@ -167,9 +210,10 @@ diff -r 5c1a815b73ab src/share/vm/oops/klass.cpp
      int sup_depth = sup->super_depth();
      juint my_depth  = MIN2(sup_depth + 1, (int)primary_super_limit());
      if (!can_be_primary_super_slow())
-diff -r 5c1a815b73ab src/share/vm/oops/klass.hpp
---- a/src/share/vm/oops/klass.hpp	Mon Dec 07 17:08:29 2015 -0800
-+++ b/src/share/vm/oops/klass.hpp	Mon Dec 07 17:11:00 2015 -0800
+diff --git a/src/share/vm/oops/klass.hpp b/src/share/vm/oops/klass.hpp
+index e3fc3bd..c5fc46d 100644
+--- a/src/share/vm/oops/klass.hpp
++++ b/src/share/vm/oops/klass.hpp
 @@ -177,6 +177,7 @@
    bool        _original_field_offsets_changed; // Did the original field offsets of this class change during class redefinition?
    int *       _update_information;     // Update information
@@ -188,9 +232,10 @@ diff -r 5c1a815b73ab src/share/vm/oops/klass.hpp
    // Revision number for redefined classes, -1 for originally loaded classes
    bool was_redefined() const            { return _revision_number != -1; }
    jint revision_number() const          { return _revision_number; }
-diff -r 5c1a815b73ab src/share/vm/prims/jvmtiRedefineClasses2.cpp
---- a/src/share/vm/prims/jvmtiRedefineClasses2.cpp	Mon Dec 07 17:08:29 2015 -0800
-+++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp	Mon Dec 07 17:11:00 2015 -0800
+diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.cpp b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
+index f545b98..4fad1cb 100644
+--- a/src/share/vm/prims/jvmtiRedefineClasses2.cpp
++++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
 @@ -443,6 +443,8 @@
  
      new_class->set_redefinition_flags(redefinition_flags);
@@ -200,7 +245,7 @@ diff -r 5c1a815b73ab src/share/vm/prims/jvmtiRedefineClasses2.cpp
      _max_redefinition_flags = _max_redefinition_flags | redefinition_flags;
  
      if ((redefinition_flags & Klass::ModifyInstances) != 0) {
-@@ -1568,7 +1570,10 @@
+@@ -1572,7 +1574,10 @@
    if (0 && JvmtiExport::all_dependencies_are_recorded()) {
      Universe::flush_evol_dependents_on(k_h);
    } else {
@@ -212,10 +257,11 @@ diff -r 5c1a815b73ab src/share/vm/prims/jvmtiRedefineClasses2.cpp
  
      ResourceMark rm(THREAD);
      DeoptimizationMarker dm;
-diff -r 5c1a815b73ab src/share/vm/runtime/globals.hpp
---- a/src/share/vm/runtime/globals.hpp	Mon Dec 07 17:08:29 2015 -0800
-+++ b/src/share/vm/runtime/globals.hpp	Mon Dec 07 17:11:00 2015 -0800
-@@ -3947,7 +3947,15 @@
+diff --git a/src/share/vm/runtime/globals.hpp b/src/share/vm/runtime/globals.hpp
+index 9a51218..b8ca7bb 100644
+--- a/src/share/vm/runtime/globals.hpp
++++ b/src/share/vm/runtime/globals.hpp
+@@ -3962,7 +3962,16 @@
                                                                              \
    product_pd(bool, PreserveFramePointer,                                    \
               "Use the FP register for holding the frame pointer "           \
@@ -223,11 +269,12 @@ diff -r 5c1a815b73ab src/share/vm/runtime/globals.hpp
 +             "and not as a general purpose register.")                      \
 +                                                                            \
 +  product(ccstr, HotswapDeoptClassPath, NULL,                               \
-+          "Class path or fragment of the class path to a folder with "      \
-+          "classes allowed to be deoptimized on hotswap. If is not "        \
-+          "defined then all classes will be deoptimized on hotswap. "       \
-+          "That's default behaviour. Using this option the performance "    \
-+          "of hotswap can be considerably increased. ")
++          "Comma separated list of packages containing classes that are "   \
++          "expected to be redefined. If com.sun.proxy is used by "          \
++          "application and proxied class is redefined, then this option "   \
++          "should contain 'com.sun.proxy'. If the option is not defined, "  \
++          "then all classes will be deoptimized on hotswap. Using this "    \
++          "option improves hotswap performance. ")
 +
  
  /*

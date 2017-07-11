@@ -1,7 +1,9 @@
-diff --git a/src/share/vm/classfile/classFileParser.cpp b/src/share/vm/classfile/classFileParser.cpp
-index fa7986b..0910a7d 100644
---- a/src/share/vm/classfile/classFileParser.cpp
-+++ b/src/share/vm/classfile/classFileParser.cpp
+# HG changeset patch
+# Parent  ae559120fec5645d5f89c6aee6704c64707ccec5
+
+diff -r ae559120fec5 src/share/vm/classfile/classFileParser.cpp
+--- a/src/share/vm/classfile/classFileParser.cpp	Thu Apr 27 18:12:53 2017 -0700
++++ b/src/share/vm/classfile/classFileParser.cpp	Sat Jul 08 13:28:02 2017 -0500
 @@ -4264,6 +4264,30 @@
        }
      }
@@ -33,10 +35,9 @@ index fa7986b..0910a7d 100644
      if (TraceClassResolution) {
        ResourceMark rm;
        // print out the superclass.
-diff --git a/src/share/vm/classfile/systemDictionary.cpp b/src/share/vm/classfile/systemDictionary.cpp
-index e40b061..588e0e5 100644
---- a/src/share/vm/classfile/systemDictionary.cpp
-+++ b/src/share/vm/classfile/systemDictionary.cpp
+diff -r ae559120fec5 src/share/vm/classfile/systemDictionary.cpp
+--- a/src/share/vm/classfile/systemDictionary.cpp	Thu Apr 27 18:12:53 2017 -0700
++++ b/src/share/vm/classfile/systemDictionary.cpp	Sat Jul 08 13:28:02 2017 -0500
 @@ -1255,6 +1255,31 @@
        ik->restore_unshareable_info(loader_data, protection_domain, CHECK_(nh));
      }
@@ -69,10 +70,9 @@ index e40b061..588e0e5 100644
      if (TraceClassLoading) {
        ResourceMark rm;
        tty->print("[Loaded %s", ik->external_name());
-diff --git a/src/share/vm/code/codeCache.cpp b/src/share/vm/code/codeCache.cpp
-index c9059d7..af10381 100644
---- a/src/share/vm/code/codeCache.cpp
-+++ b/src/share/vm/code/codeCache.cpp
+diff -r ae559120fec5 src/share/vm/code/codeCache.cpp
+--- a/src/share/vm/code/codeCache.cpp	Thu Apr 27 18:12:53 2017 -0700
++++ b/src/share/vm/code/codeCache.cpp	Sat Jul 08 13:28:02 2017 -0500
 @@ -709,6 +709,13 @@
  }
  #endif // HOTSWAP
@@ -87,10 +87,9 @@ index c9059d7..af10381 100644
  
  // Deoptimize all methods
  void CodeCache::mark_all_nmethods_for_deoptimization() {
-diff --git a/src/share/vm/code/codeCache.hpp b/src/share/vm/code/codeCache.hpp
-index f098284..d4a1363 100644
---- a/src/share/vm/code/codeCache.hpp
-+++ b/src/share/vm/code/codeCache.hpp
+diff -r ae559120fec5 src/share/vm/code/codeCache.hpp
+--- a/src/share/vm/code/codeCache.hpp	Thu Apr 27 18:12:53 2017 -0700
++++ b/src/share/vm/code/codeCache.hpp	Sat Jul 08 13:28:02 2017 -0500
 @@ -184,6 +184,7 @@
      // tells how many nmethods have dependencies
    static int number_of_nmethods_with_dependencies();
@@ -99,10 +98,9 @@ index f098284..d4a1363 100644
    static int get_codemem_full_count() { return _codemem_full_count; }
  };
  
-diff --git a/src/share/vm/code/nmethod.cpp b/src/share/vm/code/nmethod.cpp
-index 6ea39ae..bf2db7e 100644
---- a/src/share/vm/code/nmethod.cpp
-+++ b/src/share/vm/code/nmethod.cpp
+diff -r ae559120fec5 src/share/vm/code/nmethod.cpp
+--- a/src/share/vm/code/nmethod.cpp	Thu Apr 27 18:12:53 2017 -0700
++++ b/src/share/vm/code/nmethod.cpp	Sat Jul 08 13:28:02 2017 -0500
 @@ -476,6 +476,7 @@
    _lazy_critical_native       = 0;
    _has_wide_vectors           = 0;
@@ -155,10 +153,9 @@ index 6ea39ae..bf2db7e 100644
      // Copy contents of ScopeDescRecorder to nmethod
      code_buffer->copy_values_to(this);
      debug_info->copy_to(this);
-diff --git a/src/share/vm/code/nmethod.hpp b/src/share/vm/code/nmethod.hpp
-index b7d6890..3de4757 100644
---- a/src/share/vm/code/nmethod.hpp
-+++ b/src/share/vm/code/nmethod.hpp
+diff -r ae559120fec5 src/share/vm/code/nmethod.hpp
+--- a/src/share/vm/code/nmethod.hpp	Thu Apr 27 18:12:53 2017 -0700
++++ b/src/share/vm/code/nmethod.hpp	Sat Jul 08 13:28:02 2017 -0500
 @@ -184,6 +184,8 @@
    bool _marked_for_reclamation;              // Used by NMethodSweeper (set only by sweeper)
    bool _marked_for_deoptimization;           // Used for stack deoptimization
@@ -180,10 +177,33 @@ index b7d6890..3de4757 100644
    void  make_unloaded(BoolObjectClosure* is_alive, oop cause);
  
    bool has_dependencies()                         { return dependencies_size() != 0; }
-diff --git a/src/share/vm/oops/klass.cpp b/src/share/vm/oops/klass.cpp
-index 2e3d192..a889458 100644
---- a/src/share/vm/oops/klass.cpp
-+++ b/src/share/vm/oops/klass.cpp
+diff -r ae559120fec5 src/share/vm/gc_implementation/shared/markSweep.cpp
+--- a/src/share/vm/gc_implementation/shared/markSweep.cpp	Thu Apr 27 18:12:53 2017 -0700
++++ b/src/share/vm/gc_implementation/shared/markSweep.cpp	Sat Jul 08 13:28:02 2017 -0500
+@@ -222,7 +222,7 @@
+         ((HeapWord *)new_location >= (HeapWord *)q && (HeapWord *)new_location < (HeapWord *)q + size)) {
+        tmp = NEW_RESOURCE_ARRAY(HeapWord, size);
+        q = (oop) tmp;
+-       Copy::aligned_disjoint_words((HeapWord*)q, (HeapWord*)tmp_obj, size);
++       Copy::aligned_disjoint_words((HeapWord*)tmp_obj, (HeapWord*)q, size);
+     }
+   }
+ 
+diff -r ae559120fec5 src/share/vm/memory/genMarkSweep.cpp
+--- a/src/share/vm/memory/genMarkSweep.cpp	Thu Apr 27 18:12:53 2017 -0700
++++ b/src/share/vm/memory/genMarkSweep.cpp	Sat Jul 08 13:28:02 2017 -0500
+@@ -333,8 +333,6 @@
+   GCTraceTime tm("phase 4", PrintGC && Verbose, true, _gc_timer, _gc_tracer->gc_id());
+   trace("4");
+ 
+-  MarkSweep::copy_rescued_objects_back();
+-
+   GenCompactClosure blk;
+   gch->generation_iterate(&blk, true);
+ 
+diff -r ae559120fec5 src/share/vm/oops/klass.cpp
+--- a/src/share/vm/oops/klass.cpp	Thu Apr 27 18:12:53 2017 -0700
++++ b/src/share/vm/oops/klass.cpp	Sat Jul 08 13:28:02 2017 -0500
 @@ -188,6 +188,7 @@
  
    set_redefinition_flags(Klass::NoRedefinition);
@@ -210,10 +230,9 @@ index 2e3d192..a889458 100644
      int sup_depth = sup->super_depth();
      juint my_depth  = MIN2(sup_depth + 1, (int)primary_super_limit());
      if (!can_be_primary_super_slow())
-diff --git a/src/share/vm/oops/klass.hpp b/src/share/vm/oops/klass.hpp
-index e3fc3bd..c5fc46d 100644
---- a/src/share/vm/oops/klass.hpp
-+++ b/src/share/vm/oops/klass.hpp
+diff -r ae559120fec5 src/share/vm/oops/klass.hpp
+--- a/src/share/vm/oops/klass.hpp	Thu Apr 27 18:12:53 2017 -0700
++++ b/src/share/vm/oops/klass.hpp	Sat Jul 08 13:28:02 2017 -0500
 @@ -177,6 +177,7 @@
    bool        _original_field_offsets_changed; // Did the original field offsets of this class change during class redefinition?
    int *       _update_information;     // Update information
@@ -232,10 +251,9 @@ index e3fc3bd..c5fc46d 100644
    // Revision number for redefined classes, -1 for originally loaded classes
    bool was_redefined() const            { return _revision_number != -1; }
    jint revision_number() const          { return _revision_number; }
-diff --git a/src/share/vm/prims/jvmtiRedefineClasses2.cpp b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
-index f545b98..4fad1cb 100644
---- a/src/share/vm/prims/jvmtiRedefineClasses2.cpp
-+++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp
+diff -r ae559120fec5 src/share/vm/prims/jvmtiRedefineClasses2.cpp
+--- a/src/share/vm/prims/jvmtiRedefineClasses2.cpp	Thu Apr 27 18:12:53 2017 -0700
++++ b/src/share/vm/prims/jvmtiRedefineClasses2.cpp	Sat Jul 08 13:28:02 2017 -0500
 @@ -443,6 +443,8 @@
  
      new_class->set_redefinition_flags(redefinition_flags);
@@ -245,7 +263,7 @@ index f545b98..4fad1cb 100644
      _max_redefinition_flags = _max_redefinition_flags | redefinition_flags;
  
      if ((redefinition_flags & Klass::ModifyInstances) != 0) {
-@@ -1572,7 +1574,10 @@
+@@ -1579,7 +1581,10 @@
    if (0 && JvmtiExport::all_dependencies_are_recorded()) {
      Universe::flush_evol_dependents_on(k_h);
    } else {
@@ -257,10 +275,9 @@ index f545b98..4fad1cb 100644
  
      ResourceMark rm(THREAD);
      DeoptimizationMarker dm;
-diff --git a/src/share/vm/runtime/globals.hpp b/src/share/vm/runtime/globals.hpp
-index 9a51218..b8ca7bb 100644
---- a/src/share/vm/runtime/globals.hpp
-+++ b/src/share/vm/runtime/globals.hpp
+diff -r ae559120fec5 src/share/vm/runtime/globals.hpp
+--- a/src/share/vm/runtime/globals.hpp	Thu Apr 27 18:12:53 2017 -0700
++++ b/src/share/vm/runtime/globals.hpp	Sat Jul 08 13:28:02 2017 -0500
 @@ -3962,7 +3962,16 @@
                                                                              \
    product_pd(bool, PreserveFramePointer,                                    \

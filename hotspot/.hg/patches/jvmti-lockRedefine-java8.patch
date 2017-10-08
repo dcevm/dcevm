@@ -1,0 +1,96 @@
+diff --git a/src/share/vm/prims/jvmtiEnv.cpp b/src/share/vm/prims/jvmtiEnv.cpp
+index 9cafbd1..e24f8c9 100644
+--- a/src/share/vm/prims/jvmtiEnv.cpp
++++ b/src/share/vm/prims/jvmtiEnv.cpp
+@@ -298,10 +298,12 @@
+ //TODO: add locking
+   if (AllowEnhancedClassRedefinition) {
+     VM_EnhancedRedefineClasses op(class_count, class_definitions, jvmti_class_load_kind_redefine);
++    MutexLocker sd_mutex(RedefineClasses_lock);
+     VMThread::execute(&op);
+     return (op.check_error());
+   }
+   VM_RedefineClasses op(class_count, class_definitions, jvmti_class_load_kind_redefine);
++  MutexLocker sd_mutex(RedefineClasses_lock);
+   VMThread::execute(&op);
+   return (op.check_error());
+ } /* end RedefineClasses */
+diff --git a/src/share/vm/runtime/mutexLocker.cpp b/src/share/vm/runtime/mutexLocker.cpp
+index f358c75..02377a4 100644
+--- a/src/share/vm/runtime/mutexLocker.cpp
++++ b/src/share/vm/runtime/mutexLocker.cpp
+@@ -38,6 +38,7 @@
+ // Consider using GCC's __read_mostly.
+ 
+ Mutex*   Patching_lock                = NULL;
++Mutex*   RedefineClasses_lock         = NULL;
+ Monitor* SystemDictionary_lock        = NULL;
+ Mutex*   PackageTable_lock            = NULL;
+ Mutex*   CompiledIC_lock              = NULL;
+@@ -279,6 +280,7 @@
+   def(ProfileVM_lock               , Monitor, special,   false); // used for profiling of the VMThread
+   def(CompileThread_lock           , Monitor, nonleaf+5,   false );
+   def(PeriodicTask_lock            , Monitor, nonleaf+5,   true);
++  def(RedefineClasses_lock         , Mutex  , nonleaf+7,   false ); // for ensuring that class redefinition is not done in parallel
+ 
+ #ifdef INCLUDE_TRACE
+   def(JfrMsg_lock                  , Monitor, leaf,        true);
+diff --git a/src/share/vm/runtime/mutexLocker.hpp b/src/share/vm/runtime/mutexLocker.hpp
+index be86bac..a77f546 100644
+--- a/src/share/vm/runtime/mutexLocker.hpp
++++ b/src/share/vm/runtime/mutexLocker.hpp
+@@ -46,6 +46,7 @@
+ // Mutexes used in the VM.
+ 
+ extern Mutex*   Patching_lock;                   // a lock used to guard code patching of compiled code
++extern Mutex*   RedefineClasses_lock;            // a lock on class redefinition
+ extern Monitor* SystemDictionary_lock;           // a lock on the system dictonary
+ extern Mutex*   PackageTable_lock;               // a lock on the class loader package table
+ extern Mutex*   CompiledIC_lock;                 // a lock used to guard compiled IC patching and access
+diff --git a/src/share/vm/runtime/thread.cpp b/src/share/vm/runtime/thread.cpp
+index 0dc86d9..9f4c2e9 100644
+--- a/src/share/vm/runtime/thread.cpp
++++ b/src/share/vm/runtime/thread.cpp
+@@ -910,6 +910,15 @@
+   return false;
+ }
+ 
++bool Thread::owns_locks_but_redefine_classes_lock() const {
++  for(Monitor *cur = _owned_locks; cur; cur = cur->next()) {
++    if (cur != RedefineClasses_lock && cur->rank() != Mutex::redefine_classes) {
++      return true;
++    }
++  }
++  return false;
++}
++
+ 
+ #endif
+ 
+diff --git a/src/share/vm/runtime/thread.hpp b/src/share/vm/runtime/thread.hpp
+index 1117c87..77b716c 100644
+--- a/src/share/vm/runtime/thread.hpp
++++ b/src/share/vm/runtime/thread.hpp
+@@ -211,11 +211,14 @@
+   void enter_signal_handler() { _num_nested_signal++; }
+   void leave_signal_handler() { _num_nested_signal--; }
+   bool is_inside_signal_handler() const { return _num_nested_signal > 0; }
++  Mutex* redefine_classes_mutex() { return _redefine_classes_mutex; }
+ 
+  private:
+   // Debug tracing
+   static void trace(const char* msg, const Thread* const thread) PRODUCT_RETURN;
+ 
++  Mutex* _redefine_classes_mutex;
++
+   // Active_handles points to a block of handles
+   JNIHandleBlock* _active_handles;
+ 
+@@ -585,6 +588,7 @@
+   void print_owned_locks() const                 { print_owned_locks_on(tty);    }
+   Monitor* owned_locks() const                   { return _owned_locks;          }
+   bool owns_locks() const                        { return owned_locks() != NULL; }
++  bool owns_locks_but_redefine_classes_lock() const;
+   bool owns_locks_but_compiled_lock() const;
+ 
+   // Deadlock detection

@@ -26,6 +26,7 @@ package com.github.dcevm.test;
 
 import com.github.dcevm.HotSwapTool;
 import org.junit.Assert;
+import java.lang.reflect.Field;
 
 /**
  * Utility methods for unit testing.
@@ -69,6 +70,19 @@ public class TestUtil {
         HotSwapTool.toVersion(clazz, version);
       }
     });
+  }
+
+  public static int getClassRedefinedCount(Class type) {
+    try {
+      Field field = Class.class.getDeclaredField("classRedefinedCount");
+      boolean accessibility = field.isAccessible();
+      field.setAccessible(true);
+      int classRedefinedCount = (Integer) field.get(type);
+      field.setAccessible(accessibility);
+      return  classRedefinedCount;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 
 }

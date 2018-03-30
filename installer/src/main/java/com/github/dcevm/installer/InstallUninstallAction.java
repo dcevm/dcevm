@@ -28,6 +28,7 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import java.awt.event.ActionEvent;
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
 import java.util.Observable;
 import java.util.Observer;
 
@@ -90,8 +91,12 @@ class InstallUninstallAction extends AbstractAction implements ListSelectionList
             } else {
                 getSelectedInstallation().uninstallDCE();
             }
+        } catch (AccessDeniedException ex) {
+            MainWindow.showAccessDeniedException(ex, table);
         } catch (IOException ex) {
             MainWindow.showInstallerException(ex, table);
+        } catch (DcevmPatchNotFoundException ex) {
+            MainWindow.showPatchNotFoundException(ex, table);
         }
     }
 

@@ -28,6 +28,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
 
 /**
  * @author Kerstin Breiteneder
@@ -73,7 +74,16 @@ public class MainWindow extends JFrame {
         ex.printStackTrace();
 
         error += "\nPlease ensure that no other Java applications are running and you have sufficient permissions.";
-        JOptionPane.showMessageDialog(parent, error, ex.getMessage(), JOptionPane.ERROR_MESSAGE);
+        JOptionPane.showMessageDialog(parent, error, ex.getMessage() + "(" + ex.getClass().getName() + ")", JOptionPane.ERROR_MESSAGE);
+    }
+
+    public static void showPatchNotFoundException(DcevmPatchNotFoundException ex, Component parent) {
+        JOptionPane.showMessageDialog(parent, ex.getMessage(), "DCEVM patch not available", JOptionPane.ERROR_MESSAGE);
+    }
+
+
+    public static void showAccessDeniedException(AccessDeniedException ex, Component parent) {
+        JOptionPane.showMessageDialog(parent, "Please check system permissions for resource: " + ex.getMessage(), "Access denied", JOptionPane.ERROR_MESSAGE);
     }
 
     private JComponent getBanner() {

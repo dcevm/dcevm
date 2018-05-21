@@ -8,6 +8,15 @@ The purpose of the project is to maintain enhanced class redefinition functional
 
 You can download binaries [here](https://dcevm.github.io/).
 
+## Dcevm for Java9 and Java10
+
+Dcevm8 was last version supported by this project. New versions are moved to seppareted projects extended from OpenJDK uder HotswapProjects umbrella. 
+
+* [Dcevm9](https://github.com/HotswapProjects/openjdk-jdk9)
+* [Dcevm10](https://github.com/HotswapProjects/openjdk-jdk10)
+
+Dcevm patch is hosted in dedicated **dcevm** branch in each repository.
+
 ## Supported versions
 
 [hotspot/.hg/patches/](hotspot/.hg/patches/) contains patches for all supported versions. Each patch is named by concatenating prefix `full` or `light` with the OpenJDK HotSpot tag. `full` patches support full redefenition capabilities (including removal of superclasses, for example). `light` patches are easier to maintain, but they only support limited functionality (generally, additions to class hierarchies are fine, removals are not).

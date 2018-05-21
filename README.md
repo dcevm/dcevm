@@ -10,7 +10,7 @@ You can download binaries [here](https://dcevm.github.io/).
 
 ## Dcevm for Java9 and Java10
 
-Dcevm8 was last version supported by this project. New versions are moved to seppareted projects extended from OpenJDK uder HotswapProjects umbrella. 
+Dcevm8 was last version supported by this project. New versions are moved to separated projects extended from OpenJDK uder HotswapProjects umbrella. 
 
 * [Dcevm9](https://github.com/HotswapProjects/openjdk-jdk9)
 * [Dcevm10](https://github.com/HotswapProjects/openjdk-jdk10)

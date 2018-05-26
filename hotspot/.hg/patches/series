@@ -54,5 +54,6 @@ light-jdk8u152-b16.patch #+light-jdk8u152-b16 #+light-jdk8u161-b12 #+light-jdk8u
 jvmti-getLoadedClasses-java8.patch #+light-jdk8u112-b16 #+light-jdk8u144-b01 #+light-jdk8u152-b16 #+light-jdk8u161-b12 #+light-jdk8u162-b12
 jvmti-lockRedefine-java8.patch #+light-jdk8u144-b01delete
 light-jdk8u20-deopt-cp.patch #+light-jdk8u20-b22 #+light-jdk8u31-b13 #+light-jdk8u40-b25 #+light-jdk8u45-b14 #+light-jdk8u51-b16
-light-jdk8u66-b17-deopt-cp.patch #+light-jdk8u66-b17 #+light-jdk8u74-b02 #+light-jdk8u92-b14 #+light-jdk8u102-b31 #+light-jdk8u111-b14 #+light-jdk8u112-b16 #+light-jdk8u144-b01 #+light-jdk8u152-b16 #+light-jdk8u161-b12 #+light-jdk8u162-b12
-dont-clear-f1.patch #+light-jdk8u74-b02 #+light-jdk8u92-b14 #+light-jdk8u102-b31 #+light-jdk8u111-b14 #+light-jdk8u112-b16 #+light-jdk8u144-b01 #+light-jdk8u152-b16 #+light-jdk8u161-b12 #+light-jdk8u162-b12
+light-jdk8u66-b17-deopt-cp.patch #+light-jdk8u66-b17 #+light-jdk8u74-b02 #+light-jdk8u92-b14 #+light-jdk8u102-b31 #+light-jdk8u111-b14 #+light-jdk8u112-b16 #+light-jdk8u144-b01 #+light-jdk8u152-b16
+dont-clear-f1.patch #+light-jdk8u74-b02 #+light-jdk8u92-b14 #+light-jdk8u102-b31 #+light-jdk8u111-b14 #+light-jdk8u112-b16 #+light-jdk8u144-b01 #+light-jdk8u152-b16
+light-updateClassRedefinedCount-java8.patch #+light-jdk8u112-b16 #+light-jdk8u144-b01 #+light-jdk8u152-b16

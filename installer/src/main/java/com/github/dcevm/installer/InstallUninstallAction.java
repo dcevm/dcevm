@@ -42,7 +42,7 @@ class InstallUninstallAction extends AbstractAction implements ListSelectionList
     /**
      * Buttons to add/remove DCEVM.
      */
-    public static enum Type {
+    public enum Type {
         UNINSTALL("Uninstall"),
         INSTALL("Replace by DCEVM"),
         INSTALL_ALTJVM("Install DCEVM as altjvm");

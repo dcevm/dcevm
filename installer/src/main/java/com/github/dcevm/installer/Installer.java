@@ -34,6 +34,7 @@ import java.util.List;
  * @author Christoph Wimberger
  * @author Ivan Dubrov
  * @author Jiri Bubnik
+ * @author Przemysław Rumik
  */
 public class Installer {
 
@@ -166,15 +167,26 @@ public class Installer {
 
     private void scanDirectory(DirectoryStream<Path> stream, List<Installation> installations) {
         for (Path path : stream) {
-            if (Files.isDirectory(path) && (config.isJDK(path) || config.isJRE(path))) {
-                try {
-                    Installation inst = new Installation(config, path);
-                    if (!installations.contains(inst)) {
-                        installations.add(inst);
+            if (Files.isDirectory(path)) {
+                if (config.isJDK(path) || config.isJRE(path)) {
+                    try {
+                        Installation inst = new Installation(config, path);
+                        if (!installations.contains(inst)) {
+                            installations.add(inst);
+                        }
+                    } catch (Exception ex) {
+                        // FIXME: just ignore the installation for now..
+                        ex.printStackTrace();
                     }
-                } catch (Exception ex) {
-                    // FIXME: just ignore the installation for now..
-                    ex.printStackTrace();
+                } else {
+                    // in macOS/OSX we have more complicated strucuture of directories with JVM...
+                    // for example it may be /Library/Java/JavaVirtualMachines/jdk1.8.0_181.jdk/Contents/Home
+                    // so we will look deper in structure of passed folders hoping that we will find JVM ;-)
+                    try {
+                        scanDirectory(Files.newDirectoryStream(path),installations);
+                    } catch (IOException ignore) {
+
+                    }
                 }
             }
         }

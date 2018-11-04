@@ -54,7 +54,8 @@ export SA_LDFLAGS=-fobjc-exceptions
 ### Linux gcc8 specific prebuild steps
 
 ```sh
-export CFLAGS="-std=gnu++98 -pipe -Wno-stringop-overflow -Wno-deprecated-declarations -Wno-return-type"
+export CFLAGS="${CFLAGS//-O2/-O3} ${CPPFLAGS} -Wno-error=deprecated-declarations -Wno-error=stringop-overflow= -Wno-error=return-type -Wno-error=cpp -fno-lifetime-dse -fno-delete-null-pointer-checks"
+export CXXFLAGS="${CXXFLAGS} ${CPPFLAGS}"
 ```
 
 ### Compiling DCEVM

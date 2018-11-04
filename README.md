@@ -51,6 +51,12 @@ export CXX=/usr/local/bin/g++-4.8
 export SA_LDFLAGS=-fobjc-exceptions
 ```
 
+### Linux gcc8 specific prebuild steps
+
+```sh
+export CFLAGS="-std=gnu++98 -pipe -Wno-stringop-overflow -Wno-deprecated-declarations -Wno-return-type"
+```
+
 ### Compiling DCEVM
 
 * Configure version you want in [gradle.properties](gradle.properties).

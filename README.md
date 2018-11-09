@@ -8,12 +8,13 @@ The purpose of the project is to maintain enhanced class redefinition functional
 
 You can download binaries [here](https://dcevm.github.io/).
 
-## Dcevm for Java9 and Java10
+## Dcevm for Java9, Java10 and Java10
 
 Dcevm8 is last version supported by this project. New versions are moved to separated projects extended from OpenJDK under HotswapProjects umbrella. 
 
 * [Dcevm9](https://github.com/HotswapProjects/openjdk-jdk9)
 * [Dcevm10](https://github.com/HotswapProjects/openjdk-jdk10)
+* [Dcevm11](https://github.com/HotswapProjects/openjdk-jdk11)
 
 Dcevm patch is hosted in dedicated **dcevm** branch in each repository.
 

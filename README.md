@@ -1,3 +1,8 @@
+## NEWS: Dcevm-11
+
+Dcevm-8 is last version supported by this project. Distribution of new dcevm versions will be available at new project designated to build dcevm - (TravaOpenjdk)[https://github.com/TravaOpenJDK/trava-jdk-11-dcevm]
+
+
 # DCEVM
 
 This project is a fork of original [DCEVM](http://ssw.jku.at/dcevm/) project.
@@ -7,16 +12,6 @@ The purpose of the project is to maintain enhanced class redefinition functional
 ## Binaries
 
 You can download binaries [here](https://dcevm.github.io/).
-
-## Dcevm for Java9, Java10 and Java10
-
-Dcevm8 is last version supported by this project. New versions are moved to separated projects extended from OpenJDK under HotswapProjects umbrella. 
-
-* [Dcevm9](https://github.com/HotswapProjects/openjdk-jdk9)
-* [Dcevm10](https://github.com/HotswapProjects/openjdk-jdk10)
-* [Dcevm11](https://github.com/HotswapProjects/openjdk-jdk11)
-
-Dcevm patch is hosted in dedicated **dcevm** branch in each repository.
 
 ## Supported versions
 

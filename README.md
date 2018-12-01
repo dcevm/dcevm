@@ -1,6 +1,6 @@
 # NEWS: Dcevm-11 on Trava OpenJDK
 
-Dcevm-8 is last version supported by this project. There is a new distribution channel on - [TravaOpenjdk](https://github.com/TravaOpenJDK/trava-jdk-11-dcevm) designated to build newer dcevm versions!
+There is a new distribution channel for DCEVM-11 binaries on - [TravaOpenjdk](https://github.com/TravaOpenJDK/trava-jdk-11-dcevm)!
 
 
 # DCEVM

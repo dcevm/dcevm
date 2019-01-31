@@ -51,6 +51,7 @@ class AddDirectoryAction extends AbstractAction {
 
     public void actionPerformed(ActionEvent e) {
         JFileChooser fc = new JFileChooser();
+        fc.setFileHidingEnabled(false);
         fc.setDialogTitle("Select a Java installation directory...");
         fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         fc.setAcceptAllFileFilterUsed(false);

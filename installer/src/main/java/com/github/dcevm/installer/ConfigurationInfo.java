@@ -38,6 +38,7 @@ import java.util.regex.Pattern;
  * @author Ivan Dubrov
  * @author Jiri Bubnik
  * @author Przemysław Rumik
+ * @author Denis Zygann
  */
 public enum ConfigurationInfo {
 
@@ -262,7 +263,8 @@ public enum ConfigurationInfo {
     }
 
     public boolean is64Bit(Path jreDir) {
-        return getVersionString(jreDir, false).contains("64-Bit");
+        String versionString = getVersionString(jreDir, false);
+        return versionString.contains("64-Bit") || versionString.contains("amd64");
     }
 
     public String getJavaVersion(Path jreDir) throws IOException {

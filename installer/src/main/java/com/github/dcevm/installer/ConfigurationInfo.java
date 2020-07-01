@@ -268,7 +268,7 @@ public enum ConfigurationInfo {
     }
 
     public String getJavaVersion(Path jreDir) throws IOException {
-        return getVersionHelper(jreDir, ".*java version.*\"(.*)\".*", true, false);
+        return getVersionHelper(jreDir, ".*(?:java|openjdk) version.*\"(.*)\".*", true, false);;
     }
 
     final public String getDCEVersion(Path jreDir, boolean altjvm) throws IOException {

@@ -30,7 +30,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.concurrent.Callable;
-import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 
 import static com.github.dcevm.test.util.HotSwapTestHelper.__toVersion__;
 import static com.github.dcevm.test.util.HotSwapTestHelper.__version__;
@@ -87,7 +87,7 @@ public class LambdaTest {
     }
   }
 
-  public static void methodWithLambdaParam(Consumer<Integer> consumer) {
+  public static void methodWithLambdaParam(IntConsumer consumer) {
     consumer.accept(1);
   }
 
@@ -108,7 +108,7 @@ public class LambdaTest {
   // version 0
   public static class LambdaC3 {
     public int i = 0;
-    public Consumer<Integer> l = x -> i += x;
+    public IntConsumer l = x -> i += x;
 
     public void doit() {
       LambdaTest.methodWithLambdaParam(l);
@@ -118,7 +118,7 @@ public class LambdaTest {
   // version 1
   public static class LambdaC3___1 {
     int i = 0;
-    public Consumer<Integer> l = null;
+    public IntConsumer l = null;
 
     public void doit() {
       LambdaTest.methodWithLambdaParam(l);
